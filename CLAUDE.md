@@ -214,6 +214,41 @@ Resend `statut=delivered` vers la boîte réelle, sujet « Réinitialisez votre 
 XN-Facture », expéditeur `"XN-Facture" <onboarding@resend.dev>` → lien du gabarit rendu avec
 un vrai jeton et suivi → `/nouveau-mot-de-passe`, compte reconnu.
 
+### Déploiement Vercel — `xn-facture.vercel.app`
+
+Le dépôt est **`github.com/Nrj85/XN-Facture`**, branche `main`, déployée automatiquement.
+
+⚠️ **Les variables d'environnement ne sont PAS posées sur Vercel** (constaté le 4 sept. 2026).
+Symptôme exact, à ne pas rediagnostiquer :
+
+| Route | Réponse |
+|---|---|
+| `/connexion`, `/inscription`, `/mot-de-passe-oublie` | 200 — pages statiques, elles n'ont besoin de rien |
+| `/dashboard`, `/factures`, `/bienvenue` | **500** |
+| `/` | **307 sans en-tête `Location`**, corps = `<html id="__next_error__">` → page blanche |
+
+La racine ne fait pourtant que `redirect('/dashboard')` : c'est la cible qui échoue, pas elle.
+**Le diagnostic décisif** est de chercher la référence du projet Supabase dans les bundles
+servis — les variables `NEXT_PUBLIC_*` sont inlinées à la compilation, donc leur absence du
+JavaScript prouve qu'elles manquaient au build :
+
+```bash
+curl -s https://xn-facture.vercel.app/connexion \
+  | grep -oE '/_next/static/chunks/[A-Za-z0-9._-]+\.js' | sort -u \
+  | while read c; do curl -s "https://xn-facture.vercel.app$c" | grep -q "<ref-du-projet>" \
+      && echo "présente : $c"; done
+```
+
+**Trois variables suffisent** — et seulement trois : `NEXT_PUBLIC_SUPABASE_URL`,
+`NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_SITE_URL`. **`SUPABASE_SERVICE_ROLE_KEY` n'est
+pas nécessaire** : `serviceRoleKey()` est défini dans `lib/supabase/config.ts` mais n'est
+appelé nulle part. La poser sur Vercel exposerait une clé qui contourne la RLS, sans aucun
+bénéfice. `RESEND_API_KEY` non plus : elle est posée une fois sur Supabase comme mot de passe
+SMTP, l'application ne la lit jamais au runtime.
+
+Le fichier `.env.vercel.local` (ignoré par git) contient le bloc prêt à coller dans
+*Vercel > Settings > Environment Variables > Import .env*.
+
 ### Ce qui n'existe PAS — ne pas le supposer
 Aucun envoi d'email **métier** (les seuls emails sont ceux d'authentification : confirmation
 d'adresse et réinitialisation de mot de passe, envoyés par Supabase),
