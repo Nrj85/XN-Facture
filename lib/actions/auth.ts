@@ -31,7 +31,17 @@ function translateAuthError(message: string): string {
   if (normalized.includes('rate limit') || normalized.includes('too many')) {
     return 'Trop de tentatives. Patientez quelques minutes.';
   }
-  return message;
+  if (normalized.includes('is invalid') && normalized.includes('email')) {
+    return 'Cette adresse email n’est pas acceptée. Vérifiez-la, ou utilisez une autre adresse.';
+  }
+  if (normalized.includes('signups not allowed') || normalized.includes('signup is disabled')) {
+    return 'Les inscriptions sont désactivées sur ce serveur.';
+  }
+  // Rien ne doit remonter en anglais : l'interface est entièrement en français,
+  // et un message brut de Supabase renseigne l'utilisateur sur l'infrastructure
+  // sans lui dire quoi faire. Observé une fois en conditions réelles :
+  // « Email address "..." is invalid » s'affichait tel quel sur /inscription.
+  return 'La demande n’a pas abouti. Vérifiez vos informations et réessayez.';
 }
 
 export async function signIn(

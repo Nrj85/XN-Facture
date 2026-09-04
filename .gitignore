@@ -15,3 +15,6 @@ yarn-error.log*
 .vercel
 next-env.d.ts
 *.tsbuildinfo
+
+# Fichiers de travail de la CLI Supabase
+supabase/.temp/

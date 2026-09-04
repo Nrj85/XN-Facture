@@ -1,125 +1,44 @@
 /**
- * Types de la base, écrits à la main pour l'instant.
+ * Types de la base, dérivés du schéma réel.
  *
- * Ils seront remplacés par la sortie de
- *   `npx supabase gen types typescript --project-id <ref> > lib/db/types.ts`
- * dès que la connexion au projet sera établie. Jusque-là, ce fichier suffit à
- * typer les requêtes et à faire échouer la compilation si le mappeur et le
- * schéma se désaccordent.
+ * Le fichier `database.types.ts` est produit par
+ * `npx supabase gen types typescript` ; celui-ci n'en expose que ce dont le
+ * mappeur a besoin, sous des noms lisibles. L'indirection a un coût d'un
+ * fichier, et un bénéfice : renommer une colonne ou changer sa nullabilité en
+ * base fait désormais échouer `tsc`, au lieu de produire un `undefined`
+ * silencieux au premier accès — sur un montant, c'est exactement le genre
+ * d'erreur qu'on ne voit qu'en production.
  *
  * **Sur les `bigint`** : PostgREST sérialise un `bigint` en nombre JSON, donc
  * les montants arrivent ici en `number`. C'est sans risque tant que la borne
  * documentée dans `lib/money.ts` tient (|montant| < 2^53, soit 9 000 milliards
- * de francs) — ce qui est le cas de tout usage réel.
+ * de francs) — ce qui couvre tout usage réel.
  */
 
-export type InvoiceStatusRow = 'draft' | 'sent' | 'partially_paid' | 'paid' | 'cancelled';
-export type QuoteStatusRow = 'draft' | 'sent' | 'accepted' | 'refused';
-export type CurrencyRow = 'XAF' | 'XOF';
-export type MemberRoleRow = 'owner' | 'admin' | 'member';
-export type DocumentKindRow = 'invoice' | 'quote';
+import type { Database } from './database.types';
 
-export interface CompanyRow {
-  id: string;
-  name: string;
-  legal_name: string;
-  niu: string;
-  rccm: string;
-  address: string;
-  city: string;
-  country: string;
-  phone: string;
-  email: string;
-  logo_data_url: string | null;
-  currency: CurrencyRow;
-  /** `numeric` : PostgREST le rend en nombre. */
-  vat_rate: number;
-  payment_terms_days: number;
-  invoice_prefix: string;
-  default_notes: string | null;
-  bank_name: string | null;
-  bank_account: string | null;
-  momo_mtn: string | null;
-  momo_orange: string | null;
-  created_at: string;
-  updated_at: string;
-}
+type Tables = Database['public']['Tables'];
+type Enums = Database['public']['Enums'];
 
-export interface ClientRow {
-  id: string;
-  company_id: string;
-  name: string;
-  contact_name: string | null;
-  email: string;
-  phone: string;
-  address: string | null;
-  city: string;
-  created_at: string;
-}
+export type InvoiceStatusRow = Enums['invoice_status'];
+export type QuoteStatusRow = Enums['quote_status'];
+export type CurrencyRow = Enums['currency_code'];
+export type MemberRoleRow = Enums['member_role'];
+export type DocumentKindRow = Enums['document_kind'];
 
-export interface InvoiceItemRow {
-  id: string;
-  invoice_id: string;
-  position: number;
-  description: string;
-  /** Millièmes entiers. Voir `toQtyMilli` dans `lib/money.ts`. */
-  qty_milli: number;
-  unit_price: number;
-}
-
-export interface InvoiceRow {
-  id: string;
-  company_id: string;
-  number: string | null;
-  client_id: string;
-  issue_date: string;
-  due_date: string;
-  vat_rate: number;
-  address: string;
-  notes: string | null;
-  amount_paid: number;
-  status: InvoiceStatusRow;
-  created_at: string;
-  updated_at: string;
-}
+export type CompanyRow = Tables['companies']['Row'];
+export type ClientRow = Tables['clients']['Row'];
+export type InvoiceRow = Tables['invoices']['Row'];
+export type InvoiceItemRow = Tables['invoice_items']['Row'];
+export type QuoteRow = Tables['quotes']['Row'];
+export type QuoteItemRow = Tables['quote_items']['Row'];
+export type CompanyMemberRow = Tables['company_members']['Row'];
 
 /** Facture accompagnée de ses lignes, telle que la rend une requête imbriquée. */
 export interface InvoiceWithItemsRow extends InvoiceRow {
   invoice_items: InvoiceItemRow[];
 }
 
-export interface QuoteItemRow {
-  id: string;
-  quote_id: string;
-  position: number;
-  description: string;
-  qty_milli: number;
-  unit_price: number;
-}
-
-export interface QuoteRow {
-  id: string;
-  company_id: string;
-  number: string | null;
-  client_id: string;
-  issue_date: string;
-  valid_until: string;
-  vat_rate: number;
-  address: string;
-  notes: string | null;
-  status: QuoteStatusRow;
-  invoice_id: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
 export interface QuoteWithItemsRow extends QuoteRow {
   quote_items: QuoteItemRow[];
-}
-
-export interface CompanyMemberRow {
-  company_id: string;
-  user_id: string;
-  role: MemberRoleRow;
-  created_at: string;
 }

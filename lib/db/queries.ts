@@ -29,18 +29,29 @@ export interface Session {
 }
 
 /**
- * Contexte exigé par toute page applicative.
+ * Résultat de `getSession` : la session, ou la raison de son absence.
  *
- * Deux redirections distinctes, parce que ce sont deux problèmes distincts :
- * pas de session → connexion ; session mais aucune entreprise → création
- * d'entreprise. Renvoyer les deux au même endroit enfermerait l'utilisateur
- * dans une boucle.
+ * Deux raisons distinctes, parce que ce sont deux problèmes distincts : pas de
+ * session → connexion ; session mais aucune entreprise → création d'entreprise.
+ * Renvoyer les deux au même endroit enfermerait l'utilisateur dans une boucle.
  */
-export async function requireSession(): Promise<Session> {
+export type SessionResult =
+  | { ok: true; session: Session }
+  | { ok: false; raison: 'anonyme' | 'sans-entreprise' };
+
+/**
+ * Session courante, sans redirection.
+ *
+ * Une route d'API ne peut pas se contenter de `requireSession` : `redirect()`
+ * y produit un 307 vers une page HTML, que `fetch` suit sans broncher. Le
+ * client reçoit alors du HTML avec `response.ok` à vrai et croit tenir un PDF.
+ * D'où cette variante, qui laisse l'appelant choisir son code de retour.
+ */
+export async function getSession(): Promise<SessionResult> {
   const supabase = createClient();
 
   const { data: auth, error: authError } = await supabase.auth.getUser();
-  if (authError || !auth.user) redirect('/connexion');
+  if (authError || !auth.user) return { ok: false, raison: 'anonyme' };
 
   const { data: member } = await supabase
     .from('company_members')
@@ -50,7 +61,7 @@ export async function requireSession(): Promise<Session> {
     .limit(1)
     .maybeSingle();
 
-  if (!member) redirect('/bienvenue');
+  if (!member) return { ok: false, raison: 'sans-entreprise' };
 
   const { data: company, error } = await supabase
     .from('companies')
@@ -58,17 +69,27 @@ export async function requireSession(): Promise<Session> {
     .eq('id', member.company_id)
     .single<CompanyRow>();
 
-  if (error || !company) redirect('/bienvenue');
+  if (error || !company) return { ok: false, raison: 'sans-entreprise' };
 
   const metadata = auth.user.user_metadata as { full_name?: string } | null;
 
   return {
-    userId: auth.user.id,
-    email: auth.user.email ?? '',
-    displayName: metadata?.full_name?.trim() || (auth.user.email ?? 'Utilisateur'),
-    companyId: company.id,
-    company: toCompany(company),
+    ok: true,
+    session: {
+      userId: auth.user.id,
+      email: auth.user.email ?? '',
+      displayName: metadata?.full_name?.trim() || (auth.user.email ?? 'Utilisateur'),
+      companyId: company.id,
+      company: toCompany(company),
+    },
   };
+}
+
+/** Contexte exigé par toute page applicative. Redirige plutôt que d'échouer. */
+export async function requireSession(): Promise<Session> {
+  const result = await getSession();
+  if (result.ok) return result.session;
+  redirect(result.raison === 'anonyme' ? '/connexion' : '/bienvenue');
 }
 
 export async function getClients(companyId: string): Promise<Client[]> {

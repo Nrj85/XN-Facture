@@ -25,25 +25,54 @@ Trois particularités de ce marché ont façonné le produit et ne sont pas nég
 
 ### État du projet
 
-Phase 3 **écrite mais pas encore éprouvée sur une base réelle**. L'application est full-stack :
-Supabase (Postgres + RLS + Auth), lectures en Server Components, écritures en Server Actions.
-Le store `localStorage` et `lib/mock-data.ts` ont disparu ; la date du jour n'est plus figée,
-elle vient de `lib/today.ts` (fuseau `Africa/Douala`).
+Phase 3 **appliquée et éprouvée sur la base réelle**. L'application est full-stack : Supabase
+(Postgres + RLS + Auth), lectures en Server Components, écritures en Server Actions. Le store
+`localStorage` et `lib/mock-data.ts` ont disparu ; la date du jour n'est plus figée, elle vient
+de `lib/today.ts` (fuseau `Africa/Douala`).
 
-> **À faire avant toute nouvelle fonctionnalité :** appliquer
-> `supabase/migrations/*` puis `supabase/seed.sql` sur le projet, créer un compte, et rejouer
-> les vérifications de la section 9. Rien de la phase 3 n'a encore touché une vraie base —
-> `tsc`, `lint` et `build` passent, ce qui ne prouve que la cohérence des types.
+Projet Supabase : **`tpzmmgcfpnsysaghdqrx`** (région `eu-west-1`, Postgres 17). Les trois
+migrations et le seed y sont appliqués. Ce qui a été **réellement vérifié** (et non supposé) :
+
+| Contrôle | Résultat |
+|---|---|
+| RLS, deux comptes / deux entreprises, 15 tentatives de contournement | Aucune fuite, aucune écriture croisée |
+| Suppression d'un client rattaché | Refusée par la base (`23503`), pas seulement par l'interface |
+| Facture émise sans numéro | Refusée par la base (`23514`) |
+| 8 appels simultanés à `next_document_number` | 8 numéros distincts |
+| Deux factures au même numéro | Refusé (`23505`) |
+| Conversion d'un devis deux fois | Refusée par l'index unique partiel |
+| Écriture puis **rechargement complet** (facture, statut, client, paramètres) | Donnée relue en base |
+| Chiffres du tableau de bord | 25 000 166 / 11 211 550 / 13 788 616, tranches d'ancienneté = reste à encaisser |
+| Contrôle chiffré de référence, du formulaire au PDF | 2 110 000 · 406 175 · 2 516 175 |
+
+Deux comptes de démonstration existent, créés par l'API d'administration (donc déjà confirmés,
+sans passer par l'email) : `atelier@example.com`, rattaché à Atelier Nkolo, et
+`concurrent@example.com`, sans entreprise — il sert à rejouer les tests de RLS.
+
+> **Les mots de passe ne figurent pas ici : ce dépôt est public.** Ils ont été transmis
+> directement à l'utilisateur ; en cas de perte, les réinitialiser depuis le tableau de bord
+> Supabase (Authentication > Users). **Supprimer ces deux comptes avant toute mise en ligne.**
 
 Phases restantes : **5** envoi par email, lien public, avoirs, relances · **6** page d'accueil
 publique · **7** tests de bout en bout, sécurité, déploiement Vercel.
+
+### Ce qui reste à régler côté Supabase
+
+- **`mailer_autoconfirm` est à `false` et aucun SMTP propre n'est configuré.** L'inscription
+  crée le compte mais l'email de confirmation part par le serveur mutualisé de Supabase, qui
+  ne délivre qu'aux membres du projet et plafonne à 2 envois par heure. En l'état,
+  **`/inscription` ne mène nulle part pour un vrai utilisateur.** Deux issues : activer
+  l'auto-confirmation le temps du développement, ou brancher un SMTP avant la phase 5 — qui
+  en aura de toute façon besoin pour l'envoi des factures.
+- **Supabase refuse les domaines sans enregistrement MX** (`@example.com`, `@xnfacture.cm`) avec
+  `email_address_invalid`. Ce n'est pas un défaut de l'application ; inutile de le rediagnostiquer.
 
 ### Dettes assumées
 
 - **Logo en `logo_data_url`** : une data URL de ~50 ko relue à chaque lecture d'entreprise.
   Supabase Storage serait meilleur, mais touche l'uploader, l'aperçu et le PDF.
-- **`lib/db/types.ts` est écrit à la main.** À remplacer par
-  `npx supabase gen types typescript --project-id <ref> > lib/db/types.ts`.
+- **Les captures d'écran de la section 9 ne sont pas automatisées** : elles passent par une
+  session déjà ouverte, pilotée en CDP.
 
 ---
 
@@ -93,10 +122,16 @@ enregistrées, validation, réinitialisation. Tout se répercute immédiatement 
 documents ; **les documents existants gardent leur propre taux de TVA**.
 
 ### PDF
-Génération serveur (`POST /api/factures/pdf`) pour les factures comme pour les devis, avec
-logo, mentions légales, bloc de règlement, pagination. Un brouillon porte la mention
-**BROUILLON — NON ÉMISE** et se télécharge sous `Brouillon-<client>.pdf` ; un document émis
-prend son numéro.
+Génération serveur — `GET /api/factures/[id]/pdf` et `GET /api/devis/[id]/pdf` — avec logo,
+mentions légales, bloc de règlement, pagination. Le document est **relu en base sous RLS** :
+il ne peut plus être fabriqué pour une facture qui n'est pas la vôtre. Un brouillon porte la
+mention **BROUILLON — NON ÉMISE** et se télécharge sous `Brouillon-<client>.pdf` ; un document
+émis prend son numéro.
+
+Ces deux routes sont **hors du `matcher` du middleware**, et refusent elles-mêmes en **401
+JSON**. Ce n'est pas un relâchement : une redirection 307 vers `/connexion` serait suivie par
+`fetch`, et le client enregistrerait la page de connexion sous le nom `FAC-2026-0052.pdf`.
+**Toute nouvelle route d'API suit cette règle : refuser, jamais rediriger.**
 
 ### Confirmation de création
 Après enregistrement, une fenêtre rappelle client, numéro, statut et total, et offre le
@@ -182,7 +217,8 @@ lib/
   quotes.ts         deriveQuoteStatus, toQuoteView, computeQuoteStats, QUOTE_NOTES
   company-context.tsx  CompanyProvider — LECTURE SEULE (company, formatMoney, user)
   supabase/         config (env typé), client (navigateur), server (RSC/actions), middleware
-  db/               types (lignes), mappers (ligne ↔ domaine), queries (lectures serveur)
+  db/               database.types (GÉNÉRÉ), types (alias de lignes), mappers (ligne ↔ domaine),
+                    queries (lectures serveur, `getSession` et `requireSession`)
   actions/          auth, company, clients, invoices, quotes · result, schemas, context
   calendar.ts       Grille du DatePicker (lundi en tête)
   nav.ts            Navigation et libellés de fil d'Ariane
@@ -571,10 +607,18 @@ doivent être identiques dans le formulaire, l'aperçu, le détail et le PDF.
   conclure qu'un serveur est en panne.
 - Un `.next` corrompu produit des erreurs sur des pages intactes — `rm -rf .next` avant
   d'enquêter plus loin.
-- Le premier téléchargement de PDF prend ~12 s **en Chrome headless uniquement** ; le serveur
-  répond en 50 ms au chronomètre. **Cause non élucidée** — ne pas conclure à une lenteur du
-  produit sans mesurer côté serveur. L'hypothèse `Content-Disposition` a été testée et
-  **réfutée**.
+- **Chromium (Chrome 152 et Edge 152) annule sur cette machine tout téléchargement de PDF
+  servi en local.** `fetch` reçoit un **204 sans corps**, et un téléchargement natif passe
+  par `downloadWillBegin` puis `canceled`, 0 octet. **Ce n'est pas l'application** : un PDF
+  *statique* posé dans `public/` se comporte exactement pareil, alors qu'un `.js` du même
+  serveur se télécharge normalement. Ont été testées et **réfutées** : `Content-Disposition`
+  (`attachment` comme `inline`), l'absence de `Content-Length`, les extensions
+  (`--disable-extensions`), le proxy, les politiques Chrome, la protection réseau de Defender.
+  **Pour vérifier un PDF, utiliser curl avec le cookie de session**, puis extraire le texte
+  (flux Flate, chaînes hexadécimales — voir plus bas). C'est probablement la même cause que
+  la latence de ~12 s observée en phase 2, jamais élucidée.
+- **Une erreur d'authentification Supabase ne doit jamais remonter telle quelle** : elle est
+  en anglais. `translateAuthError` retombe désormais sur une phrase française générique.
 
 ### Honnêteté
 

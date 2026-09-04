@@ -30,6 +30,17 @@ export function usePdfDownload() {
       }
 
       const blob = await response.blob();
+
+      // `response.ok` est vrai jusqu'à 299, donc aussi pour un 204 sans corps.
+      // Sans ce contrôle, une réponse vidée en chemin ferait enregistrer un PDF
+      // de zéro octet **sans aucun message** : l'utilisateur ne découvrirait le
+      // problème qu'en ouvrant le fichier devant son client. Observé pour de
+      // vrai — Chromium détourne les réponses `application/pdf` vers son
+      // gestionnaire de téléchargement et rend un 204 vide à `fetch`.
+      if (blob.size === 0) {
+        throw new Error('Le document reçu est vide. Réessayez dans un instant.');
+      }
+
       const objectUrl = URL.createObjectURL(blob);
 
       // Ancre éphémère : c'est le seul moyen d'imposer un nom de fichier depuis
