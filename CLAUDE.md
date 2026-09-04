@@ -73,6 +73,15 @@ publique · **7** tests de bout en bout, sécurité, déploiement Vercel.
   Supabase Storage serait meilleur, mais touche l'uploader, l'aperçu et le PDF.
 - **Les captures d'écran de la section 9 ne sont pas automatisées** : elles passent par une
   session déjà ouverte, pilotée en CDP.
+- **« Partiellement payée » est promis mais jamais affiché.** `StoredStatus` connaît
+  `partially_paid`, mais `DisplayStatus` ne le porte pas : `deriveStatus` le replie sur
+  `sent` (ou `overdue`). Une facture soldée à moitié garde donc le badge « Envoyée », alors
+  que `record-payment-dialog.tsx:79` annonce à l'utilisateur « La facture passera à
+  « Partiellement payée » ». Constaté en conditions réelles : base à `partially_paid`,
+  montants justes à l'écran (encaissé −1 000 000, reste dû 1 516 175), badge « Envoyée ».
+  Le repli est défendable — ce qui compte est le reste dû, et un cinquième badge chargerait
+  la liste — mais **la promesse et l'affichage doivent s'accorder**. À trancher : ajouter le
+  statut d'affichage, ou corriger le texte du dialogue. Décision utilisateur, non tranchée.
 
 ---
 
@@ -144,8 +153,71 @@ vers `/connexion` en mémorisant la destination dans `?suite=`. L'inscription cr
 projet exige une confirmation par email, il n'y a pas encore de session à l'inscription et
 `/bienvenue` rattrape le cas — un compte sans entreprise serait un cul-de-sac.
 
+### Mot de passe oublié — `/mot-de-passe-oublie`, `/nouveau-mot-de-passe`
+Trois étapes : demande (adresse email) → lien reçu par email → choix du nouveau mot de passe,
+suivi d'une connexion immédiate. Le lien passe par **`GET /api/auth/confirmation`**, qui
+échange le jeton contre une session puis redirige.
+
+- **La route de retour est sous `/api/`** parce que le middleware exclut ce préfixe. Ailleurs,
+  il l'aurait renvoyée vers `/connexion` avant exécution — or l'utilisateur qui arrive là n'a
+  justement pas encore de session.
+- **Deux formes de jeton sont acceptées.** `?code=` (flux PKCE, celui de `@supabase/ssr` par
+  défaut) exige que le lien soit ouvert **dans le navigateur qui a fait la demande**, le
+  vérificateur étant un cookie ; `?token_hash=&type=` (gabarit d'email utilisant
+  `{{ .TokenHash }}`) fonctionne depuis n'importe quel appareil. Le message d'échec dit
+  explicitement le cas « autre appareil », sans quoi il est indevinable.
+- **`?suite=` n'accepte qu'un chemin interne.** Il transite par Supabase et reviendrait sinon
+  en redirection ouverte.
+- **La réponse est la même que l'adresse existe ou non.** Dire « compte inconnu » ferait de ce
+  formulaire un outil d'énumération de clients. Seule la limite de débit est signalée — sans
+  quoi l'utilisateur réessaie en boucle sans jamais rien recevoir.
+- **Configuration requise** : `NEXT_PUBLIC_SITE_URL` (sinon l'origine est déduite d'en-têtes
+  fournis par le client), et l'adresse `<site>/api/auth/confirmation` déclarée dans Supabase
+  sous *Authentication > URL Configuration > Redirect URLs*.
+### Envoi des emails — configuration en place (4 sept. 2026)
+
+**Resend est branché comme SMTP de Supabase.** Le service d'email intégré a été abandonné :
+il plafonnait à 2 messages par heure, ne livrait qu'aux membres du projet, et — c'est le
+point qui l'a condamné — **verrouillait les gabarits**. L'API de gestion refusait toute
+modification :
+
+> `Email template modification is not available for free tier projects using the default
+> email provider.`
+
+Un SMTP personnalisé débloque les trois d'un coup : livraison, traduction, et forme du lien.
+
+| Réglage | Valeur |
+|---|---|
+| `smtp_host` / `smtp_user` | `smtp.resend.com` / `resend` (mot de passe = `RESEND_API_KEY`) |
+| `smtp_admin_email` | `onboarding@resend.dev` — **expéditeur d'essai** |
+| `smtp_sender_name` | `XN-Facture` |
+| `rate_limit_email_sent` | 30/h (était 2) |
+| `uri_allow_list` | `http://localhost:3000/**` |
+| Gabarits | Français : `recovery`, `confirmation`, `password_changed_notification` |
+
+**Les gabarits pointent sur `{{ .TokenHash }}`, pas sur `{{ .ConfirmationURL }}`.** Le lien va
+donc directement à l'application et ne dépend d'aucun cookie : il s'ouvre depuis n'importe
+quel appareil. Avec `ConfirmationURL` on héritait du flux PKCE, qui exige d'ouvrir le lien
+dans le navigateur ayant fait la demande — intenable quand on demande depuis Chrome mobile et
+qu'on ouvre le message dans l'application Gmail, c'est-à-dire le cas courant ici.
+
+⚠️ **Deux limites à lever avant l'ouverture au public :**
+
+1. **Aucun domaine n'est vérifié chez Resend.** L'expéditeur `onboarding@resend.dev` ne livre
+   qu'à l'adresse propriétaire du compte Resend. Tout autre destinataire est rejeté.
+   Vérifier un domaine, puis remplacer `smtp_admin_email`.
+2. **`site_url` vaut `http://localhost:3000`**, donc les liens envoyés ne fonctionnent que sur
+   cette machine. À changer au déploiement, avec `NEXT_PUBLIC_SITE_URL` et `uri_allow_list`.
+
+**Vérifié de bout en bout**, et non supposé : demande depuis `/mot-de-passe-oublie` → journal
+Resend `statut=delivered` vers la boîte réelle, sujet « Réinitialisez votre mot de passe —
+XN-Facture », expéditeur `"XN-Facture" <onboarding@resend.dev>` → lien du gabarit rendu avec
+un vrai jeton et suivi → `/nouveau-mot-de-passe`, compte reconnu.
+
 ### Ce qui n'existe PAS — ne pas le supposer
-Aucun envoi d'email métier, aucun lien de partage public, aucun avoir, aucune relance
+Aucun envoi d'email **métier** (les seuls emails sont ceux d'authentification : confirmation
+d'adresse et réinitialisation de mot de passe, envoyés par Supabase),
+aucun lien de partage public, aucun avoir, aucune relance
 automatique, aucune invitation de collaborateur (le schéma la prévoit, l'interface non).
 Les pages `/paiements`, `/rapports` et `/aide` sont des **écrans d'attente**.
 
@@ -186,8 +258,11 @@ supabase/
 app/
   layout.tsx                    Polices auto-hébergées, <html lang="fr">
   (auth)/connexion|inscription|bienvenue/
+  (auth)/mot-de-passe-oublie/   Demande du lien de réinitialisation
+  (auth)/nouveau-mot-de-passe/  Choix du nouveau mot de passe (session déjà ouverte)
   (app)/layout.tsx              requireSession + CompanyProvider + AppShell
   (app)/dashboard|factures|devis|clients|parametres|paiements|rapports|aide/
+  api/auth/confirmation         GET, jeton d'email → session (hors middleware)
   api/factures/[id]/pdf         GET, lit la base (runtime Node)
   api/devis/[id]/pdf            GET, idem
   fonts/                        archivo-latin.woff2, inter-latin.woff2
@@ -197,6 +272,8 @@ components/
   ui/          Primitives : button, icon-button, card, input, field, switch, combobox,
                date-picker, dialog, popover, status-badge, empty-state
   layout/      app-shell, sidebar, topbar, logo, page-placeholder
+  auth/        auth-card (enveloppe commune), sign-in-form, sign-up-form,
+               create-company-form, forgot-password-form, reset-password-form
   dashboard/   dashboard-view, stat-card, recent-invoices, receivables-panel
   invoices/    invoice-form, invoice-list, invoice-detail, invoice-editor, invoice-preview,
                line-items-editor, totals-summary, invoice-quick-actions,
@@ -607,16 +684,34 @@ doivent être identiques dans le formulaire, l'aperçu, le détail et le PDF.
   conclure qu'un serveur est en panne.
 - Un `.next` corrompu produit des erreurs sur des pages intactes — `rm -rf .next` avant
   d'enquêter plus loin.
-- **Chromium (Chrome 152 et Edge 152) annule sur cette machine tout téléchargement de PDF
-  servi en local.** `fetch` reçoit un **204 sans corps**, et un téléchargement natif passe
-  par `downloadWillBegin` puis `canceled`, 0 octet. **Ce n'est pas l'application** : un PDF
-  *statique* posé dans `public/` se comporte exactement pareil, alors qu'un `.js` du même
-  serveur se télécharge normalement. Ont été testées et **réfutées** : `Content-Disposition`
-  (`attachment` comme `inline`), l'absence de `Content-Length`, les extensions
-  (`--disable-extensions`), le proxy, les politiques Chrome, la protection réseau de Defender.
-  **Pour vérifier un PDF, utiliser curl avec le cookie de session**, puis extraire le texte
-  (flux Flate, chaînes hexadécimales — voir plus bas). C'est probablement la même cause que
-  la latence de ~12 s observée en phase 2, jamais élucidée.
+- **CAUSE ÉLUCIDÉE (4 sept. 2026) — c'est Internet Download Manager, pas l'application.**
+  Chromium annulait sur cette machine tout téléchargement de PDF servi en local : `fetch`
+  recevait un **204 sans corps**, un téléchargement natif passait par `downloadWillBegin`
+  puis `canceled`, 0 octet. Le coupable est l'**« Advanced Integration » d'IDM** (`IDMan.exe`),
+  qui détourne les réponses `application/pdf` au niveau du réseau. La preuve est dans le
+  `statusText` de la réponse, visible uniquement par CDP `Network.responseReceived` :
+
+  ```
+  ← réponse 204 « Intercepted by the IDM Advanced Integration » | protocole http/1.0
+  ```
+
+  Cela explique pourquoi `--disable-extensions` n'y changeait rien : l'intégration avancée
+  n'est pas une extension, elle s'accroche sous le navigateur et s'applique donc même à un
+  profil neuf et au mode headless.
+
+  **Conséquences pratiques.** La route `/api/factures/[id]/pdf` est saine : en curl avec le
+  cookie de session elle rend **200, ~4,8 ko, `Content-Disposition` correct, en ~2,7 s**.
+  Pour vérifier un PDF sur cette machine, **utiliser curl avec le cookie de session** (le
+  récupérer par CDP `Network.getCookies`), puis extraire le texte. Pour un essai dans le
+  navigateur, arrêter `IDMan.exe` au préalable. Le garde-fou de `use-pdf-download.ts`
+  (`blob.size === 0`) fait son travail : l'utilisateur voit « Le document reçu est vide »
+  au lieu d'enregistrer un fichier de zéro octet.
+
+  ⚠️ Le commentaire des lignes 34–41 de `lib/pdf/use-pdf-download.ts` attribue encore ce 204
+  au « gestionnaire de téléchargement de Chromium ». C'est faux — il vise IDM. `Content-
+  Disposition` a été **formellement mis hors de cause** : réponse fabriquée en même origine
+  par CDP `Fetch.fulfillRequest`, corps identique, avec et sans l'en-tête — les deux
+  arrivent intactes à `fetch`.
 - **Une erreur d'authentification Supabase ne doit jamais remonter telle quelle** : elle est
   en anglais. `translateAuthError` retombe désormais sur une phrase française générique.
 

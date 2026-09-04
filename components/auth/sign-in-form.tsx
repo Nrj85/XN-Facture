@@ -68,18 +68,31 @@ export function SignInForm() {
           )}
         </Field>
 
-        <Field label="Mot de passe" required>
-          {(props) => (
-            <Input
-              {...props}
-              type="password"
-              autoComplete="current-password"
-              required
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-            />
-          )}
-        </Field>
+        <div className="space-y-1.5">
+          <Field label="Mot de passe" required>
+            {(props) => (
+              <Input
+                {...props}
+                type="password"
+                autoComplete="current-password"
+                required
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+              />
+            )}
+          </Field>
+
+          {/* Contre le champ concerné plutôt qu'en pied de carte : on le
+              cherche au moment précis où le mot de passe ne vient pas. */}
+          <p className="text-right">
+            <Link
+              href="/mot-de-passe-oublie"
+              className="text-[12.5px] font-medium text-brand transition-colors duration-150 hover:text-brand-hover hover:underline"
+            >
+              Mot de passe oublié ?
+            </Link>
+          </p>
+        </div>
 
         <Button type="submit" disabled={pending} className="w-full gap-2">
           {pending && (

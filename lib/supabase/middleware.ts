@@ -2,8 +2,20 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { isConfigured, publicConfig } from '@/lib/supabase/config';
 
-/** Routes accessibles sans session. Tout le reste exige d'être connecté. */
-const PUBLIC_PATHS = ['/connexion', '/inscription', '/bienvenue'];
+/**
+ * Routes accessibles sans session. Tout le reste exige d'être connecté.
+ *
+ * `/nouveau-mot-de-passe` y figure alors qu'il suppose une session : sans
+ * cela, un lien expiré renverrait vers `/connexion` sans un mot d'explication.
+ * La page fait elle-même le contrôle et dit ce qui s'est passé.
+ */
+const PUBLIC_PATHS = [
+  '/connexion',
+  '/inscription',
+  '/bienvenue',
+  '/mot-de-passe-oublie',
+  '/nouveau-mot-de-passe',
+];
 
 function isPublic(pathname: string): boolean {
   return PUBLIC_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`));
