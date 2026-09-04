@@ -58,12 +58,13 @@ publique · **7** tests de bout en bout, sécurité, déploiement Vercel.
 
 ### Ce qui reste à régler côté Supabase
 
-- **`mailer_autoconfirm` est à `false` et aucun SMTP propre n'est configuré.** L'inscription
-  crée le compte mais l'email de confirmation part par le serveur mutualisé de Supabase, qui
-  ne délivre qu'aux membres du projet et plafonne à 2 envois par heure. En l'état,
-  **`/inscription` ne mène nulle part pour un vrai utilisateur.** Deux issues : activer
-  l'auto-confirmation le temps du développement, ou brancher un SMTP avant la phase 5 — qui
-  en aura de toute façon besoin pour l'envoi des factures.
+- ~~Aucun SMTP propre~~ — **réglé le 4 sept. 2026 : Resend est branché**, voir « Envoi des
+  emails » en section 2. `mailer_autoconfirm` reste à `false`, ce qui est le bon réglage
+  maintenant que les emails partent réellement.
+- **Aucun domaine n'est vérifié chez Resend.** L'expéditeur d'essai `onboarding@resend.dev` ne
+  délivre qu'à l'adresse propriétaire du compte Resend : **`/inscription` ne mène toujours
+  nulle part pour un vrai utilisateur.** C'est le dernier verrou avant l'ouverture au public,
+  et il se lève avec trois enregistrements DNS.
 - **Supabase refuse les domaines sans enregistrement MX** (`@example.com`, `@xnfacture.cm`) avec
   `email_address_invalid`. Ce n'est pas un défaut de l'application ; inutile de le rediagnostiquer.
 
@@ -216,45 +217,69 @@ un vrai jeton et suivi → `/nouveau-mot-de-passe`, compte reconnu.
 
 ### Déploiement Vercel — `xn-facture.vercel.app`
 
-Le dépôt est **`github.com/Nrj85/XN-Facture`**, branche `main`, déployée automatiquement.
+Dépôt **`github.com/Nrj85/XN-Facture`**, branche `main`, déployée automatiquement. **En ligne
+et vérifié le 4 sept. 2026** : connexion, destination mémorisée par `?suite=`, tableau de bord
+et factures lus depuis Supabase, lien « Mot de passe oublié ? » fonctionnel.
 
-⚠️ **Les variables d'environnement ne sont PAS posées sur Vercel** (constaté le 4 sept. 2026).
-Symptôme exact, à ne pas rediagnostiquer :
+**Trois variables, et seulement trois** — toutes en type **Config**, sur *All Environments* :
 
-| Route | Réponse |
-|---|---|
-| `/connexion`, `/inscription`, `/mot-de-passe-oublie` | 200 — pages statiques, elles n'ont besoin de rien |
-| `/dashboard`, `/factures`, `/bienvenue` | **500** |
-| `/` | **307 sans en-tête `Location`**, corps = `<html id="__next_error__">` → page blanche |
-
-La racine ne fait pourtant que `redirect('/dashboard')` : c'est la cible qui échoue, pas elle.
-**Le diagnostic décisif** est de chercher la référence du projet Supabase dans les bundles
-servis — les variables `NEXT_PUBLIC_*` sont inlinées à la compilation, donc leur absence du
-JavaScript prouve qu'elles manquaient au build :
-
-```bash
-curl -s https://xn-facture.vercel.app/connexion \
-  | grep -oE '/_next/static/chunks/[A-Za-z0-9._-]+\.js' | sort -u \
-  | while read c; do curl -s "https://xn-facture.vercel.app$c" | grep -q "<ref-du-projet>" \
-      && echo "présente : $c"; done
+```
+NEXT_PUBLIC_SUPABASE_URL       https://tpzmmgcfpnsysaghdqrx.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY  (208 caractères)
+NEXT_PUBLIC_SITE_URL           https://xn-facture.vercel.app
 ```
 
-**Trois variables suffisent** — et seulement trois : `NEXT_PUBLIC_SUPABASE_URL`,
-`NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_SITE_URL`. **`SUPABASE_SERVICE_ROLE_KEY` n'est
-pas nécessaire** : `serviceRoleKey()` est défini dans `lib/supabase/config.ts` mais n'est
-appelé nulle part. La poser sur Vercel exposerait une clé qui contourne la RLS, sans aucun
-bénéfice. `RESEND_API_KEY` non plus : elle est posée une fois sur Supabase comme mot de passe
-SMTP, l'application ne la lit jamais au runtime.
+**`SUPABASE_SERVICE_ROLE_KEY` et `SUPABASE_ACCESS_TOKEN` ne doivent PAS y être.**
+`serviceRoleKey()` existe dans `lib/supabase/config.ts` mais n'est appelé nulle part ; la
+poser exposerait une clé qui contourne la RLS sans aucun bénéfice. `SUPABASE_ACCESS_TOKEN` est
+un jeton personnel qui pilote *tous* les projets Supabase du compte : il n'a rien à faire sur
+un serveur web. `RESEND_API_KEY` non plus — elle vit sur Supabase comme mot de passe SMTP.
 
-Le fichier `.env.vercel.local` (ignoré par git) contient le bloc prêt à coller dans
-*Vercel > Settings > Environment Variables > Import .env*.
+Le fichier `.env.vercel.local` (ignoré par git) contient le bloc prêt à coller.
 
-### Ce qui n'existe PAS — ne pas le supposer
-Aucun envoi d'email **métier** (les seuls emails sont ceux d'authentification : confirmation
-d'adresse et réinitialisation de mot de passe, envoyés par Supabase),
-aucun lien de partage public, aucun avoir, aucune relance
-automatique, aucune invitation de collaborateur (le schéma la prévoit, l'interface non).
-Les pages `/paiements`, `/rapports` et `/aide` sont des **écrans d'attente**.
+#### Les trois pièges rencontrés — ne pas les rediagnostiquer
+
+**1. Importer `.env.example` au lieu de `.env.local`.** Les deux se ressemblent ; le premier
+est versionné et **vide par construction**. Symptôme : quatre variables aux bons noms, toutes
+sans valeur.
+
+**2. Une variable `NEXT_PUBLIC_*` ne peut pas être de type « Secret ».** Vercel refuse
+d'enregistrer (« Remove the public framework prefix… change the variable to Config ») — mais
+une variable déjà enregistrée en Secret **ne se convertit pas** (« Saved secrets are
+write-only »). Seule issue : **la supprimer et la recréer en Config**, le type se choisissant
+avant le premier enregistrement. C'est légitime ici : ce qui contourne la RLS reste secret,
+ce que la RLS protège peut être public.
+
+**3. `NEXT_PUBLIC_*` est inscrit en dur À LA COMPILATION.** Corriger la valeur dans l'interface
+ne change **rien** au binaire déjà déployé. Il faut **Redeploy en décochant « Use existing
+Build Cache »**. Signature observée : `NEXT_PUBLIC_SITE_URL` — absente du build précédent, donc
+laissée en lecture à l'exécution — arrivait correctement, tandis que les deux variables déjà
+présentes mais vides restaient vides. Une variable *absente* au build se lit à l'exécution ;
+une variable *présente mais vide* est gravée à vide.
+
+#### Comment diagnostiquer, si cela se reproduit
+
+Le test décisif est **comparatif**, sur `/dashboard` sans session :
+
+| | Attendu | Si les clés manquent |
+|---|---|---|
+| `/dashboard` | `307 → /connexion?suite=%2Fdashboard` | **500** |
+| `/` | 307 vers `/connexion` | 307 **sans `Location`**, page blanche |
+
+Le 500 vient de `isConfigured()` faux dans le middleware : il laisse passer, puis la page lève
+`ConfigError`. En cas de doute sur *quelle* variable manque, une route temporaire
+`app/api/diagnostic/route.ts` renvoyant présence et longueur (jamais les valeurs) tranche en
+un déploiement.
+
+⚠️ **Ne pas chercher les clés dans les bundles JavaScript servis.** C'est une fausse piste :
+`lib/supabase/client.ts` n'est importé nulle part, tout Supabase passe par le serveur, donc
+`NEXT_PUBLIC_SUPABASE_URL` n'apparaît dans aucun bundle client — même en local avec toutes les
+clés. L'absence n'y prouve rien.
+
+⚠️ **`/connexion` n'a rien dans son HTML statique** : `useSearchParams` impose un `<Suspense>`,
+donc le formulaire n'existe qu'après hydratation. Un `curl | grep` sur cette page ne prouve
+rien non plus — il faut inspecter le DOM. Et tester le lien « Mot de passe oublié ? » exige
+une session purgée, sinon le middleware renvoie `/connexion` vers `/dashboard`.
 
 ---
 
