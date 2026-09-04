@@ -1,0 +1,53 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-paper text-ink antialiased;
+    font-feature-settings: 'cv05' 1;
+  }
+
+  /* Focus visible et cohérent sur toute l'application. */
+  :focus-visible {
+    @apply outline-none ring-2 ring-brand-bright ring-offset-2 ring-offset-paper;
+  }
+
+  ::selection {
+    @apply bg-brand-bright/20;
+  }
+}
+
+@layer components {
+  /* Titres : grotesque lourd en capitales, tracking resserré — repris du style
+     des captures. Réservé aux titres de page et aux libellés de section forts. */
+  .type-display {
+    @apply font-display font-extrabold uppercase tracking-[-0.02em];
+  }
+
+  /* Un produit de facturation est fait de colonnes de chiffres : ils doivent
+     s'aligner verticalement. Appliqué à tout montant et toute date. */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum' 1;
+  }
+
+  .label-caps {
+    @apply text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-2;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
