@@ -214,6 +214,21 @@ défaut), Encaissement (banque, compte, MTN MoMo, Orange Money). Suivi des modif
 enregistrées, validation, réinitialisation. Tout se répercute immédiatement sur les nouveaux
 documents ; **les documents existants gardent leur propre taux de TVA**.
 
+### Pages légales — `/confidentialite`, `/conditions`, `/mentions-legales`
+Trois pages statiques (420 o chacune), bâties sur un gabarit unique
+(`marketing/legal-page.tsx`) : mêmes documents de texte long, même mise en page.
+**Elles sont dans les `PUBLIC_PATHS`** — des mentions légales derrière une authentification
+n'auraient aucun sens.
+
+⚠️ **Trois réserves assumées, à lever avant l'ouverture :**
+- Chaque page porte un encart « document de travail, non validé juridiquement ». Il reste tant
+  qu'un juriste n'a pas relu les textes.
+- Les champs d'identification de l'éditeur des mentions légales sont des **espaces réservés
+  visibles** (`[à compléter]`). Un produit qui impose le NIU et le RCCM sur chaque facture ne
+  peut pas en inventer pour lui-même.
+- Le contenu décrit l'infrastructure **réelle** (Supabase à Dublin, Vercel, Resend, isolation
+  par RLS). Décrire un traitement qui n'existe pas serait pire que de ne rien écrire.
+
 ### PDF
 Génération serveur — `GET /api/factures/[id]/pdf` et `GET /api/devis/[id]/pdf` — avec logo,
 mentions légales, bloc de règlement, pagination. Le document est **relu en base sous RLS** :
@@ -244,6 +259,21 @@ node -e "const a=require('./.next/server/app/api/factures/[id]/pdf/route.js.nft.
 Les forcer n'a **rien changé** : le module manquant est un `.cjs`, pas un `.afm`. La leçon
 tient en une phrase : **lire l'erreur avant de deviner la cause.** Une route qui renvoie
 temporairement `cause.message` et six lignes de pile tranche en un déploiement.
+
+**Filigrane.** Le logo de l'émetteur est repris en grand au centre de chaque page, à
+**opacité 0,07**, rendu avant le contenu et marqué `fixed` pour se répéter sur toutes les
+pages. Absent si l'entreprise n'a pas de logo — aucun repli textuel, deux lettres géantes en
+fond ne ressembleraient à rien.
+
+⚠️ **L'opacité est reprise à l'identique dans `invoice-preview.tsx`** : l'aperçu prétend
+montrer « le document tel que le client le recevra », les deux doivent bouger ensemble. 0,05
+faisait disparaître un logo à traits fins ; au-delà de 0,10 les montants souffrent.
+
+⚠️ **Piège d'empilement CSS, côté aperçu uniquement.** Il faut `-z-10` sur le filigrane ET
+`isolate` sur la carte. Sans `isolate`, un enfant à indice négatif passe derrière le fond du
+parent — donc sous le `bg-surface` blanc, invisible. Constaté en capturant la carte avec et
+sans filigrane : **empreintes identiques**. Le contrôle vaut d'être rejoué si l'aperçu change,
+parce que l'œil ne voit pas la différence entre « très pâle » et « absent ».
 
 Ces deux routes sont **hors du `matcher` du middleware**, et refusent elles-mêmes en **401
 JSON**. Ce n'est pas un relâchement : une redirection 307 vers `/connexion` serait suivie par

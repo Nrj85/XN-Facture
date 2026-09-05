@@ -42,6 +42,36 @@ const styles = StyleSheet.create({
   meta: { marginTop: 6, fontSize: 8.5, color: INK_3 },
   metaStrong: { fontFamily: 'Helvetica-Bold', color: INK_2 },
   logo: { width: 46, height: 46, objectFit: 'contain' },
+
+  /**
+   * Filigrane : le logo de l'émetteur, en très large et très pâle, au centre
+   * de chaque page.
+   *
+   * **L'opacité est le point sensible.** Un filigrane trop appuyé rend une
+   * colonne de montants pénible à lire, et une facture doit rester lisible
+   * avant d'être décorative. 0,07 est le compromis retenu : à 0,05 un logo à
+   * traits fins disparaissait purement et simplement, au-delà de 0,10 les
+   * chiffres commencent à souffrir. **La même valeur est reprise dans
+   * `invoice-preview.tsx`** — l'aperçu prétend montrer le document réel, les
+   * deux doivent bouger ensemble.
+   *
+   * Le bloc est posé en `absolute` sur toute la page ET rendu AVANT le
+   * contenu : dans @react-pdf, la peinture suit l'ordre du document, donc
+   * tout ce qui suit passe par-dessus. `fixed` le fait réapparaître à chaque
+   * page — sans lui, une facture de deux pages n'aurait le filigrane que sur
+   * la première.
+   */
+  watermark: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    opacity: 0.07,
+  },
+  watermarkImage: { width: 320, height: 320, objectFit: 'contain' },
   logoFallback: {
     width: 38,
     height: 38,
@@ -160,6 +190,17 @@ export function InvoiceDocument({ payload }: { payload: PdfPayload }) {
       subject={`${docLabel} ${company.legalName} — ${client.name}`}
     >
       <Page size="A4" style={styles.page}>
+        {/* Filigrane : rendu en PREMIER pour que tout le contenu passe
+            par-dessus, et `fixed` pour qu'il se répète à chaque page. Absent
+            si l'entreprise n'a pas encore de logo — pas de repli textuel ici,
+            deux lettres géantes en fond ne ressembleraient à rien. */}
+        {company.logoDataUrl && (
+          <View style={styles.watermark} fixed>
+            {/* eslint-disable-next-line jsx-a11y/alt-text */}
+            <Image src={company.logoDataUrl} style={styles.watermarkImage} />
+          </View>
+        )}
+
         <View style={styles.header}>
           <View>
             <Text style={styles.title}>{isQuote ? 'DEVIS' : 'FACTURE'}</Text>

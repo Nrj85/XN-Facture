@@ -11,6 +11,12 @@ import { isConfigured, publicConfig } from '@/lib/supabase/config';
  */
 const PUBLIC_PATHS = [
   '/',
+  // Pages publiques du site vitrine. Les oublier ici les rendrait
+  // inaccessibles : le middleware renvoie tout le reste vers /connexion, et
+  // des mentions légales derrière une authentification n'ont aucun sens.
+  '/confidentialite',
+  '/conditions',
+  '/mentions-legales',
   '/connexion',
   '/inscription',
   '/bienvenue',

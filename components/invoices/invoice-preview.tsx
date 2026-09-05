@@ -51,7 +51,36 @@ export function InvoicePreview({
   const { company, formatMoney } = useCompany();
   const isQuote = variant === 'quote';
   return (
-    <article className="rounded-[10px] border border-line bg-surface p-5 shadow-card sm:p-6">
+    <article className="relative isolate overflow-hidden rounded-[10px] border border-line bg-surface p-5 shadow-card sm:p-6">
+      {/* Filigrane — même opacité et même cadrage que le PDF (`invoice-document.tsx`).
+          L'aperçu prétend montrer « le document tel que le client le recevra » :
+          s'il omettait le filigrane, il mentirait. `pointer-events-none` pour
+          qu'il n'intercepte aucun clic, `aria-hidden` parce qu'il n'apporte
+          rien à qui écoute la page. */}
+      {/* **Deux règles d'empilement se combinent ici, et l'une sans l'autre ne
+          marche pas.**
+
+          1. `-z-10` : un élément POSITIONNÉ peint au-dessus du contenu statique
+             qui le suit, même à `z-index: 0`. Il faut un indice négatif pour
+             passer dessous.
+          2. `isolate` sur la carte : sans contexte d'empilement, un enfant à
+             indice négatif passe derrière le fond du PARENT — donc sous le
+             `bg-surface` blanc, invisible. `isolation: isolate` fait de la
+             carte un contexte, et l'ordre de peinture devient alors : fond de
+             la carte, puis les indices négatifs, puis le contenu.
+
+          Constaté pour de vrai : sans `isolate`, la capture de la carte avec et
+          sans filigrane rendait deux images d'empreinte identique. */}
+      {company.logoDataUrl && (
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-0 -z-10 flex items-center justify-center opacity-[0.07]"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={company.logoDataUrl} alt="" className="h-[62%] w-[62%] object-contain" />
+        </span>
+      )}
+
       <header className="flex items-start justify-between gap-4">
         <div>
           <h3 className="type-display text-[22px] leading-none text-ink">

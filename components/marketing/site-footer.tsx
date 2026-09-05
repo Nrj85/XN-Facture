@@ -22,9 +22,9 @@ const COLONNES = [
   {
     title: 'Légal',
     links: [
-      { label: 'Confidentialité', href: '#' },
-      { label: 'Conditions d’utilisation', href: '#' },
-      { label: 'Mentions légales', href: '#' },
+      { label: 'Confidentialité', href: '/confidentialite' },
+      { label: 'Conditions d’utilisation', href: '/conditions' },
+      { label: 'Mentions légales', href: '/mentions-legales' },
     ],
   },
 ];
