@@ -88,6 +88,53 @@ publique · **7** tests de bout en bout, sécurité, déploiement Vercel.
 
 ## 2. Fonctionnalités implémentées
 
+### Page d'accueil publique — `/`
+
+Point d'entrée du site depuis le 5 sept. 2026. La racine redirigeait vers `/dashboard` ;
+elle porte désormais la landing, et `'/'` a rejoint les `PUBLIC_PATHS` du middleware.
+
+⚠️ **Ajouter `'/'` à cette liste n'ouvre que la racine.** `isPublic` teste `pathname === path`
+puis `startsWith(path + '/')` — soit `'//'`, qui ne correspond à aucun chemin réel. Vérifié :
+`/dashboard`, `/factures`, `/devis`, `/clients`, `/parametres`, `/paiements` redirigent
+toujours vers `/connexion?suite=`.
+
+**La page est STATIQUE**, 1,42 ko de JS — seul l'en-tête est un composant client. C'est
+délibéré : la première page que voit un prospect sur un réseau lent ne doit rien attendre.
+
+**Elle n'utilise pas Tailwind mais des modules CSS.** C'est le seul endroit du projet dans ce
+cas, et c'était une demande explicite. La landing a des compositions longues, des dégradés et
+des animations d'ambiance que des attributs `class` rendraient illisibles. Les jetons sont
+**recopiés** de `tailwind.config.ts` dans `app/(marketing)/marketing.css` — un module CSS ne
+peut pas lire le thème Tailwind. **Toute modification d'une couleur doit donc être répercutée
+aux deux endroits.** C'est le coût de la séparation, et il est borné à cette liste de jetons.
+
+- Composants dans `components/marketing/`, chacun avec son `.module.css`.
+- `Section`, `InfoCardGrid` et `CtaButton` sont les trois briques réutilisées partout :
+  les sections « défis », « fonctionnalités » et « étapes » sont la **même** grille, et tous
+  les boutons de la page sont le **même** composant.
+- **Palette de l'application, pas celle de la maquette fournie.** La maquette proposait un
+  fond bleuté `#f6faff` ; une landing froide suivie d'une app crème se lit comme deux
+  produits. Structure et sections de la maquette : conservées telles quelles.
+- **Polices déjà auto-hébergées** (Archivo + Inter). Charger Plus Jakarta Sans depuis Google
+  aurait cassé la règle du build hermétique de la section 3.
+- **Icônes lucide et non Material Symbols** : cela évite une police externe sur un réseau lent.
+- Les chiffres de la maquette d'aperçu sont ceux du **contrôle chiffré de référence**
+  (2 110 000 · 406 175 · 2 516 175). Inventer des montants aurait affiché une TVA fausse sur
+  la page qui vend justement le calcul de la TVA.
+- ⚠️ **Les trois témoignages sont des exemples de mise en page, pas de vrais clients.** À
+  remplacer avant l'ouverture au public : des avis inventés sous des noms et des villes
+  précises seraient un mensonge, pas une maquette.
+
+**Animations.** La landing s'autorise plus de mouvement que l'application — ce n'est pas un
+écran où l'on manipule de l'argent. Le plafond de 240 ms de la section 6.6 reste tenu pour
+tout ce qui **répond à une action** ; seules les animations d'ambiance (flottement, halo,
+lueur) sont longues, et toutes sont coupées par `prefers-reduced-motion`.
+
+⚠️ **Piège CSS rencontré :** `.base:active` et `.primary:hover` ont la même spécificité (une
+classe + une pseudo-classe) — c'est l'ordre du fichier qui départage. Placée avant le survol,
+la règle d'enfoncement était écrasée et le bouton ne redescendait jamais. Constaté en forçant
+`:active` par CDP `CSS.forcePseudoState`, pas supposé.
+
 ### Tableau de bord — `/dashboard`
 Quatre cartes de statistiques (Factures émises · Montant facturé · Montant encaissé · Reste à
 encaisser), un panneau d'**ancienneté de créance** en barre empilée à quatre tranches
@@ -377,6 +424,8 @@ supabase/
 
 app/
   layout.tsx                    Polices auto-hébergées, <html lang="fr">
+  (marketing)/page.tsx          Landing publique — STATIQUE, modules CSS
+  (marketing)/marketing.css     Jetons recopiés de tailwind.config.ts
   (auth)/connexion|inscription|bienvenue/
   (auth)/mot-de-passe-oublie/   Demande du lien de réinitialisation
   (auth)/nouveau-mot-de-passe/  Choix du nouveau mot de passe (session déjà ouverte)
@@ -392,6 +441,9 @@ components/
   ui/          Primitives : button, icon-button, card, input, field, switch, combobox,
                date-picker, dialog, popover, action-menu, status-badge, empty-state
   layout/      app-shell, sidebar, topbar, logo, page-placeholder
+  marketing/   site-header, site-footer (+ FinalCta), hero, app-preview,
+               section, info-card, cta-button, pricing, testimonials
+               — chacun avec son .module.css, hors Tailwind
   auth/        auth-card (enveloppe commune), sign-in-form, sign-up-form,
                create-company-form, forgot-password-form, reset-password-form
   dashboard/   dashboard-view, dashboard-filters, stat-card, recent-invoices,

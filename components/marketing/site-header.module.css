@@ -1,0 +1,326 @@
+/*
+ * En-tête public.
+ *
+ * Il commence transparent, posé sur le dégradé du héros, et gagne son fond
+ * translucide + son filet dès qu'on défile. La bascule dit « tu n'es plus en
+ * haut » sans occuper un pixel de plus.
+ */
+
+.header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 50;
+  transition:
+    background-color 200ms ease-out,
+    box-shadow 200ms ease-out,
+    border-color 200ms ease-out;
+  border-bottom: 1px solid transparent;
+}
+
+.scrolled {
+  background: rgba(251, 248, 243, 0.82);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-bottom-color: var(--line);
+  box-shadow: 0 1px 12px rgba(27, 24, 21, 0.04);
+}
+
+.inner {
+  max-width: var(--max);
+  margin: 0 auto;
+  padding: 0 var(--gutter);
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+@media (min-width: 768px) {
+  .inner {
+    height: 76px;
+  }
+}
+
+/* --- Marque --------------------------------------------------------------- */
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  flex-shrink: 0;
+}
+
+.mark {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--r-sm);
+  background: var(--brand);
+  color: #ffffff;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  transition: transform 200ms ease-out;
+}
+
+.brand:hover .mark {
+  transform: rotate(-6deg) scale(1.06);
+}
+
+.wordmark {
+  font-family: var(--font-display), system-ui, sans-serif;
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+
+/* --- Navigation de bureau -------------------------------------------------- */
+
+.nav {
+  display: none;
+}
+
+@media (min-width: 900px) {
+  .nav {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+}
+
+/*
+ * Le soulignement pousse depuis la gauche au survol plutôt que d'apparaître
+ * d'un bloc : le mouvement suit le sens de lecture.
+ */
+.navLink {
+  position: relative;
+  padding: 8px 12px;
+  border-radius: var(--r-sm);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ink-2);
+  text-decoration: none;
+  transition: color 150ms ease-out;
+}
+
+.navLink::after {
+  content: '';
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 4px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--brand-bright);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 200ms ease-out;
+}
+
+.navLink:hover {
+  color: var(--ink);
+}
+
+.navLink:hover::after {
+  transform: scaleX(1);
+}
+
+/* --- Actions --------------------------------------------------------------- */
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.signIn {
+  display: none;
+  padding: 8px 14px;
+  border-radius: var(--r-sm);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+  text-decoration: none;
+  transition:
+    background-color 150ms ease-out,
+    color 150ms ease-out;
+}
+
+.signIn:hover {
+  background: var(--sand);
+  color: var(--brand-hover);
+}
+
+@media (min-width: 600px) {
+  .signIn {
+    display: inline-flex;
+  }
+}
+
+.ctaDesktop {
+  display: none;
+}
+
+@media (min-width: 600px) {
+  .ctaDesktop {
+    display: inline-flex;
+  }
+}
+
+/* --- Bouton du menu mobile -------------------------------------------------- */
+
+.burger {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+  transition:
+    background-color 150ms ease-out,
+    border-color 150ms ease-out,
+    transform 150ms ease-out;
+}
+
+.burger:hover {
+  border-color: var(--line-strong);
+  background: var(--sand);
+}
+
+.burger:active {
+  transform: scale(0.92);
+  transition-duration: 75ms;
+}
+
+@media (min-width: 900px) {
+  .burger {
+    display: none;
+  }
+}
+
+/*
+ * Les deux barres se croisent pour former une croix. Une icône remplacée par
+ * une autre saute ; celle-ci se transforme, ce qui montre que le même bouton
+ * ouvre et ferme.
+ */
+.bars {
+  position: relative;
+  width: 18px;
+  height: 12px;
+}
+
+.bar {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  border-radius: 2px;
+  background: currentColor;
+  transition:
+    transform 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 140ms ease-out;
+}
+
+.bar:nth-child(1) {
+  top: 0;
+}
+.bar:nth-child(2) {
+  top: 5px;
+}
+.bar:nth-child(3) {
+  top: 10px;
+}
+
+.open .bar:nth-child(1) {
+  transform: translateY(5px) rotate(45deg);
+}
+.open .bar:nth-child(2) {
+  opacity: 0;
+  transform: scaleX(0.4);
+}
+.open .bar:nth-child(3) {
+  transform: translateY(-5px) rotate(-45deg);
+}
+
+/* --- Tiroir mobile ---------------------------------------------------------- */
+
+.sheet {
+  position: fixed;
+  inset: 64px 0 0;
+  z-index: 40;
+  background: var(--paper);
+  padding: var(--gutter);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  animation: sheet-in 220ms cubic-bezier(0.22, 1, 0.36, 1);
+  overflow-y: auto;
+}
+
+@keyframes sheet-in {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.sheetLink {
+  padding: 14px 12px;
+  border-radius: var(--r-sm);
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--ink);
+  text-decoration: none;
+  border-bottom: 1px solid var(--line);
+  transition: background-color 150ms ease-out;
+  /* Les entrées entrent en cascade : l'œil suit la liste au lieu de la
+     recevoir d'un bloc. */
+  animation: sheet-item 260ms ease-out backwards;
+}
+
+.sheetLink:hover {
+  background: var(--sand);
+}
+
+@keyframes sheet-item {
+  from {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.sheetActions {
+  margin-top: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sheet,
+  .sheetLink {
+    animation: none;
+  }
+  .bar,
+  .mark,
+  .navLink::after {
+    transition: none;
+  }
+}

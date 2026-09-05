@@ -10,6 +10,7 @@ import { isConfigured, publicConfig } from '@/lib/supabase/config';
  * La page fait elle-même le contrôle et dit ce qui s'est passé.
  */
 const PUBLIC_PATHS = [
+  '/',
   '/connexion',
   '/inscription',
   '/bienvenue',
@@ -18,6 +19,9 @@ const PUBLIC_PATHS = [
 ];
 
 function isPublic(pathname: string): boolean {
+  // `'/'` ne rend public que la racine : la comparaison stricte l'attrape, et
+  // le préfixe `'//'` du second test ne correspond à aucun chemin réel. Sans
+  // cette précision, ajouter `'/'` à la liste ouvrirait tout le site.
   return PUBLIC_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`));
 }
 

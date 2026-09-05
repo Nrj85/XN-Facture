@@ -1,0 +1,166 @@
+/*
+ * Bouton d'appel à l'action de la landing.
+ *
+ * Trois temps, et chacun dit quelque chose :
+ *   - au repos, rien ne bouge ;
+ *   - au survol, le bouton se soulève de 2 px et une lueur balaie sa surface —
+ *     c'est l'invitation ;
+ *   - à l'enfoncement, il redescend en 75 ms, la seule durée qui confirme
+ *     vraiment la prise en compte du clic (§6.6 du design système).
+ *
+ * La flèche avance de 3 px au survol : elle dit où mène le bouton.
+ */
+
+.base {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 14px 26px;
+  border-radius: var(--r-sm);
+  border: 1px solid transparent;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  overflow: hidden;
+  isolation: isolate;
+  transition:
+    background-color 150ms ease-out,
+    border-color 150ms ease-out,
+    box-shadow 150ms ease-out,
+    transform 150ms ease-out;
+}
+
+/* --- Variante principale ------------------------------------------------- */
+
+.primary {
+  background: var(--brand);
+  color: #ffffff;
+  box-shadow: var(--shadow-card);
+}
+
+.primary:hover {
+  background: var(--brand-hover);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-raised);
+}
+
+/*
+ * La lueur : un trait clair incliné qui traverse le bouton au survol. Il est
+ * posé en pseudo-élément sous le contenu (`z-index: -1`), donc il n'intercepte
+ * aucun clic et ne gêne pas la lecture du libellé.
+ */
+.primary::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(
+    100deg,
+    transparent 25%,
+    rgba(255, 255, 255, 0.28) 50%,
+    transparent 75%
+  );
+  transform: translateX(-120%);
+  transition: transform 520ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.primary:hover::before {
+  transform: translateX(120%);
+}
+
+/*
+ * Halo pulsé au repos, réservé à l'appel à l'action principal de la page. Il
+ * attire l'œil sans rien déplacer : la pulsation porte sur une ombre, jamais
+ * sur la géométrie, donc rien ne saute autour du bouton.
+ */
+.pulse {
+  animation: cta-halo 2600ms ease-in-out infinite;
+}
+
+@keyframes cta-halo {
+  0%,
+  100% {
+    box-shadow:
+      var(--shadow-card),
+      0 0 0 0 rgba(206, 74, 20, 0.34);
+  }
+  55% {
+    box-shadow:
+      var(--shadow-card),
+      0 0 0 12px rgba(206, 74, 20, 0);
+  }
+}
+
+.pulse:hover {
+  animation: none;
+}
+
+/* --- Variante secondaire ------------------------------------------------- */
+
+.secondary {
+  background: var(--surface);
+  color: var(--ink);
+  border-color: var(--line);
+}
+
+.secondary:hover {
+  background: var(--sand);
+  border-color: var(--line-strong);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-card);
+}
+
+/* --- Enfoncement ----------------------------------------------------------
+ *
+ * ⚠️ Cette règle DOIT rester après `.primary:hover` et `.secondary:hover`.
+ * `.base:active` et `.primary:hover` ont la même spécificité (une classe plus
+ * une pseudo-classe) : c'est l'ordre du fichier qui départage. Placée plus
+ * haut, elle était écrasée par le survol et le bouton ne redescendait jamais —
+ * constaté en forçant `:active` par CDP, pas supposé.
+ */
+.base:active {
+  transform: translateY(0) scale(0.975);
+  transition-duration: 75ms;
+}
+
+/* --- Flèche -------------------------------------------------------------- */
+
+.icon {
+  flex-shrink: 0;
+  transition: transform 200ms ease-out;
+}
+
+.base:hover .icon {
+  transform: translateX(3px);
+}
+
+/* --- Tailles ------------------------------------------------------------- */
+
+.sm {
+  padding: 10px 18px;
+  font-size: 13px;
+}
+
+.block {
+  width: 100%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .base,
+  .base:hover,
+  .base:active,
+  .icon,
+  .base:hover .icon {
+    transform: none;
+  }
+  .primary::before,
+  .pulse {
+    animation: none;
+    transition: none;
+  }
+}

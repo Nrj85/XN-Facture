@@ -1,0 +1,69 @@
+/*
+ * Enveloppe de section : rythme vertical, largeur maximale, en-tête centré.
+ *
+ * Toutes les sections de la landing passent par là. C'est ce qui garantit
+ * qu'elles respirent pareil — sans cette enveloppe, chaque section finirait
+ * avec son propre `padding`, et l'écart entre deux blocs deviendrait aléatoire.
+ */
+
+.section {
+  padding-top: var(--section-y);
+  padding-bottom: var(--section-y);
+  scroll-margin-top: 84px; /* l'en-tête fixe ne doit pas masquer le titre visé */
+}
+
+.tinted {
+  background: var(--surface);
+}
+
+.sand {
+  background: var(--sand);
+}
+
+.inner {
+  max-width: var(--max);
+  margin: 0 auto;
+  padding: 0 var(--gutter);
+}
+
+.head {
+  max-width: 660px;
+  margin: 0 auto calc(var(--section-y) * 0.5);
+  text-align: center;
+}
+
+.eyebrow {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--brand-hover);
+  background: var(--brand-soft);
+  padding: 5px 12px;
+  border-radius: var(--r-full);
+  margin-bottom: 14px;
+}
+
+.title {
+  font-family: var(--font-display), system-ui, sans-serif;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  font-size: clamp(26px, 5.2vw, 40px);
+  margin: 0;
+  color: var(--ink);
+}
+
+.subtitle {
+  margin: 14px 0 0;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--ink-2);
+}
+
+@media (min-width: 768px) {
+  .subtitle {
+    font-size: 16px;
+  }
+}

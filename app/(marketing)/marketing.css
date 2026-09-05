@@ -1,0 +1,111 @@
+/*
+ * Socle de la page d'accueil publique.
+ *
+ * **Pourquoi du CSS séparé et non des classes utilitaires dans le JSX.** La
+ * landing est la seule surface du produit qui n'est pas une interface de
+ * travail : elle a des compositions longues, des dégradés, des animations
+ * d'ambiance. Les écrire en attributs `class` rendrait le balisage illisible.
+ * Chaque composant porte donc son `.module.css`, et ce fichier ne contient que
+ * ce qui est vraiment partagé : les jetons et deux animations.
+ *
+ * Les jetons reprennent EXACTEMENT les valeurs de `tailwind.config.ts`. Ils y
+ * sont recopiés parce qu'un module CSS ne peut pas lire le thème Tailwind ;
+ * toute modification de l'un doit donc être répercutée sur l'autre. C'est le
+ * prix de la séparation demandée, et il est limité à cette liste.
+ */
+
+.marketing {
+  /* Fonds */
+  --paper: #fbf8f3;
+  --surface: #ffffff;
+  --sand: #f4efe6;
+  --sand-deep: #ede6d9;
+
+  /* Filets */
+  --line: #e8e1d4;
+  --line-strong: #d8cfbd;
+
+  /* Textes */
+  --ink: #1b1815;
+  --ink-2: #5c544a;
+  --ink-3: #7a7064;
+
+  /* Marque */
+  --brand: #ce4a14;
+  --brand-hover: #b03d0f;
+  --brand-bright: #e2571f;
+  --brand-soft: #fdf1ea;
+
+  /* Statuts, pour la maquette de facture */
+  --status-sent: #92400e;
+  --status-sent-bg: #fdf0e3;
+  --status-paid: #0b5c43;
+  --status-paid-bg: #e6f4ee;
+  --status-overdue-dot: #d93a2b;
+
+  /* Rythme vertical — mobile d'abord, élargi au-delà de 768 px. */
+  --gutter: 16px;
+  --section-y: 56px;
+  --stack: 16px;
+
+  /* Rayons, repris du design système */
+  --r-sm: 10px;
+  --r-md: 14px;
+  --r-full: 9999px;
+
+  --shadow-card: 0 1px 2px rgba(27, 24, 21, 0.04), 0 1px 3px rgba(27, 24, 21, 0.06);
+  --shadow-raised: 0 4px 12px rgba(27, 24, 21, 0.08);
+  --shadow-pop: 0 12px 32px rgba(27, 24, 21, 0.12);
+
+  --max: 1200px;
+
+  background: var(--paper);
+  color: var(--ink);
+}
+
+@media (min-width: 768px) {
+  .marketing {
+    --gutter: 24px;
+    --section-y: 80px;
+    --stack: 24px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .marketing {
+    --gutter: 32px;
+    --section-y: 104px;
+  }
+}
+
+/* --- Animations partagées ------------------------------------------------
+ *
+ * La landing s'autorise plus de mouvement que l'application : ce n'est pas un
+ * outil où l'on manipule de l'argent, et un peu de vie y sert le propos. Le
+ * plafond de 240 ms du design système reste tenu pour tout ce qui répond à une
+ * action ; seules les animations d'AMBIANCE (flottement, lueur) sont longues,
+ * et elles sont toutes coupées par `prefers-reduced-motion` — la règle globale
+ * de `globals.css` s'en charge, et chaque module la répète pour les
+ * transformations.
+ */
+
+@keyframes marketing-rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes marketing-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}

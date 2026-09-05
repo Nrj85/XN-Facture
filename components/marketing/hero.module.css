@@ -1,0 +1,230 @@
+.hero {
+  position: relative;
+  padding-top: calc(64px + var(--section-y));
+  padding-bottom: var(--section-y);
+  overflow: hidden;
+}
+
+@media (min-width: 768px) {
+  .hero {
+    padding-top: calc(76px + var(--section-y));
+  }
+}
+
+/* Voile chaud derrière le héros : il assoit le titre sans dessiner de bloc. */
+.glow {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(60% 50% at 50% 0%, rgba(226, 87, 31, 0.13), transparent 70%),
+    radial-gradient(40% 40% at 85% 30%, rgba(206, 74, 20, 0.07), transparent 70%);
+  pointer-events: none;
+}
+
+.inner {
+  position: relative;
+  z-index: 1;
+  max-width: var(--max);
+  margin: 0 auto;
+  padding: 0 var(--gutter);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+/* --- Bandeau d'accroche ----------------------------------------------------- */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px 7px 8px;
+  border-radius: var(--r-full);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-card);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink-2);
+  margin-bottom: 24px;
+  animation: marketing-rise 400ms ease-out both;
+}
+
+.badgeDot {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--r-full);
+  background: var(--brand-soft);
+  color: var(--brand-hover);
+}
+
+/* --- Titre ------------------------------------------------------------------ */
+
+.title {
+  font-family: var(--font-display), system-ui, sans-serif;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  line-height: 1.06;
+  font-size: clamp(32px, 7.6vw, 60px);
+  max-width: 15ch;
+  margin: 0 0 20px;
+  color: var(--ink);
+  animation: marketing-rise 460ms ease-out 60ms both;
+}
+
+@media (min-width: 768px) {
+  .title {
+    max-width: 18ch;
+  }
+}
+
+.accent {
+  color: var(--brand);
+  /* Le trait sous l'accent se dessine au chargement : il pointe la promesse. */
+  background-image: linear-gradient(var(--brand-bright), var(--brand-bright));
+  background-repeat: no-repeat;
+  background-position: 0 92%;
+  background-size: 0% 4px;
+  animation: hero-underline 700ms cubic-bezier(0.22, 1, 0.36, 1) 620ms forwards;
+}
+
+@keyframes hero-underline {
+  to {
+    background-size: 100% 4px;
+  }
+}
+
+.lead {
+  max-width: 60ch;
+  margin: 0 0 32px;
+  font-size: 16px;
+  line-height: 1.65;
+  color: var(--ink-2);
+  animation: marketing-rise 460ms ease-out 120ms both;
+}
+
+@media (min-width: 768px) {
+  .lead {
+    font-size: 18px;
+  }
+}
+
+/* --- Boutons ---------------------------------------------------------------- */
+
+.ctas {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  margin-bottom: 32px;
+  animation: marketing-rise 460ms ease-out 180ms both;
+}
+
+@media (min-width: 480px) {
+  .ctas {
+    flex-direction: row;
+    justify-content: center;
+    width: auto;
+  }
+}
+
+/* --- Points de preuve -------------------------------------------------------- */
+
+.proofs {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px 28px;
+  margin: 0 0 44px;
+  padding: 0;
+  list-style: none;
+  animation: marketing-rise 460ms ease-out 240ms both;
+}
+
+.proof {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--ink-2);
+}
+
+.proofIcon {
+  color: var(--brand);
+  flex-shrink: 0;
+}
+
+/* --- Icônes flottantes -------------------------------------------------------
+ *
+ * Décoratives, donc `aria-hidden` et masquées sous 1100 px : sur un écran
+ * étroit elles chevaucheraient le texte, et ce serait pire que rien.
+ */
+.floaters {
+  display: none;
+}
+
+@media (min-width: 1100px) {
+  .floaters {
+    display: block;
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 1;
+  }
+}
+
+.floater {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: var(--r-md);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-raised);
+  color: var(--brand);
+  animation: marketing-float 6s ease-in-out infinite;
+}
+
+.f1 {
+  top: 18%;
+  left: 4%;
+  animation-delay: 0s;
+}
+.f2 {
+  top: 46%;
+  left: 8%;
+  animation-delay: 1.4s;
+  color: var(--status-paid);
+}
+.f3 {
+  top: 22%;
+  right: 5%;
+  animation-delay: 0.7s;
+  color: var(--status-sent);
+}
+.f4 {
+  top: 52%;
+  right: 9%;
+  animation-delay: 2.1s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .floater,
+  .badge,
+  .title,
+  .lead,
+  .ctas,
+  .proofs,
+  .accent {
+    animation: none;
+  }
+  .accent {
+    background-size: 100% 4px;
+  }
+}

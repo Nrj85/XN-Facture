@@ -1,0 +1,121 @@
+/*
+ * Carte à icône — réutilisée par « Les défis », « Fonctionnalités » et
+ * « Comment ça marche ». Trois sections, un seul composant : c'était le point
+ * de la demande, et c'est ce qui garde les trois grilles cohérentes.
+ */
+
+.grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 640px) {
+  .grid {
+    gap: 20px;
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1024px) {
+  .cols3 {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .cols4 {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.card {
+  position: relative;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: 24px;
+  box-shadow: var(--shadow-card);
+  transition:
+    transform 200ms ease-out,
+    box-shadow 200ms ease-out,
+    border-color 200ms ease-out;
+  overflow: hidden;
+}
+
+.card:hover {
+  transform: translateY(-3px);
+  border-color: var(--line-strong);
+  box-shadow: var(--shadow-raised);
+}
+
+/* Sur fond blanc, la carte doit se distinguer autrement : on la pose sur le
+   papier plutôt que sur du blanc sur blanc. */
+.onSurface {
+  background: var(--paper);
+}
+
+.badge {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--r-sm);
+  display: grid;
+  place-items: center;
+  margin-bottom: 18px;
+  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.card:hover .badge {
+  transform: translateY(-2px) rotate(-5deg);
+}
+
+.brandBadge {
+  background: var(--brand);
+  color: #ffffff;
+}
+
+.softBadge {
+  background: var(--brand-soft);
+  color: var(--brand-hover);
+}
+
+.sandBadge {
+  background: var(--sand-deep);
+  color: var(--ink-2);
+}
+
+.cardTitle {
+  margin: 0 0 8px;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+
+.cardText {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.62;
+  color: var(--ink-2);
+}
+
+/* Numéro d'étape, filigrane en fond de carte. */
+.step {
+  position: absolute;
+  top: 12px;
+  right: 18px;
+  font-family: var(--font-display), system-ui, sans-serif;
+  font-size: 52px;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--brand);
+  opacity: 0.12;
+  pointer-events: none;
+  user-select: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card,
+  .card:hover,
+  .badge,
+  .card:hover .badge {
+    transform: none;
+  }
+}
