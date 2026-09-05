@@ -13,20 +13,33 @@ const nextConfig = {
     /**
      * **Sans ceci, les PDF échouent en production et nulle part ailleurs.**
      *
-     * `pdfkit` lit les métriques des polices de base — `Helvetica.afm` et ses
-     * treize voisines — dans `node_modules/pdfkit/js/data/`, par un chemin
-     * calculé à l'exécution. L'analyse statique de Next ne peut pas le voir :
-     * la trace du build n'embarquait que le profil couleur `.icc` du même
-     * dossier, et pas un seul `.afm`. La fonction déployée se retrouvait donc
-     * sans la police que le document réclame, et `renderToBuffer` levait.
+     * Erreur exacte, relevée sur la fonction déployée :
+     *
+     *     Cannot find module
+     *     '/var/task/node_modules/pdfkit/js/standard-fonts/Helvetica.cjs'
+     *
+     * `pdfkit` charge les polices de base par un **sous-chemin d'import de
+     * paquet** — `require('#standard-fonts/Helvetica')`, résolu à l'exécution
+     * via le champ `imports` de son `package.json`. L'analyse statique de Next
+     * ne peut pas suivre cette indirection : les 29 fichiers du dossier étaient
+     * absents de la trace, donc du bundle déployé.
      *
      * En local rien ne paraissait, puisque `node_modules` est présent en
      * entier : symptôme exact, 200 en développement et 500 sur Vercel, sur la
      * même facture et le même code.
+     *
+     * `js/data/**` est inclus par surcroît : ce dossier porte le profil couleur
+     * et les métriques `.afm`, lus eux aussi par des chemins calculés.
      */
     outputFileTracingIncludes: {
-      '/api/factures/[id]/pdf': ['./node_modules/pdfkit/js/data/**'],
-      '/api/devis/[id]/pdf': ['./node_modules/pdfkit/js/data/**'],
+      '/api/factures/[id]/pdf': [
+        './node_modules/pdfkit/js/standard-fonts/**',
+        './node_modules/pdfkit/js/data/**',
+      ],
+      '/api/devis/[id]/pdf': [
+        './node_modules/pdfkit/js/standard-fonts/**',
+        './node_modules/pdfkit/js/data/**',
+      ],
     },
   },
 

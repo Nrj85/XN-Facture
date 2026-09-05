@@ -175,20 +175,28 @@ mention **BROUILLON — NON ÉMISE** et se télécharge sous `Brouillon-<client>
 émis prend son numéro.
 
 ⚠️ **Piège de déploiement, réglé le 5 sept. 2026 — 500 sur Vercel, 200 partout ailleurs.**
-`pdfkit` lit les métriques des polices de base (`Helvetica.afm` et ses treize voisines) dans
-`node_modules/pdfkit/js/data/`, par un **chemin calculé à l'exécution**. L'analyse statique de
-Next ne le voit pas : la trace du build n'embarquait que le profil couleur `.icc` du même
-dossier, **et pas un seul `.afm`**. La fonction déployée n'avait donc pas la police, et
-`renderToBuffer` levait — d'où « Génération du PDF impossible » en production uniquement,
-puisqu'en local `node_modules` est présent en entier.
+Erreur exacte, relevée sur la fonction déployée :
+
+    Cannot find module '/var/task/node_modules/pdfkit/js/standard-fonts/Helvetica.cjs'
+
+`pdfkit` charge les polices de base par un **sous-chemin d'import de paquet** —
+`require('#standard-fonts/Helvetica')`, résolu à l'exécution via le champ `imports` de son
+`package.json`. L'analyse statique de Next ne suit pas cette indirection : les 29 fichiers du
+dossier étaient absents de la trace, donc du bundle déployé. En local rien ne paraissait,
+`node_modules` étant présent en entier.
 
 Le correctif tient dans `next.config.mjs`, `experimental.outputFileTracingIncludes`, pour les
 deux routes PDF. **Contrôle après tout changement de dépendance** :
 
 ```bash
-node -e "const a=require('./.next/server/app/api/factures/[id]/pdf/route.js.nft.json').files; \
-  console.log(a.filter(f=>f.endsWith('.afm')).length)"   # doit rendre 14, pas 0
+node -e "const a=require('./.next/server/app/api/factures/[id]/pdf/route.js.nft.json').files;   console.log(a.filter(f=>f.includes('standard-fonts')).length)"   # doit rendre 30, pas 0
 ```
+
+⚠️ **Fausse piste, ne pas la refaire.** J'ai d'abord accusé les métriques `.afm` de
+`pdfkit/js/data/` — absentes de la trace elles aussi, ce qui rendait l'hypothèse séduisante.
+Les forcer n'a **rien changé** : le module manquant est un `.cjs`, pas un `.afm`. La leçon
+tient en une phrase : **lire l'erreur avant de deviner la cause.** Une route qui renvoie
+temporairement `cause.message` et six lignes de pile tranche en un déploiement.
 
 Ces deux routes sont **hors du `matcher` du middleware**, et refusent elles-mêmes en **401
 JSON**. Ce n'est pas un relâchement : une redirection 307 vers `/connexion` serait suivie par

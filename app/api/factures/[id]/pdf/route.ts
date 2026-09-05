@@ -66,16 +66,6 @@ export async function GET(_request: Request, { params }: { params: { id: string 
     });
   } catch (cause) {
     console.error('Génération PDF impossible', cause);
-    // DIAGNOSTIC TEMPOIRE : la route échoue en production et nulle part
-    // ailleurs, et le message générique n'apprend rien. On remonte la cause
-    // le temps de l'identifier, puis on revient au message seul.
-    const detail =
-      cause instanceof Error
-        ? { nom: cause.name, message: cause.message, pile: (cause.stack ?? '').split('\n').slice(0, 6) }
-        : { valeur: String(cause).slice(0, 300) };
-    return NextResponse.json(
-      { error: 'Génération du PDF impossible.', diagnostic: detail },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: 'Génération du PDF impossible.' }, { status: 500 });
   }
 }
