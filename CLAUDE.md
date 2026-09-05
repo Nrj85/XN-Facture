@@ -118,6 +118,18 @@ personnalisée à deux `DatePicker`. Recherche par nom de client ou numéro.
 - `matchesQuery` (`lib/invoices.ts`) est l'**unique** prédicat de recherche, partagé avec
   `/factures` pour que les deux ne puissent pas diverger.
 
+**Menu d'actions ⋯ par ligne** (`invoice-row-actions.tsx`) : ouvrir, télécharger le PDF,
+transitions de statut, supprimer.
+
+- Le panneau passe par `ui/action-menu.tsx`, **rendu en portail**. `Popover` aurait été rogné
+  par le `overflow-x-auto` du tableau — c'est la raison d'être de la règle « rien ne flotte »
+  de la section 7.3, que ce portail lève proprement.
+- **Les transitions ne sont pas réécrites** : elles viennent de `invoice-status-actions.ts`,
+  la même table que la page de détail. Deux copies auraient fini par diverger sur des
+  opérations qui attribuent un numéro ou soldent un encaissement.
+- Confirmation de suppression et saisie d'encaissement vivent dans la liste, en **un seul
+  exemplaire** : une modale par ligne en monterait sept.
+
 ### Factures — `/factures`
 - **Liste** : filtres par statut avec compteurs, recherche par client ou numéro, bascule en
   cartes sous `md`, états vides distincts (aucune facture / aucun résultat).
@@ -161,6 +173,22 @@ mentions légales, bloc de règlement, pagination. Le document est **relu en bas
 il ne peut plus être fabriqué pour une facture qui n'est pas la vôtre. Un brouillon porte la
 mention **BROUILLON — NON ÉMISE** et se télécharge sous `Brouillon-<client>.pdf` ; un document
 émis prend son numéro.
+
+⚠️ **Piège de déploiement, réglé le 5 sept. 2026 — 500 sur Vercel, 200 partout ailleurs.**
+`pdfkit` lit les métriques des polices de base (`Helvetica.afm` et ses treize voisines) dans
+`node_modules/pdfkit/js/data/`, par un **chemin calculé à l'exécution**. L'analyse statique de
+Next ne le voit pas : la trace du build n'embarquait que le profil couleur `.icc` du même
+dossier, **et pas un seul `.afm`**. La fonction déployée n'avait donc pas la police, et
+`renderToBuffer` levait — d'où « Génération du PDF impossible » en production uniquement,
+puisqu'en local `node_modules` est présent en entier.
+
+Le correctif tient dans `next.config.mjs`, `experimental.outputFileTracingIncludes`, pour les
+deux routes PDF. **Contrôle après tout changement de dépendance** :
+
+```bash
+node -e "const a=require('./.next/server/app/api/factures/[id]/pdf/route.js.nft.json').files; \
+  console.log(a.filter(f=>f.endsWith('.afm')).length)"   # doit rendre 14, pas 0
+```
 
 Ces deux routes sont **hors du `matcher` du middleware**, et refusent elles-mêmes en **401
 JSON**. Ce n'est pas un relâchement : une redirection 307 vers `/connexion` serait suivie par
@@ -354,13 +382,14 @@ app/
 
 components/
   ui/          Primitives : button, icon-button, card, input, field, switch, combobox,
-               date-picker, dialog, popover, status-badge, empty-state
+               date-picker, dialog, popover, action-menu, status-badge, empty-state
   layout/      app-shell, sidebar, topbar, logo, page-placeholder
   auth/        auth-card (enveloppe commune), sign-in-form, sign-up-form,
                create-company-form, forgot-password-form, reset-password-form
   dashboard/   dashboard-view, dashboard-filters, stat-card, recent-invoices,
-               receivables-panel
+               invoice-row-actions, receivables-panel
   invoices/    invoice-form, invoice-list, invoice-detail, invoice-editor, invoice-preview,
+               invoice-status-actions (table UNIQUE des transitions),
                line-items-editor, totals-summary, invoice-quick-actions,
                record-payment-dialog, download-invoice-button
   quotes/      quote-form, quote-list, quote-detail, quote-editor, quote-quick-actions
@@ -629,7 +658,8 @@ mouvement décoratif sape la crédibilité.
 | `ui/icon-button.tsx` | Bouton-icône 36 × 36, tons `neutral` / `brand` / `danger`. `label` **obligatoire** |
 | `ui/card.tsx` | `Card`, `CardHeader`, `CardTitle` |
 | `ui/status-badge.tsx` | **Seule** façon d'afficher un statut. Couvre factures et devis ; `label` sert à accorder au masculin |
-| `ui/popover.tsx` | Panneau flottant : bascule au-dessus si la place manque, alignement, clic extérieur, Échap |
+| `ui/popover.tsx` | Panneau flottant `absolute` : bascule au-dessus si la place manque, alignement, clic extérieur, Échap. **Rogné par un ancêtre à `overflow`** |
+| `ui/action-menu.tsx` | Menu ⋯ en **portail** (`fixed` sur `document.body`) : le seul qui survive à un `overflow-x-auto`. Se replace au défilement |
 | `ui/combobox.tsx` | Sélecteur déroulant, `searchable`, `disabled`. **Remplace `<select>` partout** |
 | `ui/date-picker.tsx` | Calendrier. **Remplace `<input type="date">` partout** |
 | `ui/dialog.tsx` | `Dialog` et `ConfirmDialog` sur `<dialog>` natif — piège à focus, Échap, inertie gratuits |
@@ -670,6 +700,11 @@ page blanche.
 1. **Une seule action contextuelle**, celle que le statut appelle. Un document au bout de sa
    course n'en propose aucune.
 2. **Rien ne flotte** — un menu déroulant serait rogné par l'`overflow-x-auto` du tableau.
+   ⚠️ **Vrai de `Popover`, faux de `ActionMenu`.** `Popover` se positionne en `absolute` dans
+   le flux, donc un ancêtre à `overflow` le découpe. `ui/action-menu.tsx` rend son panneau
+   dans un **portail sur `document.body`**, en `fixed` : aucun ancêtre ne peut plus le rogner.
+   C'est ce qui permet le menu ⋯ du tableau de bord. La règle reste valable pour tout panneau
+   bâti sur `Popover`.
 3. **`stopPropagation` sur chaque bouton** : la ligne entière est un raccourci vers le détail.
 
 Sur téléphone, la carte ne peut plus être un `<Link>` enveloppant — un lien ne contient pas de

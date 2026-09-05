@@ -3,18 +3,7 @@
 import { useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import {
-  ArrowLeft,
-  BadgeCheck,
-  Ban,
-  CoinsIcon,
-  Loader2,
-  Pencil,
-  RotateCcw,
-  Send,
-  Trash2,
-  Undo2,
-} from 'lucide-react';
+import { ArrowLeft, Loader2, Pencil, Send, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { ConfirmDialog } from '@/components/ui/dialog';
@@ -23,17 +12,14 @@ import { InvoicePreview } from '@/components/invoices/invoice-preview';
 import { DownloadInvoiceButton } from '@/components/invoices/download-invoice-button';
 import { RecordPaymentDialog } from '@/components/invoices/record-payment-dialog';
 import { DocumentCreatedDialog } from '@/components/documents/document-created-dialog';
-import { StatusMenu, type StatusAction } from '@/components/documents/status-menu';
+import { StatusMenu } from '@/components/documents/status-menu';
+import { invoiceStatusActions } from '@/components/invoices/invoice-status-actions';
 import { useCreationNotice } from '@/components/documents/use-creation-notice';
 import { formatDate, formatDueLabel } from '@/lib/format';
 import { computeTotals } from '@/lib/invoice-calc';
 import { formatQuantity } from '@/lib/money';
 import { useCompany } from '@/lib/company-context';
-import {
-  deleteInvoiceAction,
-  sendInvoiceAction,
-  setInvoiceStatusAction,
-} from '@/lib/actions/invoices';
+import { deleteInvoiceAction, sendInvoiceAction } from '@/lib/actions/invoices';
 import type { Client, InvoiceView } from '@/lib/types';
 
 /**
@@ -73,69 +59,17 @@ export function InvoiceDetail({
   /**
    * Transitions offertes depuis le statut courant.
    *
-   * Elles sont construites à partir du statut STOCKÉ, jamais de l'affiché :
-   * « en retard » n'est pas un état qu'on quitte, c'est une facture envoyée
-   * dont l'échéance est passée. Les deux se traitent donc identiquement.
+   * La table vit dans `invoice-status-actions.ts`, partagée avec le menu
+   * d'actions du tableau de bord : deux copies auraient fini par diverger sur
+   * des opérations qui attribuent un numéro ou soldent un encaissement.
    */
-  const markPaid: StatusAction = {
-    label: 'Marquer comme payée',
-    icon: BadgeCheck,
-    hint: `Solde la facture à ${formatMoney(totals.total)}.`,
-    onSelect: () => run(() => setInvoiceStatusAction(invoice.id, 'paid')),
-  };
-  const recordPartial: StatusAction = {
-    label:
-      invoice.amountPaid > 0 ? 'Corriger l’encaissement' : 'Enregistrer un encaissement partiel',
-    icon: CoinsIcon,
-    hint: 'Le statut se déduira du montant reçu.',
-    onSelect: () => setPaymentOpen(true),
-  };
-  const cancel: StatusAction = {
-    label: 'Annuler la facture',
-    icon: Ban,
-    hint: 'Elle sort des statistiques mais garde son numéro.',
-    group: 'correct',
-    onSelect: () => run(() => setInvoiceStatusAction(invoice.id, 'cancelled')),
-  };
-  const backToDraft: StatusAction = {
-    label: 'Repasser en brouillon',
-    icon: Undo2,
-    hint: 'Le numéro déjà attribué reste acquis, pour ne pas trouer la séquence.',
-    group: 'correct',
-    onSelect: () => run(() => setInvoiceStatusAction(invoice.id, 'draft')),
-  };
-
-  const STATUS_ACTIONS: Record<typeof invoice.status, StatusAction[]> = {
-    draft: [
-      {
-        label: 'Marquer comme envoyée',
-        icon: Send,
-        hint: 'Attribue le numéro définitif.',
-        onSelect: () => run(() => sendInvoiceAction(invoice.id)),
-      },
-      markPaid,
-      cancel,
-    ],
-    sent: [markPaid, recordPartial, backToDraft, cancel],
-    partially_paid: [markPaid, recordPartial, cancel],
-    paid: [
-      {
-        label: 'Annuler le règlement',
-        icon: RotateCcw,
-        hint: 'La facture repasse en attente d’encaissement.',
-        group: 'correct',
-        onSelect: () => run(() => setInvoiceStatusAction(invoice.id, 'sent')),
-      },
-    ],
-    cancelled: [
-      {
-        label: 'Rétablir la facture',
-        icon: RotateCcw,
-        hint: 'Elle repasse en attente d’encaissement.',
-        onSelect: () => run(() => setInvoiceStatusAction(invoice.id, 'sent')),
-      },
-    ],
-  };
+  const statusActions = invoiceStatusActions({
+    invoice,
+    total: totals.total,
+    formatMoney,
+    run,
+    onRecordPayment: () => setPaymentOpen(true),
+  });
 
   return (
     <div className="animate-fade-in space-y-5">
@@ -189,7 +123,7 @@ export function InvoiceDetail({
           )}
           <StatusMenu
             status={invoice.displayStatus}
-            actions={STATUS_ACTIONS[invoice.status]}
+            actions={statusActions}
             footnote="« En retard » se déduit de l’échéance, il ne se choisit pas."
           />
           <DownloadInvoiceButton invoice={invoice} />
