@@ -56,6 +56,27 @@ export const STATUS_LABELS: Record<DisplayStatus, string> = {
   cancelled: 'Annulée',
 };
 
+/**
+ * Prédicat de recherche d'une facture — **unique implémentation**, partagée par
+ * la liste `/factures` et le tableau de bord.
+ *
+ * On cherche sur le nom du client et le numéro, et sur rien d'autre : ce sont
+ * les deux seules choses qu'on a en tête quand on cherche une facture. Y
+ * ajouter les montants ferait remonter du bruit dès qu'on tape un chiffre.
+ *
+ * Un brouillon n'a pas de numéro ; il reste trouvable par son client.
+ *
+ * `needle` est attendu **déjà en minuscules et détouré** — la normaliser ici
+ * la referait à chaque élément de la liste.
+ */
+export function matchesQuery(view: InvoiceView, needle: string): boolean {
+  if (!needle) return true;
+  return (
+    view.clientName.toLowerCase().includes(needle) ||
+    (view.number?.toLowerCase().includes(needle) ?? false)
+  );
+}
+
 export interface DashboardStats {
   /** Nombre de factures émises (brouillons et annulations exclus). */
   invoiceCount: number;

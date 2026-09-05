@@ -1,8 +1,10 @@
 'use client';
 
 import Link from 'next/link';
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight, FileText } from 'lucide-react';
+import { buttonClasses } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
+import { EmptyState } from '@/components/ui/empty-state';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { formatDate, formatDueLabel } from '@/lib/format';
 
@@ -47,14 +49,23 @@ function AmountCell({ invoice }: { invoice: InvoiceView }) {
   );
 }
 
-export function RecentInvoices({ invoices }: { invoices: InvoiceView[] }) {
+export function RecentInvoices({
+  invoices,
+  filtering = false,
+}: {
+  invoices: InvoiceView[];
+  /** Un filtre est actif : le titre et l'état vide doivent le dire. */
+  filtering?: boolean;
+}) {
   return (
     <Card>
       <CardHeader>
         <div>
-          <CardTitle>Dernières factures</CardTitle>
+          <CardTitle>{filtering ? 'Factures de la sélection' : 'Dernières factures'}</CardTitle>
           <p className="mt-0.5 text-[12.5px] text-ink-3">
-            Les {invoices.length} documents les plus récents
+            {invoices.length === 0
+              ? 'Aucun document à afficher'
+              : `Les ${invoices.length} document${invoices.length > 1 ? 's' : ''} le${invoices.length > 1 ? 's' : ''} plus récent${invoices.length > 1 ? 's' : ''}`}
           </p>
         </div>
         <Link
@@ -70,6 +81,25 @@ export function RecentInvoices({ invoices }: { invoices: InvoiceView[] }) {
         </Link>
       </CardHeader>
 
+      {invoices.length === 0 ? (
+        <EmptyState
+          icon={FileText}
+          title={filtering ? 'Aucune facture sur cette sélection' : 'Aucune facture'}
+          description={
+            filtering
+              ? 'Élargissez la période, ou effacez la recherche pour retrouver toutes vos factures.'
+              : 'Créez votre première facture pour commencer à suivre vos encaissements.'
+          }
+          action={
+            !filtering && (
+              <Link href="/factures/nouvelle" className={buttonClasses({ size: 'sm' })}>
+                Nouvelle facture
+              </Link>
+            )
+          }
+        />
+      ) : (
+        <>
       {/* Tableau à partir de md. */}
       <div className="hidden overflow-x-auto md:block">
         <table className="w-full border-collapse text-[13.5px]">
@@ -143,6 +173,8 @@ export function RecentInvoices({ invoices }: { invoices: InvoiceView[] }) {
           </li>
         ))}
       </ul>
+        </>
+      )}
     </Card>
   );
 }

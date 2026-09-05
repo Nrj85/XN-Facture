@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { InvoiceQuickActions } from '@/components/invoices/invoice-quick-actions';
 import { formatDate, formatDueLabel } from '@/lib/format';
-import { STATUS_LABELS } from '@/lib/invoices';
+import { matchesQuery, STATUS_LABELS } from '@/lib/invoices';
 
 import { useCompany } from '@/lib/company-context';
 import { deleteInvoiceAction } from '@/lib/actions/invoices';
@@ -50,11 +50,7 @@ export function InvoiceList({ views }: { views: InvoiceView[] }) {
     const needle = query.trim().toLowerCase();
     return views.filter((view) => {
       if (filter !== 'all' && view.displayStatus !== filter) return false;
-      if (!needle) return true;
-      return (
-        view.clientName.toLowerCase().includes(needle) ||
-        (view.number?.toLowerCase().includes(needle) ?? false)
-      );
+      return matchesQuery(view, needle);
     });
   }, [views, filter, query]);
 

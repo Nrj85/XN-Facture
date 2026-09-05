@@ -173,7 +173,12 @@ export function Combobox({
           }}
           onKeyDown={onKeyDown}
           className={cn(
-            'w-full bg-transparent text-[13px] outline-none placeholder:text-ink-3',
+            // `h-full` : sans lui l'input ne fait que la hauteur de son texte —
+            // 20 px dans un cadre de 40. Comme c'est lui, et lui seul, qui porte
+            // `onMouseDown`, taper les dix pixels du haut ou du bas n'ouvrait
+            // pas la liste. La cible tombait sous le plancher tactile de 36 px,
+            // sur l'appareil qui est justement le principal ici.
+            'h-full w-full bg-transparent text-[13px] outline-none placeholder:text-ink-3',
             disabled ? 'cursor-not-allowed text-ink-2' : 'text-ink',
             !searchable && !disabled && 'cursor-pointer',
           )}

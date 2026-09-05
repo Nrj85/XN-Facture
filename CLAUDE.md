@@ -94,6 +94,30 @@ encaisser), un panneau d'**ancienneté de créance** en barre empilée à quatre
 (à échoir, 1–30 j, 31–60 j, +60 j), et les dernières factures.
 *Contrôle croisé permanent : la somme des quatre tranches doit égaler le reste à encaisser.*
 
+**Filtres : période et recherche** (`dashboard-filters.tsx`). Période par préréglages —
+depuis le début, ce mois-ci, le mois dernier, 3 derniers mois, cette année — plus une plage
+personnalisée à deux `DatePicker`. Recherche par nom de client ou numéro.
+
+- **Les deux filtrent l'écran entier**, cartes et panneau d'ancienneté compris, pas seulement
+  la liste du bas. Filtrer la liste seule afficherait deux vérités contradictoires sur la même
+  page. Une ligne sous les filtres dit ce que couvrent les chiffres, sans quoi des totaux
+  partiels se lisent comme ceux de l'entreprise entière. Le contrôle croisé continue de
+  tenir : tout est calculé sur le même sous-ensemble.
+- **La période porte sur la date d'ÉMISSION**, pas l'échéance : c'est elle qui rattache une
+  facture à un exercice.
+- **Les bornes couvrent la période entière**, pas « jusqu'à aujourd'hui » : une facture datée
+  du 30 septembre doit apparaître dans « Ce mois-ci » dès le 5.
+- **L'état vit dans le composant, pas dans l'URL.** Le porter en `?periode=` imposerait
+  `useSearchParams`, donc un `<Suspense>` : le tableau de bord ne serait plus rendu qu'après
+  hydratation — cf. `/connexion`, dont le HTML statique est vide pour cette raison. Sur réseau
+  lent, le coût dépasse le bénéfice d'un lien partageable.
+- **Le filtrage se fait sur les données déjà chargées.** La page reçoit déjà toutes les
+  factures ; une requête par frappe coûterait bien plus que le tri local.
+- `lib/period.ts` porte l'arithmétique des bornes (`Date.UTC`, comme `lib/format.ts`).
+  Éprouvée sur 19 cas : bascule d'année, février bissextile, 31 mars → février.
+- `matchesQuery` (`lib/invoices.ts`) est l'**unique** prédicat de recherche, partagé avec
+  `/factures` pour que les deux ne puissent pas diverger.
+
 ### Factures — `/factures`
 - **Liste** : filtres par statut avec compteurs, recherche par client ou numéro, bascule en
   cartes sous `md`, états vides distincts (aucune facture / aucun résultat).
@@ -334,7 +358,8 @@ components/
   layout/      app-shell, sidebar, topbar, logo, page-placeholder
   auth/        auth-card (enveloppe commune), sign-in-form, sign-up-form,
                create-company-form, forgot-password-form, reset-password-form
-  dashboard/   dashboard-view, stat-card, recent-invoices, receivables-panel
+  dashboard/   dashboard-view, dashboard-filters, stat-card, recent-invoices,
+               receivables-panel
   invoices/    invoice-form, invoice-list, invoice-detail, invoice-editor, invoice-preview,
                line-items-editor, totals-summary, invoice-quick-actions,
                record-payment-dialog, download-invoice-button
@@ -357,6 +382,7 @@ lib/
   db/               database.types (GÉNÉRÉ), types (alias de lignes), mappers (ligne ↔ domaine),
                     queries (lectures serveur, `getSession` et `requireSession`)
   actions/          auth, company, clients, invoices, quotes · result, schemas, context
+  period.ts         Préréglages de période du tableau de bord (bornes en Date.UTC)
   calendar.ts       Grille du DatePicker (lundi en tête)
   nav.ts            Navigation et libellés de fil d'Ariane
   utils.ts          cn()
