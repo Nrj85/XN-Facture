@@ -58,7 +58,7 @@ export function Topbar({ onOpenMenu }: { onOpenMenu: () => void }) {
         </button>
 
         <div className="lg:hidden">
-          <Logo />
+          <Logo href="/dashboard" label="XN-Facture — tableau de bord" />
         </div>
 
         <nav aria-label="Fil d'Ariane" className="hidden min-w-0 flex-1 lg:block">

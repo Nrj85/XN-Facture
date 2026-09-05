@@ -46,7 +46,10 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <div className="flex h-full flex-col bg-sand">
       <div className="px-4 pb-3 pt-5">
-        <Logo />
+        {/* Depuis l'intérieur de l'application, le logo ramène au tableau de
+            bord — pas au site vitrine, qui n'a plus rien à dire à quelqu'un
+            de déjà connecté. */}
+        <Logo href="/dashboard" label="XN-Facture — tableau de bord" />
       </div>
 
       <div className="px-4 pb-4">

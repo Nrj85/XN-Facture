@@ -754,7 +754,8 @@ mouvement décoratif sape la crédibilité.
 | `ui/date-picker.tsx` | Calendrier. **Remplace `<input type="date">` partout** |
 | `ui/dialog.tsx` | `Dialog` et `ConfirmDialog` sur `<dialog>` natif — piège à focus, Échap, inertie gratuits |
 | `ui/field.tsx` · `input.tsx` · `switch.tsx` · `empty-state.tsx` | Champs et états |
-| `layout/app-shell.tsx` · `sidebar` · `topbar` · `logo` | Coquille et navigation. L'action principale de la barre supérieure **suit la section** (`primaryAction`) |
+| `layout/logo.tsx` | Marque. **`href` la rend cliquable** ; sans lui elle reste un `<span>` — un logo qui ne mène nulle part ne doit pas se comporter comme un lien. Destination : `/` depuis les écrans d'authentification, `/dashboard` depuis l'application |
+| `layout/app-shell.tsx` · `sidebar` · `topbar` | Coquille et navigation. L'action principale de la barre supérieure **suit la section** (`primaryAction`) |
 | `dashboard/stat-card.tsx` | Carte de statistique (valeur, unité, jauge, aide) |
 | `dashboard/recent-invoices.tsx` | Motif de référence **tableau + bascule liste mobile** |
 | `dashboard/receivables-panel.tsx` | Motif de référence **barre empilée + étiquetage direct** |
