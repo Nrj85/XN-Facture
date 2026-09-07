@@ -5,7 +5,8 @@ import { Combobox } from '@/components/ui/combobox';
 import { DatePicker } from '@/components/ui/date-picker';
 import { Input } from '@/components/ui/input';
 import type { IsoDate } from '@/lib/format';
-import { PERIOD_OPTIONS, type DateRange, type PeriodPreset } from '@/lib/period';
+import { PERIOD_KEYS, type DateRange, type PeriodPreset } from '@/lib/period';
+import { useT } from '@/lib/i18n/context';
 
 /**
  * Barre de filtres du tableau de bord : période et recherche.
@@ -41,23 +42,27 @@ export function DashboardFilters({
   today: IsoDate;
   rangeInvalid: boolean;
 }) {
+  const t = useT();
+  // Les préréglages portent une clé ; le libellé est résolu ici, à l'affichage.
+  const options = PERIOD_KEYS.map((entry) => ({ value: entry.value, label: t.period[entry.key] }));
+
   return (
-    <section aria-label="Filtrer le tableau de bord" className="space-y-3">
+    <section aria-label={t.dashboard.filtersLabel} className="space-y-3">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         <div className="sm:w-[210px]">
           <label htmlFor="periode" className="sr-only">
-            Période
+            {t.dashboard.period}
           </label>
           <Combobox
             id="periode"
             value={preset}
             onChange={(value) => onPresetChange(value as PeriodPreset)}
-            options={PERIOD_OPTIONS}
+            options={options}
           />
         </div>
 
         <label className="relative block flex-1">
-          <span className="sr-only">Rechercher une facture par client ou par numéro</span>
+          <span className="sr-only">{t.dashboard.searchAria}</span>
           <Search
             className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-3"
             aria-hidden
@@ -66,7 +71,7 @@ export function DashboardFilters({
             type="search"
             value={query}
             onChange={(event) => onQueryChange(event.target.value)}
-            placeholder="Rechercher un client ou un numéro de facture"
+            placeholder={t.dashboard.searchPlaceholder}
             className="pl-9"
           />
         </label>
@@ -86,7 +91,7 @@ export function DashboardFilters({
             className="inline-flex h-10 shrink-0 self-start items-center gap-1.5 rounded-[10px] border border-line bg-surface px-3 text-[13px] font-medium text-ink-2 transition-[background-color,border-color,transform] duration-150 ease-out hover:border-line-strong hover:text-ink active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100 sm:self-center"
           >
             <X className="h-3.5 w-3.5" aria-hidden />
-            Réinitialiser
+            {t.dashboard.reset}
           </button>
         )}
       </div>
@@ -95,7 +100,7 @@ export function DashboardFilters({
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
           <div className="sm:w-[210px]">
             <label htmlFor="periode-du" className="mb-1.5 block text-[12.5px] font-medium text-ink-2">
-              Du
+              {t.dashboard.from}
             </label>
             <DatePicker
               id="periode-du"
@@ -106,7 +111,7 @@ export function DashboardFilters({
           </div>
           <div className="sm:w-[210px]">
             <label htmlFor="periode-au" className="mb-1.5 block text-[12.5px] font-medium text-ink-2">
-              Au
+              {t.dashboard.to}
             </label>
             <DatePicker
               id="periode-au"
@@ -126,7 +131,7 @@ export function DashboardFilters({
               role="alert"
               className="text-[11.5px] font-medium text-status-overdue sm:mt-7"
             >
-              La date de fin précède la date de début.
+              {t.dashboard.rangeInvalid}
             </p>
           )}
         </div>

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { createPortal } from 'react-dom';
 import { MoreHorizontal, type LucideIcon } from 'lucide-react';
 import { IconButton } from '@/components/ui/icon-button';
+import { useT } from '@/lib/i18n/context';
 import { cn } from '@/lib/utils';
 
 /**
@@ -39,7 +40,7 @@ const LARGEUR = 244;
 
 export function ActionMenu({
   actions,
-  label = 'Actions',
+  label,
   title,
   className,
 }: {
@@ -49,6 +50,7 @@ export function ActionMenu({
   title?: string;
   className?: string;
 }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<{ top: number; left: number; above: boolean } | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -115,7 +117,7 @@ export function ActionMenu({
       <IconButton
         ref={triggerRef}
         icon={MoreHorizontal}
-        label={label}
+        label={label ?? t.common.actions}
         aria-haspopup="menu"
         aria-expanded={open}
         className={className}
@@ -133,7 +135,7 @@ export function ActionMenu({
           <div
             ref={panelRef}
             role="menu"
-            aria-label={title ?? label}
+            aria-label={title ?? label ?? t.common.actions}
             style={{ top: pos?.top ?? -9999, left: pos?.left ?? -9999, width: LARGEUR }}
             className={cn(
               'fixed z-50 rounded-card border border-line bg-surface shadow-pop animate-fade-in',
@@ -146,7 +148,7 @@ export function ActionMenu({
             )}
 
             {utilisables.length === 0 ? (
-              <p className="px-3 py-3 text-[12.5px] text-ink-3">Aucune action disponible.</p>
+              <p className="px-3 py-3 text-[12.5px] text-ink-3">{t.rowActions.noAction}</p>
             ) : (
               <ul className="py-1">
                 {utilisables.map((action) => {

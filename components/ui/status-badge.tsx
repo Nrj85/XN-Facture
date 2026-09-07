@@ -1,4 +1,6 @@
-import { STATUS_LABELS } from '@/lib/invoices';
+'use client';
+
+import { useT } from '@/lib/i18n/context';
 import type { DisplayStatus, QuoteDisplayStatus } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
@@ -32,13 +34,11 @@ const STYLES: Record<BadgeStatus, { pill: string; dot: string }> = {
  * `label` : « envoyé » ne s'accorde pas comme « envoyée », et un badge qui se
  * trompe de genre trahit tout de suite le gabarit générique.
  */
-const DEFAULT_LABELS: Record<BadgeStatus, string> = {
-  ...STATUS_LABELS,
-  accepted: 'Accepté',
-  converted: 'Facturé',
-  refused: 'Refusé',
-  expired: 'Expiré',
-};
+/**
+ * Les libellés viennent désormais du dictionnaire. `STATUS_LABELS` reste dans
+ * `lib/invoices.ts` pour ce qui ne passe pas par React — le PDF, notamment,
+ * qui reste en français quelle que soit la langue de l'interface.
+ */
 
 export function StatusBadge({
   status,
@@ -49,6 +49,7 @@ export function StatusBadge({
   label?: string;
   className?: string;
 }) {
+  const t = useT();
   const style = STYLES[status];
   return (
     <span
@@ -59,7 +60,7 @@ export function StatusBadge({
       )}
     >
       <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', style.dot)} aria-hidden />
-      {label ?? DEFAULT_LABELS[status]}
+      {label ?? t.status[status]}
     </span>
   );
 }

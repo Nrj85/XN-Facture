@@ -1,4 +1,7 @@
 import type { IsoDate } from '@/lib/format';
+import type { Dictionary } from '@/lib/i18n/dictionaries';
+
+type PeriodKey = keyof Dictionary['period'];
 
 /**
  * Périodes de consultation du tableau de bord.
@@ -25,13 +28,18 @@ export interface DateRange {
   to: IsoDate;
 }
 
-export const PERIOD_OPTIONS: { value: PeriodPreset; label: string }[] = [
-  { value: 'all', label: 'Depuis le début' },
-  { value: 'this-month', label: 'Ce mois-ci' },
-  { value: 'last-month', label: 'Le mois dernier' },
-  { value: 'last-3-months', label: '3 derniers mois' },
-  { value: 'this-year', label: 'Cette année' },
-  { value: 'custom', label: 'Période personnalisée' },
+/**
+ * Préréglages, dans l'ordre d'affichage. Ils portent une **clé de
+ * dictionnaire** et non un libellé : le sélecteur doit suivre la langue de
+ * l'interface, et ce module n'a pas à connaître les traductions.
+ */
+export const PERIOD_KEYS: { value: PeriodPreset; key: PeriodKey }[] = [
+  { value: 'all', key: 'all' },
+  { value: 'this-month', key: 'thisMonth' },
+  { value: 'last-month', key: 'lastMonth' },
+  { value: 'last-3-months', key: 'last3Months' },
+  { value: 'this-year', key: 'thisYear' },
+  { value: 'custom', key: 'custom' },
 ];
 
 function parts(iso: IsoDate): { y: number; m: number; d: number } {

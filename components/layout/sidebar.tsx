@@ -7,6 +7,7 @@ import { Logo } from '@/components/layout/logo';
 import { IconButton } from '@/components/ui/icon-button';
 import { PRIMARY_NAV, SECONDARY_NAV, type NavItem } from '@/lib/nav';
 import { useCompany } from '@/lib/company-context';
+import { useT } from '@/lib/i18n/context';
 import { signOut } from '@/lib/actions/auth';
 import { cn } from '@/lib/utils';
 
@@ -16,6 +17,7 @@ function isActive(pathname: string, href: string): boolean {
 
 function NavLink({ item, active, onNavigate }: { item: NavItem; active: boolean; onNavigate?: () => void }) {
   const Icon = item.icon;
+  const t = useT();
   return (
     <Link
       href={item.href}
@@ -33,7 +35,7 @@ function NavLink({ item, active, onNavigate }: { item: NavItem; active: boolean;
         strokeWidth={active ? 2.2 : 1.9}
         aria-hidden
       />
-      {item.label}
+      {t.nav[item.key]}
     </Link>
   );
 }
@@ -42,6 +44,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
   const router = useRouter();
   const { company, user } = useCompany();
+  const t = useT();
 
   return (
     <div className="flex h-full flex-col bg-sand">
@@ -49,7 +52,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         {/* Depuis l'intérieur de l'application, le logo ramène au tableau de
             bord — pas au site vitrine, qui n'a plus rien à dire à quelqu'un
             de déjà connecté. */}
-        <Logo href="/dashboard" label="XN-Facture — tableau de bord" />
+        <Logo href="/dashboard" label={t.nav.logoToDashboard} />
       </div>
 
       <div className="px-4 pb-4">
@@ -66,7 +69,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
           }}
         >
           <label className="relative block">
-            <span className="sr-only">Rechercher une facture ou un client</span>
+            <span className="sr-only">{t.nav.searchLabel}</span>
             <Search
               className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-3"
               aria-hidden
@@ -74,15 +77,15 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
             <input
               name="q"
               type="search"
-              placeholder="Rechercher"
+              placeholder={t.nav.search}
               className="h-9 w-full rounded-[10px] border border-line bg-surface pl-9 pr-3 text-[13px] text-ink transition-colors duration-150 placeholder:text-ink-3 hover:border-line-strong"
             />
           </label>
         </form>
       </div>
 
-      <nav className="flex-1 overflow-y-auto px-3" aria-label="Navigation principale">
-        <p className="label-caps px-3 pb-2 pt-1">Menu</p>
+      <nav className="flex-1 overflow-y-auto px-3" aria-label={t.nav.mainNav}>
+        <p className="label-caps px-3 pb-2 pt-1">{t.nav.menu}</p>
         <ul className="space-y-0.5">
           {PRIMARY_NAV.map((item) => (
             <li key={item.href}>
@@ -120,7 +123,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
             <IconButton
               type="submit"
               icon={LogOut}
-              label="Se déconnecter"
+              label={t.nav.signOut}
               className="shrink-0"
             />
           </form>

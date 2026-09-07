@@ -1,5 +1,7 @@
 import { AppShell } from '@/components/layout/app-shell';
 import { CompanyProvider } from '@/lib/company-context';
+import { LocaleProvider } from '@/lib/i18n/context';
+import { getLocale } from '@/lib/i18n';
 import { requireSession } from '@/lib/db/queries';
 
 /**
@@ -16,13 +18,27 @@ import { requireSession } from '@/lib/db/queries';
  */
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const session = await requireSession();
+  // La langue est résolue ICI, une seule fois, comme l'entreprise. Chaque
+  // composant client la reprend par contexte plutôt que de relire le cookie.
+  const locale = getLocale();
 
   return (
-    <CompanyProvider
-      company={session.company}
-      user={{ displayName: session.displayName, email: session.email }}
-    >
-      <AppShell>{children}</AppShell>
-    </CompanyProvider>
+    <LocaleProvider locale={locale}>
+      <CompanyProvider
+        company={session.company}
+        user={{ displayName: session.displayName, email: session.email }}
+      >
+        {/*
+          `lang` est posé ICI et non sur <html>. La racine est partagée avec la
+          landing publique, qui est STATIQUE et française : y lire le cookie
+          rendrait toute la page dynamique. `lang` sur un conteneur est du HTML
+          parfaitement valide, et c'est ce qui évite qu'un lecteur d'écran
+          prononce de l'anglais avec la phonétique française.
+        */}
+        <div lang={locale}>
+          <AppShell>{children}</AppShell>
+        </div>
+      </CompanyProvider>
+    </LocaleProvider>
   );
 }

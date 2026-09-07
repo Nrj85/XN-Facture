@@ -113,19 +113,24 @@ export function computeStats(views: readonly InvoiceView[]): DashboardStats {
 }
 
 /** Tranches d'ancienneté de créance, de la plus fraîche à la plus vieille. */
+/**
+ * Tranches d'ancienneté, dans l'ordre d'affichage.
+ *
+ * Elles ne portent plus que leur clé : les libellés viennent du dictionnaire,
+ * pour que le panneau suive la langue de l'interface. La clé sert aussi de
+ * jeton de couleur (`aging-1` à `aging-4`), donc l'ordre compte.
+ */
 export const AGING_BUCKETS = [
-  { key: 'current', label: 'À échoir', hint: 'Pas encore dues' },
-  { key: 'd1_30', label: '1 à 30 j', hint: 'Retard récent' },
-  { key: 'd31_60', label: '31 à 60 j', hint: 'À relancer' },
-  { key: 'd60p', label: 'Plus de 60 j', hint: 'Recouvrement' },
+  { key: 'current' },
+  { key: 'd1_30' },
+  { key: 'd31_60' },
+  { key: 'd60p' },
 ] as const;
 
 export type AgingKey = (typeof AGING_BUCKETS)[number]['key'];
 
 export interface AgingBucket {
   key: AgingKey;
-  label: string;
-  hint: string;
   amount: number;
   count: number;
 }

@@ -11,29 +11,32 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { InvoiceRowActions } from '@/components/dashboard/invoice-row-actions';
 import { RecordPaymentDialog } from '@/components/invoices/record-payment-dialog';
-import { formatDate, formatDueLabel } from '@/lib/format';
+import { formatDate } from '@/lib/format';
 import { deleteInvoiceAction } from '@/lib/actions/invoices';
 
 import { useCompany } from '@/lib/company-context';
+import { useT } from '@/lib/i18n/context';
 import type { InvoiceView } from '@/lib/types';
 
 function InvoiceRef({ invoice }: { invoice: InvoiceView }) {
+  const t = useT();
   // Un brouillon n'a pas encore de numéro : il n'en consomme un qu'à l'envoi.
   return invoice.number ? (
     <span className="tabular font-semibold text-ink">{invoice.number}</span>
   ) : (
-    <span className="text-ink-3">Sans numéro</span>
+    <span className="text-ink-3">{t.table.noNumber}</span>
   );
 }
 
 function DueCell({ invoice }: { invoice: InvoiceView }) {
+  const t = useT();
   const late = invoice.displayStatus === 'overdue';
   return (
     <>
       <span className="tabular block text-ink-2">{formatDate(invoice.dueDate)}</span>
       {late && (
         <span className="mt-0.5 block text-[11.5px] font-medium text-status-overdue">
-          {formatDueLabel(invoice.daysToDue)}
+          {t.due.label(invoice.daysToDue)}
         </span>
       )}
     </>
@@ -42,13 +45,14 @@ function DueCell({ invoice }: { invoice: InvoiceView }) {
 
 function AmountCell({ invoice }: { invoice: InvoiceView }) {
   const { formatMoney } = useCompany();
+  const t = useT();
   const partial = invoice.amountPaid > 0 && invoice.balanceDue > 0;
   return (
     <>
       <span className="tabular block font-semibold text-ink">{formatMoney(invoice.total)}</span>
       {partial && (
         <span className="tabular mt-0.5 block text-[11.5px] text-ink-3">
-          {formatMoney(invoice.amountPaid)} encaissé
+          {t.table.collected(formatMoney(invoice.amountPaid))}
         </span>
       )}
     </>
@@ -74,6 +78,7 @@ export function RecentInvoices({
   filtering?: boolean;
 }) {
   const router = useRouter();
+  const t = useT();
   const [pendingDelete, setPendingDelete] = useState<InvoiceView | null>(null);
   const [paymentFor, setPaymentFor] = useState<InvoiceView | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -93,18 +98,16 @@ export function RecentInvoices({
       <Card>
         <CardHeader>
           <div>
-            <CardTitle>{filtering ? 'Factures de la sélection' : 'Dernières factures'}</CardTitle>
+            <CardTitle>{filtering ? t.dashboard.recentSelection : t.dashboard.recent}</CardTitle>
             <p className="mt-0.5 text-[12.5px] text-ink-3">
-              {invoices.length === 0
-                ? 'Aucun document à afficher'
-                : `Les ${invoices.length} document${invoices.length > 1 ? 's' : ''} le${invoices.length > 1 ? 's' : ''} plus récent${invoices.length > 1 ? 's' : ''}`}
+              {t.dashboard.recentCount(invoices.length)}
             </p>
           </div>
           <Link
             href="/factures"
             className="group inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[13px] font-semibold text-brand transition-colors duration-150 hover:bg-brand-soft hover:text-brand-hover"
           >
-            Voir toutes les factures
+            {t.dashboard.seeAll}
             {/* La flèche avance : elle dit où mène le lien. */}
             <ArrowRight
               className="h-3.5 w-3.5 transition-transform duration-200 ease-out group-hover:translate-x-0.5 motion-reduce:transform-none"
@@ -125,16 +128,14 @@ export function RecentInvoices({
         {invoices.length === 0 ? (
           <EmptyState
             icon={FileText}
-            title={filtering ? 'Aucune facture sur cette sélection' : 'Aucune facture'}
+            title={filtering ? t.dashboard.emptyFiltered : t.dashboard.emptyTitle}
             description={
-              filtering
-                ? 'Élargissez la période, ou effacez la recherche pour retrouver toutes vos factures.'
-                : 'Créez votre première facture pour commencer à suivre vos encaissements.'
+              filtering ? t.dashboard.emptyFilteredText : t.dashboard.emptyText
             }
             action={
               !filtering && (
                 <Link href="/factures/nouvelle" className={buttonClasses({ size: 'sm' })}>
-                  Nouvelle facture
+                  {t.nav.newInvoice}
                 </Link>
               )
             }
@@ -144,16 +145,16 @@ export function RecentInvoices({
             {/* Tableau à partir de md. */}
             <div className="hidden overflow-x-auto md:block">
               <table className="w-full border-collapse text-[13.5px]">
-                <caption className="sr-only">Dernières factures émises</caption>
+                <caption className="sr-only">{t.table.caption}</caption>
                 <thead>
                   <tr className="border-b border-line">
-                    <th scope="col" className="label-caps px-5 py-2.5 text-left">Numéro</th>
-                    <th scope="col" className="label-caps px-5 py-2.5 text-left">Client</th>
-                    <th scope="col" className="label-caps px-5 py-2.5 text-left">Émission</th>
-                    <th scope="col" className="label-caps px-5 py-2.5 text-left">Échéance</th>
-                    <th scope="col" className="label-caps px-5 py-2.5 text-right">Montant</th>
-                    <th scope="col" className="label-caps px-5 py-2.5 text-left">Statut</th>
-                    <th scope="col" className="label-caps px-5 py-2.5 text-right">Actions</th>
+                    <th scope="col" className="label-caps px-5 py-2.5 text-left">{t.table.number}</th>
+                    <th scope="col" className="label-caps px-5 py-2.5 text-left">{t.table.client}</th>
+                    <th scope="col" className="label-caps px-5 py-2.5 text-left">{t.table.issued}</th>
+                    <th scope="col" className="label-caps px-5 py-2.5 text-left">{t.table.due}</th>
+                    <th scope="col" className="label-caps px-5 py-2.5 text-right">{t.table.amount}</th>
+                    <th scope="col" className="label-caps px-5 py-2.5 text-left">{t.table.status}</th>
+                    <th scope="col" className="label-caps px-5 py-2.5 text-right">{t.table.actions}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -212,10 +213,10 @@ export function RecentInvoices({
                   </div>
                   <div className="mt-2.5 flex items-end justify-between gap-3">
                     <p className="text-[12px] text-ink-3">
-                      <span className="tabular">Échéance {formatDate(invoice.dueDate)}</span>
+                      <span className="tabular">{t.table.dueOn(formatDate(invoice.dueDate))}</span>
                       {invoice.displayStatus === 'overdue' && (
                         <span className="mt-0.5 block font-medium text-status-overdue">
-                          {formatDueLabel(invoice.daysToDue)}
+                          {t.due.label(invoice.daysToDue)}
                         </span>
                       )}
                     </p>
@@ -233,13 +234,13 @@ export function RecentInvoices({
       <ConfirmDialog
         open={pendingDelete !== null}
         onClose={() => setPendingDelete(null)}
-        title="Supprimer cette facture ?"
+        title={t.rowActions.confirmTitle}
         description={
           pendingDelete
-            ? `${pendingDelete.number ?? 'Ce brouillon'} — ${pendingDelete.clientName}. Cette action est irréversible.`
+            ? t.rowActions.confirmText(pendingDelete.number ?? t.rowActions.draft, pendingDelete.clientName)
             : ''
         }
-        confirmLabel="Supprimer"
+        confirmLabel={t.common.delete}
         onConfirm={() => {
           const target = pendingDelete;
           setPendingDelete(null);

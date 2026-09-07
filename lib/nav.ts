@@ -9,38 +9,55 @@ import {
   Wallet,
   type LucideIcon,
 } from 'lucide-react';
+import type { Dictionary } from '@/lib/i18n/dictionaries';
+
+/**
+ * Navigation.
+ *
+ * Les entrées portent une **clé de dictionnaire**, pas un libellé. C'est ce
+ * qui permet à la barre latérale de changer de langue sans que ce fichier ait
+ * à connaître les deux traductions — et `keyof` fait échouer la compilation si
+ * une clé disparaît du dictionnaire.
+ */
+export type NavKey = keyof Dictionary['nav'];
 
 export interface NavItem {
   href: string;
-  label: string;
+  key: NavKey;
   icon: LucideIcon;
 }
 
 export const PRIMARY_NAV: NavItem[] = [
-  { href: '/dashboard', label: 'Tableau de bord', icon: LayoutDashboard },
-  { href: '/factures', label: 'Factures', icon: FileText },
-  { href: '/devis', label: 'Devis', icon: FileCheck },
-  { href: '/clients', label: 'Clients', icon: Users },
-  { href: '/paiements', label: 'Paiements', icon: Wallet },
-  { href: '/rapports', label: 'Rapports', icon: BarChart3 },
+  { href: '/dashboard', key: 'dashboard', icon: LayoutDashboard },
+  { href: '/factures', key: 'invoices', icon: FileText },
+  { href: '/devis', key: 'quotes', icon: FileCheck },
+  { href: '/clients', key: 'clients', icon: Users },
+  { href: '/paiements', key: 'payments', icon: Wallet },
+  { href: '/rapports', key: 'reports', icon: BarChart3 },
 ];
 
 export const SECONDARY_NAV: NavItem[] = [
-  { href: '/aide', label: 'Aide et support', icon: LifeBuoy },
-  { href: '/parametres', label: 'Paramètres', icon: Settings },
+  { href: '/aide', key: 'help', icon: LifeBuoy },
+  { href: '/parametres', key: 'settings', icon: Settings },
 ];
 
-/** Libellés de fil d'Ariane par segment de route. */
-export const SEGMENT_LABELS: Record<string, string> = {
-  dashboard: 'Tableau de bord',
-  factures: 'Factures',
-  devis: 'Devis',
-  clients: 'Clients',
-  paiements: 'Paiements',
-  rapports: 'Rapports',
-  parametres: 'Paramètres',
-  aide: 'Aide et support',
-  nouvelle: 'Nouvelle facture',
-  nouveau: 'Nouveau devis',
-  modifier: 'Modifier',
+/**
+ * Fil d'Ariane : segment de route → clé de dictionnaire.
+ *
+ * **Les routes restent en français** (`/factures`, `/devis`) même quand
+ * l'interface passe en anglais. Traduire les URL casserait tous les liens déjà
+ * partagés, et le document lui-même reste un document français.
+ */
+export const SEGMENT_KEYS: Record<string, NavKey> = {
+  dashboard: 'dashboard',
+  factures: 'invoices',
+  devis: 'quotes',
+  clients: 'clients',
+  paiements: 'payments',
+  rapports: 'reports',
+  parametres: 'settings',
+  aide: 'help',
+  nouvelle: 'newInvoice',
+  nouveau: 'newQuote',
+  modifier: 'edit',
 };

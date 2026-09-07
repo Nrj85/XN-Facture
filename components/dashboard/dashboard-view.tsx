@@ -17,6 +17,7 @@ import {
   type PeriodPreset,
 } from '@/lib/period';
 import { useCompany } from '@/lib/company-context';
+import { useT } from '@/lib/i18n/context';
 import type { InvoiceView } from '@/lib/types';
 
 /**
@@ -34,6 +35,7 @@ import type { InvoiceView } from '@/lib/types';
  */
 export function DashboardView({ views, today }: { views: InvoiceView[]; today: string }) {
   const { company, formatMoney, user } = useCompany();
+  const t = useT();
 
   const [preset, setPreset] = useState<PeriodPreset>('all');
   const [query, setQuery] = useState('');
@@ -65,7 +67,9 @@ export function DashboardView({ views, today }: { views: InvoiceView[]; today: s
   const stats = computeStats(filtered);
   const aging = computeAging(filtered);
   const collectedShare = stats.invoiced > 0 ? stats.paid / stats.invoiced : 0;
-  const firstName = user.displayName.split(' ')[0];
+  // `noUncheckedIndexedAccess` rend `[0]` optionnel aux yeux du compilateur :
+  // on retombe sur le nom entier plutôt que d'afficher « Bonjour undefined ».
+  const firstName = user.displayName.split(' ')[0] ?? user.displayName;
 
   const filtering = preset !== 'all' || query.trim().length > 0;
   // « Aucune facture émise », « 1 facture émise », « 7 factures émises » :
@@ -77,10 +81,10 @@ export function DashboardView({ views, today }: { views: InvoiceView[]; today: s
       <header>
         <p className="label-caps">{formatDateLong(today)}</p>
         <h1 className="type-display mt-1.5 text-[26px] leading-none sm:text-[32px]">
-          Tableau de bord
+          {t.dashboard.title}
         </h1>
         <p className="mt-2 text-sm text-ink-2">
-          Bonjour {firstName} — voici où en est {company.name}.
+          {t.dashboard.greeting(firstName, company.name)}
         </p>
       </header>
 
@@ -104,70 +108,63 @@ export function DashboardView({ views, today }: { views: InvoiceView[]; today: s
               dans les six combinaisons possibles (avec/sans période,
               avec/sans recherche, zéro ou plusieurs résultats). D'où le pluriel
               piloté par `plural` et non par la présence d'un filtre. */}
-          {filtered.length === 0 ? 'Aucune facture' : `${filtered.length} facture${plural}`}
+          {t.dashboard.scopeCount(filtered.length)}
           {effectiveRange && (
             <>
               {' '}
-              émise{plural} entre le{' '}
+              {t.dashboard.scopeIssued(filtered.length)}{' '}
               <span className="tabular font-medium text-ink">{formatDate(effectiveRange.from)}</span>{' '}
-              et le{' '}
+              {t.dashboard.scopeAnd}{' '}
               <span className="tabular font-medium text-ink">{formatDate(effectiveRange.to)}</span>
             </>
           )}
           {query.trim() && (
             <>
               {' '}
-              correspondant à « <span className="font-medium text-ink">{query.trim()}</span> »
+              {t.dashboard.scopeMatching} «{' '}
+              <span className="font-medium text-ink">{query.trim()}</span> »
             </>
           )}
-          . Tous les chiffres ci-dessous ne portent que sur cette sélection.
+          . {t.dashboard.scopeSuffix}
         </p>
       )}
 
-      <section aria-label="Chiffres clés" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <section aria-label={t.dashboard.keyFigures} className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
-          label="Factures émises"
+          label={t.dashboard.invoiceCount}
           value={String(stats.invoiceCount)}
-          unit={stats.invoiceCount > 1 ? 'factures' : 'facture'}
+          unit={t.dashboard.invoiceUnit(stats.invoiceCount)}
           icon={FileText}
           hint={
             stats.draftCount > 0
-              ? `${stats.draftCount} brouillon${stats.draftCount > 1 ? 's' : ''} pas encore envoyé${stats.draftCount > 1 ? 's' : ''}`
-              : 'Aucun brouillon en attente'
+              ? t.dashboard.draftsPending(stats.draftCount)
+              : t.dashboard.noDraft
           }
         />
         <StatCard
-          label="Montant facturé"
+          label={t.dashboard.invoiced}
           value={formatAmount(stats.invoiced)}
           unit="FCFA"
           icon={TrendingUp}
-          hint="Brouillons et factures annulées exclus"
+          hint={t.dashboard.invoicedHint}
         />
         <StatCard
-          label="Montant encaissé"
+          label={t.dashboard.collected}
           value={formatAmount(stats.paid)}
           unit="FCFA"
           icon={CheckCircle2}
           meter={collectedShare}
-          hint={`${Math.round(collectedShare * 100)} % du montant facturé`}
+          hint={t.dashboard.collectedHint(Math.round(collectedShare * 100))}
         />
         <StatCard
-          label="Reste à encaisser"
+          label={t.dashboard.outstanding}
           value={formatAmount(stats.outstanding)}
           unit="FCFA"
           icon={Clock}
           hint={
-            stats.overdueCount > 0 ? (
-              <>
-                dont{' '}
-                <span className="font-semibold text-status-overdue">
-                  {formatMoney(stats.overdueAmount)}
-                </span>{' '}
-                en retard sur {stats.overdueCount} factures
-              </>
-            ) : (
-              'Aucune facture en retard'
-            )
+            stats.overdueCount > 0
+              ? t.dashboard.overdueHint(formatMoney(stats.overdueAmount), stats.overdueCount)
+              : t.dashboard.noOverdue
           }
         />
       </section>

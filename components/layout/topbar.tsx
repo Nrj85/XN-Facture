@@ -5,7 +5,9 @@ import { usePathname } from 'next/navigation';
 import { ChevronRight, Menu, Plus } from 'lucide-react';
 import { buttonClasses } from '@/components/ui/button';
 import { Logo } from '@/components/layout/logo';
-import { SEGMENT_LABELS } from '@/lib/nav';
+import { SEGMENT_KEYS } from '@/lib/nav';
+import { useT } from '@/lib/i18n/context';
+import type { Dictionary } from '@/lib/i18n/dictionaries';
 
 /**
  * Fil d'Ariane construit à partir de l'URL.
@@ -14,13 +16,16 @@ import { SEGMENT_LABELS } from '@/lib/nav';
  * afficher un identifiant technique à l'utilisateur n'a aucun sens, et le titre
  * de la page porte déjà le numéro de la facture.
  */
-function useCrumbs(pathname: string) {
+function useCrumbs(pathname: string, t: Dictionary) {
   const segments = pathname.split('/').filter(Boolean);
   return segments
-    .map((segment, index) => ({
-      label: SEGMENT_LABELS[segment],
-      href: `/${segments.slice(0, index + 1).join('/')}`,
-    }))
+    .map((segment, index) => {
+      const key = SEGMENT_KEYS[segment];
+      return {
+        label: key ? t.nav[key] : undefined,
+        href: `/${segments.slice(0, index + 1).join('/')}`,
+      };
+    })
     .filter((crumb): crumb is { label: string; href: string } => Boolean(crumb.label))
     .map((crumb, index, all) => ({ ...crumb, last: index === all.length - 1 }));
 }
@@ -33,17 +38,18 @@ function useCrumbs(pathname: string) {
  * boutons orange à quarante pixels l'un de l'autre, ce qui se lit comme un
  * défaut de mise en page plutôt que comme un choix.
  */
-function primaryAction(pathname: string) {
+function primaryAction(pathname: string, t: Dictionary) {
   if (pathname.startsWith('/devis')) {
-    return { href: '/devis/nouveau', long: 'Nouveau devis', short: 'Devis' };
+    return { href: '/devis/nouveau', long: t.nav.newQuote, short: t.nav.quoteShort };
   }
-  return { href: '/factures/nouvelle', long: 'Nouvelle facture', short: 'Facture' };
+  return { href: '/factures/nouvelle', long: t.nav.newInvoice, short: t.nav.invoiceShort };
 }
 
 export function Topbar({ onOpenMenu }: { onOpenMenu: () => void }) {
   const pathname = usePathname();
-  const crumbs = useCrumbs(pathname);
-  const action = primaryAction(pathname);
+  const t = useT();
+  const crumbs = useCrumbs(pathname, t);
+  const action = primaryAction(pathname, t);
 
   return (
     <header className="sticky top-0 z-30 border-b border-line bg-paper/85 backdrop-blur-md">
@@ -54,14 +60,14 @@ export function Topbar({ onOpenMenu }: { onOpenMenu: () => void }) {
           className="-ml-1 grid h-9 w-9 shrink-0 place-items-center rounded-[10px] text-ink-2 transition-[background-color,color,transform] duration-150 ease-out hover:bg-sand hover:text-ink active:scale-90 motion-reduce:transition-none motion-reduce:active:scale-100 lg:hidden"
         >
           <Menu className="h-5 w-5" aria-hidden />
-          <span className="sr-only">Ouvrir le menu</span>
+          <span className="sr-only">{t.nav.openMenu}</span>
         </button>
 
         <div className="lg:hidden">
-          <Logo href="/dashboard" label="XN-Facture — tableau de bord" />
+          <Logo href="/dashboard" label={t.nav.logoToDashboard} />
         </div>
 
-        <nav aria-label="Fil d'Ariane" className="hidden min-w-0 flex-1 lg:block">
+        <nav aria-label={t.nav.breadcrumb} className="hidden min-w-0 flex-1 lg:block">
           <ol className="flex items-center gap-1.5 text-[13px]">
             {crumbs.map((crumb) => (
               <li key={crumb.href} className="flex items-center gap-1.5">

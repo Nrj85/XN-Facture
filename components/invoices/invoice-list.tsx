@@ -11,10 +11,11 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { Input } from '@/components/ui/input';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { InvoiceQuickActions } from '@/components/invoices/invoice-quick-actions';
-import { formatDate, formatDueLabel } from '@/lib/format';
+import { formatDate } from '@/lib/format';
 import { matchesQuery, STATUS_LABELS } from '@/lib/invoices';
 
 import { useCompany } from '@/lib/company-context';
+import { useT } from '@/lib/i18n/context';
 import { deleteInvoiceAction } from '@/lib/actions/invoices';
 import type { DisplayStatus, InvoiceView } from '@/lib/types';
 import { cn } from '@/lib/utils';
@@ -30,6 +31,7 @@ function filterLabel(filter: Filter): string {
 export function InvoiceList({ views }: { views: InvoiceView[] }) {
   const router = useRouter();
   const { formatMoney } = useCompany();
+  const t = useT();
   const [filter, setFilter] = useState<Filter>('all');
   // Terme initial repris de l'URL : c'est ce qui rend la recherche de la barre
   // latérale utile depuis n'importe quelle page.
@@ -191,7 +193,7 @@ export function InvoiceList({ views }: { views: InvoiceView[] }) {
                         <span className="tabular block text-ink-2">{formatDate(invoice.dueDate)}</span>
                         {invoice.displayStatus === 'overdue' && (
                           <span className="mt-0.5 block text-[11.5px] font-medium text-status-overdue">
-                            {formatDueLabel(invoice.daysToDue)}
+                            {t.due.label(invoice.daysToDue)}
                           </span>
                         )}
                       </td>
@@ -245,7 +247,7 @@ export function InvoiceList({ views }: { views: InvoiceView[] }) {
                         <span className="tabular">Échéance {formatDate(invoice.dueDate)}</span>
                         {invoice.displayStatus === 'overdue' && (
                           <span className="mt-0.5 block font-medium text-status-overdue">
-                            {formatDueLabel(invoice.daysToDue)}
+                            {t.due.label(invoice.daysToDue)}
                           </span>
                         )}
                       </p>

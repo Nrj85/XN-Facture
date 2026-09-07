@@ -5,7 +5,9 @@ code**, et le mettre à jour quand une décision structurante est prise. Les sec
 décrivent ce qui existe ; les sections 5 à 8 disent pourquoi c'est ainsi ; la section 9 explique
 comment travailler ici.
 
-**Interface entièrement en français** — libellés, messages, et commentaires de code.
+**Interface en français par défaut, anglais disponible** — voir « Langue de l'interface » en
+section 2. Le **code** reste commenté en français, et les **documents PDF restent français**
+quelle que soit la langue choisie.
 
 ---
 
@@ -223,6 +225,40 @@ coordonnée de règlement sur le document — rien n'est encore dû.
 Liste avec recherche, ajout et modification en modale (nom, contact, email, téléphone, adresse,
 ville). **La suppression est refusée** si le client porte des factures ou des devis, avec le
 décompte exact : supprimer en cascade détruirait de la comptabilité.
+
+### Langue de l'interface — préférence personnelle
+
+Sélecteur dans **Paramètres**, carte séparée du formulaire d'entreprise. Français par défaut,
+anglais disponible.
+
+- **Préférence PERSONNELLE, pas réglage d'entreprise.** Deux associés partagent la même
+  société sans forcément lire la même langue : le choix vit dans un cookie (`xn-langue`), pas
+  dans la table `companies`. Aucune migration, rien à synchroniser.
+- **Les documents ne suivent PAS.** Factures et devis restent en français : ce sont des pièces
+  comptables camerounaises portant des mentions (NIU, RCCM) sans équivalent traduit. Décision
+  prise avec l'utilisateur — ne pas la rouvrir sans lui demander. Le sélecteur le dit à
+  l'écran, pour éviter la question « pourquoi ma facture est-elle encore en français ? ».
+- **Les routes restent françaises** (`/factures`, `/devis`). Les traduire casserait tous les
+  liens déjà partagés.
+
+**Architecture.** `lib/i18n/` : `fr.ts` est la référence, `en.ts` est typé `typeof fr` — une
+clé manquante fait échouer `tsc`. `dictionaries.ts` est utilisable des deux côtés,
+`index.ts` porte les fonctions serveur, `context.tsx` le `useT()` des composants clients.
+
+⚠️ **Trois pièges déjà payés :**
+- **Pas de `as const` sur `fr.ts`.** Il fige chaque chaîne en type littéral, et `'Dashboard'`
+  n'est alors pas assignable au type `'Tableau de bord'`. Sans lui, la vérification porte sur
+  la forme — c'est ce qu'on veut.
+- **`context.tsx` ne doit importer que `dictionaries.ts`.** Passer par `index.ts` tire
+  `next/headers` dans le bundle client : « You're importing a component that needs
+  next/headers », et l'erreur désigne l'importateur, pas le fautif.
+- **`lang` est posé sur la coquille applicative, pas sur `<html>`.** La racine est partagée
+  avec la landing, qui est STATIQUE : y lire le cookie rendrait toute la page dynamique.
+
+**Ce qui est traduit** : navigation, fil d'Ariane, statuts, tableau de bord entier (cartes,
+encours, tranches, filtres, liste, menu ⋯), libellés d'échéance, paramètres.
+**Ce qui ne l'est pas encore** : `/factures`, `/devis`, `/clients`, les pages de détail, les
+écrans d'authentification, les dialogues, et les messages d'erreur des Server Actions.
 
 ### Paramètres — `/parametres`
 Quatre sections — Identité (dont téléversement du logo, redimensionné à 256 px avant stockage),

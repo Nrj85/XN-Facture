@@ -15,10 +15,11 @@ import { DocumentCreatedDialog } from '@/components/documents/document-created-d
 import { StatusMenu } from '@/components/documents/status-menu';
 import { invoiceStatusActions } from '@/components/invoices/invoice-status-actions';
 import { useCreationNotice } from '@/components/documents/use-creation-notice';
-import { formatDate, formatDueLabel } from '@/lib/format';
+import { formatDate } from '@/lib/format';
 import { computeTotals } from '@/lib/invoice-calc';
 import { formatQuantity } from '@/lib/money';
 import { useCompany } from '@/lib/company-context';
+import { useT } from '@/lib/i18n/context';
 import { deleteInvoiceAction, sendInvoiceAction } from '@/lib/actions/invoices';
 import type { Client, InvoiceView } from '@/lib/types';
 
@@ -38,6 +39,7 @@ export function InvoiceDetail({
 }) {
   const router = useRouter();
   const { formatMoney } = useCompany();
+  const t = useT();
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -100,7 +102,7 @@ export function InvoiceDetail({
             {invoice.displayStatus === 'overdue' && (
               <span className="font-medium text-status-overdue">
                 {' '}
-                · {formatDueLabel(invoice.daysToDue)}
+                · {t.due.label(invoice.daysToDue)}
               </span>
             )}
           </p>

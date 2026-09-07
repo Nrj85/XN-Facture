@@ -2,6 +2,7 @@
 
 import { Card } from '@/components/ui/card';
 import type { AgingBucket, AgingKey } from '@/lib/invoices';
+import { useT } from '@/lib/i18n/context';
 
 import { useCompany } from '@/lib/company-context';
 import { cn } from '@/lib/utils';
@@ -35,6 +36,7 @@ export function ReceivablesPanel({
   total: number;
   overdueAmount: number;
 }) {
+  const t = useT();
   const { formatMoney } = useCompany();
   const visible = buckets.filter((bucket) => bucket.amount > 0);
   const share = (amount: number) => (total > 0 ? (amount / total) * 100 : 0);
@@ -43,9 +45,9 @@ export function ReceivablesPanel({
     <Card className="p-5">
       <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
         <div>
-          <h2 className="text-[15px] font-semibold text-ink">Encours clients</h2>
+          <h2 className="text-[15px] font-semibold text-ink">{t.dashboard.receivables}</h2>
           <p className="mt-0.5 text-[12.5px] text-ink-3">
-            Ce qu&apos;il reste à encaisser, par ancienneté
+            {t.dashboard.receivablesHint}
           </p>
         </div>
         <div className="text-right">
@@ -54,7 +56,7 @@ export function ReceivablesPanel({
           </p>
           {overdueAmount > 0 && (
             <p className="mt-1.5 text-[12.5px] font-medium text-status-overdue">
-              dont {formatMoney(overdueAmount)} en retard
+              {t.dashboard.overdueShare(formatMoney(overdueAmount))}
             </p>
           )}
         </div>
@@ -75,14 +77,17 @@ export function ReceivablesPanel({
                 )}
               >
                 <span className="sr-only">
-                  {bucket.label} : {formatMoney(bucket.amount)} sur {bucket.count} facture
-                  {bucket.count > 1 ? 's' : ''}
+                  {t.dashboard.agingReading(
+                    t.dashboard.aging[bucket.key],
+                    formatMoney(bucket.amount),
+                    bucket.count,
+                  )}
                 </span>
                 <span
                   className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 hidden -translate-x-1/2 whitespace-nowrap rounded-lg bg-ink px-2.5 py-1.5 text-[11.5px] font-medium text-white shadow-pop group-hover:block"
                   aria-hidden
                 >
-                  {bucket.label} · {formatMoney(bucket.amount)}
+                  {t.dashboard.aging[bucket.key]} · {formatMoney(bucket.amount)}
                 </span>
               </div>
             ))}
@@ -96,13 +101,13 @@ export function ReceivablesPanel({
                     className={cn('h-2 w-2 shrink-0 rounded-[3px]', BAR_COLORS[bucket.key])}
                     aria-hidden
                   />
-                  <span className="text-[12px] font-semibold text-ink-2">{bucket.label}</span>
+                  <span className="text-[12px] font-semibold text-ink-2">{t.dashboard.aging[bucket.key]}</span>
                 </span>
                 <p className="tabular mt-1.5 text-[15px] font-bold leading-none tracking-[-0.01em] text-ink">
                   {formatMoney(bucket.amount)}
                 </p>
                 <p className="mt-1 text-[11.5px] text-ink-3">
-                  {bucket.count} facture{bucket.count > 1 ? 's' : ''} · {Math.round(share(bucket.amount))} %
+                  {t.dashboard.agingCount(bucket.count, Math.round(share(bucket.amount)))}
                 </p>
               </li>
             ))}
@@ -110,7 +115,7 @@ export function ReceivablesPanel({
         </>
       ) : (
         <p className="mt-5 text-[13px] text-ink-2">
-          Aucune facture en attente de paiement. Tout est encaissé.
+          {t.dashboard.receivablesEmpty}
         </p>
       )}
     </Card>

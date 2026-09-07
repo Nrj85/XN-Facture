@@ -8,6 +8,7 @@ import { invoiceStatusActions } from '@/components/invoices/invoice-status-actio
 import { pdfFileName } from '@/lib/pdf/payload';
 import { usePdfDownload } from '@/lib/pdf/use-pdf-download';
 import { useCompany } from '@/lib/company-context';
+import { useT } from '@/lib/i18n/context';
 import type { InvoiceView } from '@/lib/types';
 
 /**
@@ -38,6 +39,7 @@ export function InvoiceRowActions({
 }) {
   const router = useRouter();
   const { formatMoney } = useCompany();
+  const t = useT();
   const { download } = usePdfDownload();
   const [, startTransition] = useTransition();
 
@@ -58,13 +60,13 @@ export function InvoiceRowActions({
 
   const actions: MenuAction[] = [
     {
-      label: 'Ouvrir la facture',
+      label: t.rowActions.open,
       icon: Pencil,
-      hint: 'Voir le détail et modifier.',
+      hint: t.rowActions.openHint,
       onSelect: () => router.push(`/factures/${invoice.id}`),
     },
     {
-      label: 'Télécharger le PDF',
+      label: t.rowActions.download,
       icon: Download,
       onSelect: async () => {
         const nom = pdfFileName({
@@ -88,9 +90,9 @@ export function InvoiceRowActions({
         (action.group === 'correct' && transitions[index - 1]?.group !== 'correct'),
     })),
     {
-      label: 'Supprimer la facture',
+      label: t.rowActions.delete,
       icon: Trash2,
-      hint: 'Définitif.',
+      hint: t.rowActions.deleteHint,
       tone: 'danger',
       separated: true,
       onSelect: () => onDelete(invoice),
@@ -100,8 +102,8 @@ export function InvoiceRowActions({
   return (
     <ActionMenu
       actions={actions}
-      label={`Actions sur ${invoice.number ?? 'ce brouillon'}`}
-      title={invoice.number ?? 'Brouillon'}
+      label={t.rowActions.label(invoice.number ?? t.rowActions.thisDraft)}
+      title={invoice.number ?? t.rowActions.draft}
     />
   );
 }
