@@ -8,15 +8,25 @@
  * la landing ment ; ils sont donc repris tels quels, et pas inventés.
  */
 
-.frame {
+/* Le conteneur de révélation porte désormais la largeur : c'est lui qui
+   enveloppe le cadre depuis que la maquette s'anime au défilement. */
+.reveal {
   width: 100%;
   max-width: 1000px;
+}
+
+.frame {
+  width: 100%;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--r-md);
   box-shadow: var(--shadow-pop);
   overflow: hidden;
-  animation: marketing-rise 560ms ease-out 300ms both;
+  /*
+   * Plus d'animation au chargement ici : le cadre est révélé au défilement
+   * comme le reste, par `reveal.module.css`. En garder une seconde aurait fait
+   * jouer deux apparitions concurrentes sur le même élément.
+   */
 }
 
 /* --- Barre de navigateur ------------------------------------------------------ */
@@ -239,8 +249,5 @@
   border: 1px solid var(--line);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .frame {
-    animation: none;
-  }
-}
+/* `prefers-reduced-motion` est traité dans `reveal.module.css`, qui porte
+   désormais toute l'animation de ce bloc. */

@@ -125,6 +125,23 @@ aux deux endroits.** C'est le coût de la séparation, et il est borné à cette
   remplacer avant l'ouverture au public : des avis inventés sous des noms et des villes
   précises seraient un mensonge, pas une maquette.
 
+**Apparition au défilement** (`marketing/reveal.tsx`). La maquette d'aperçu se construit
+morceau par morceau quand elle entre dans l'écran : barre du navigateur, formulaire de gauche,
+puis document de droite — l'ordre raconte le geste réel, on saisit à gauche et le document se
+compose à droite.
+
+- **Un seul `IntersectionObserver` par groupe.** Les enfants marqués `data-reveal` s'échelonnent
+  ensuite par `transition-delay: calc(var(--reveal-index) * 70ms)`. Un observateur par élément
+  n'aurait rien apporté.
+- **L'observation s'arrête au premier passage** : rejouer l'animation à chaque aller-retour de
+  molette donnerait une page qui clignote — c'est le défaut le plus courant du procédé.
+- ⚠️ **Le contenu est masqué par CSS avant l'exécution du script**, pour éviter le clignotement
+  « visible → caché → révélé ». Un échec du script laisserait donc la maquette invisible : deux
+  filets couvrent ce risque, `@media (scripting: none)` et le repli du composant quand
+  `IntersectionObserver` n'existe pas.
+- ⚠️ **§6.6 proscrit l'apparition au défilement — pour l'APPLICATION.** Cette mécanique est
+  réservée à la landing, et ne doit pas franchir la frontière.
+
 **Animations.** La landing s'autorise plus de mouvement que l'application — ce n'est pas un
 écran où l'on manipule de l'argent. Le plafond de 240 ms de la section 6.6 reste tenu pour
 tout ce qui **répond à une action** ; seules les animations d'ambiance (flottement, halo,
@@ -471,8 +488,8 @@ components/
   ui/          Primitives : button, icon-button, card, input, field, switch, combobox,
                date-picker, dialog, popover, action-menu, status-badge, empty-state
   layout/      app-shell, sidebar, topbar, logo, page-placeholder
-  marketing/   site-header, site-footer (+ FinalCta), hero, app-preview,
-               section, info-card, cta-button, pricing, testimonials
+  marketing/   site-header, site-footer (+ FinalCta), hero, app-preview, reveal,
+               section, info-card, cta-button, pricing, testimonials, legal-page
                — chacun avec son .module.css, hors Tailwind
   auth/        auth-card (enveloppe commune), sign-in-form, sign-up-form,
                create-company-form, forgot-password-form, reset-password-form

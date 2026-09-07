@@ -1,0 +1,56 @@
+/*
+ * Apparition au défilement, élément par élément.
+ *
+ * **Un seul observateur pour tout un groupe.** Le déclencheur est posé sur le
+ * conteneur ; les enfants marqués `data-reveal` s'échelonnent ensuite par une
+ * simple `transition-delay` calculée depuis `--reveal-index`. Observer chaque
+ * élément séparément aurait multiplié les observateurs sans rien apporter.
+ *
+ * ⚠️ **Le contenu est masqué par CSS avant que le JavaScript ne s'exécute.**
+ * C'est ce qui évite le clignotement — visible, puis caché, puis révélé — mais
+ * cela veut dire qu'un échec du script laisserait la maquette invisible. Deux
+ * filets de sécurité couvrent ce risque :
+ *   - `@media (scripting: none)` rend tout visible quand le navigateur n'exécute
+ *     pas de script ;
+ *   - côté composant, l'absence d'`IntersectionObserver` révèle immédiatement.
+ *
+ * L'application, elle, s'interdit toujours l'apparition au défilement (§6.6) :
+ * cette mécanique est réservée à la landing, qui n'est pas un écran de travail.
+ */
+
+.group [data-reveal] {
+  opacity: 0;
+  transform: translateY(14px);
+  transition:
+    opacity 380ms ease-out,
+    transform 380ms cubic-bezier(0.22, 1, 0.36, 1);
+  /* L'échelonnement : 70 ms d'écart, assez pour que l'œil suive la
+     construction, trop peu pour qu'on attende. */
+  transition-delay: calc(var(--reveal-index, 0) * 70ms);
+  will-change: opacity, transform;
+}
+
+.group[data-shown] [data-reveal] {
+  opacity: 1;
+  transform: none;
+}
+
+/* Une fois l'animation jouée, on rend la main au navigateur. */
+.group[data-shown] [data-reveal] {
+  will-change: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .group [data-reveal] {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}
+
+@media (scripting: none) {
+  .group [data-reveal] {
+    opacity: 1;
+    transform: none;
+  }
+}
