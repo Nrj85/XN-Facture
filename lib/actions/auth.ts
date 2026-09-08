@@ -53,6 +53,13 @@ function translateAuthError(message: string): string {
   if (normalized.includes('signups not allowed') || normalized.includes('signup is disabled')) {
     return 'Les inscriptions sont désactivées sur ce serveur.';
   }
+  // Cas rencontré en conditions réelles : Supabase crée le compte, échoue à
+  // envoyer l'email de confirmation, et renvoie un 500. L'inscription est
+  // impossible pour TOUT LE MONDE, et le message générique laissait croire à
+  // une faute de saisie — la personne réessayait indéfiniment.
+  if (normalized.includes('error sending') && normalized.includes('email')) {
+    return 'Le compte n’a pas pu être créé : l’envoi de l’email de confirmation a échoué. Ce n’est pas votre saisie, c’est un réglage du serveur. Réessayez plus tard ou contactez-nous.';
+  }
   // Rien ne doit remonter en anglais : l'interface est entièrement en français,
   // et un message brut de Supabase renseigne l'utilisateur sur l'infrastructure
   // sans lui dire quoi faire. Observé une fois en conditions réelles :

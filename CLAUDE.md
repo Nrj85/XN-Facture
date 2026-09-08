@@ -63,10 +63,24 @@ publique · **7** tests de bout en bout, sécurité, déploiement Vercel.
 - ~~Aucun SMTP propre~~ — **réglé le 4 sept. 2026 : Resend est branché**, voir « Envoi des
   emails » en section 2. `mailer_autoconfirm` reste à `false`, ce qui est le bon réglage
   maintenant que les emails partent réellement.
-- **Aucun domaine n'est vérifié chez Resend.** L'expéditeur d'essai `onboarding@resend.dev` ne
-  délivre qu'à l'adresse propriétaire du compte Resend : **`/inscription` ne mène toujours
-  nulle part pour un vrai utilisateur.** C'est le dernier verrou avant l'ouverture au public,
-  et il se lève avec trois enregistrements DNS.
+- ⚠️ **Aucun domaine n'est vérifié chez Resend**, et c'est plus grave qu'il n'y paraît.
+  L'expéditeur d'essai `onboarding@resend.dev` ne délivre qu'à l'adresse propriétaire du
+  compte Resend. Tant que `mailer_autoconfirm` valait `false`, Supabase créait le compte,
+  échouait à envoyer l'email de confirmation, et renvoyait un **500** : l'inscription était
+  **impossible pour tout le monde**, avec à l'écran « La demande n'a pas abouti. Vérifiez vos
+  informations » — un message qui accusait la saisie de l'utilisateur.
+
+  Erreur exacte, obtenue en appelant `/auth/v1/signup` en direct :
+
+  ```
+  500  unexpected_failure  Error sending confirmation email
+  ```
+
+  **Contournement en place (8 sept. 2026) : `mailer_autoconfirm = true`.** L'inscription
+  fonctionne, mais les adresses ne sont plus vérifiées. **À remettre à `false` le jour où un
+  domaine est vérifié chez Resend** — c'est le seul vrai correctif, et il tient en trois
+  enregistrements DNS. `translateAuthError` traduit désormais ce cas en clair, pour qu'un
+  échec d'envoi ne se lise plus comme une faute de frappe.
 - **Supabase refuse les domaines sans enregistrement MX** (`@example.com`, `@xnfacture.cm`) avec
   `email_address_invalid`. Ce n'est pas un défaut de l'application ; inutile de le rediagnostiquer.
 

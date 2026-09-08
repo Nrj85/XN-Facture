@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { CreateCompanyForm } from '@/components/auth/create-company-form';
 import { createClient, currentUser } from '@/lib/supabase/server';
+import { isPlatformAdmin } from '@/lib/db/admin-queries';
 
 export const metadata: Metadata = { title: 'Votre entreprise' };
 
@@ -21,5 +22,10 @@ export default async function BienvenuePage() {
 
   if (member) redirect('/dashboard');
 
-  return <CreateCompanyForm />;
+  // Un administrateur de plateforme n'a pas forcément d'entreprise : après
+  // connexion il atterrit ici, et sans ce lien il n'avait AUCUN moyen
+  // d'atteindre son propre espace depuis l'interface. Il fallait taper l'URL.
+  const admin = await isPlatformAdmin();
+
+  return <CreateCompanyForm isAdmin={admin} />;
 }
