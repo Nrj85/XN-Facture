@@ -11,7 +11,14 @@ import { Topbar } from '@/components/layout/topbar';
  * dessous. La majorité des utilisateurs facturera depuis un téléphone, donc le
  * tiroir n'est pas une adaptation de second rang.
  */
-export function AppShell({ children }: { children: React.ReactNode }) {
+export function AppShell({
+  children,
+  isAdmin = false,
+}: {
+  children: React.ReactNode;
+  /** Résolu côté serveur par la coquille applicative, jamais deviné ici. */
+  isAdmin?: boolean;
+}) {
   const [menuOpen, setMenuOpen] = useState(false);
   const pathname = usePathname();
 
@@ -36,7 +43,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen lg:grid lg:grid-cols-[248px_minmax(0,1fr)]">
       <aside className="hidden border-r border-line lg:sticky lg:top-0 lg:block lg:h-screen">
-        <Sidebar />
+        <Sidebar isAdmin={isAdmin} />
       </aside>
 
       {menuOpen && (
@@ -56,7 +63,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <X className="h-4 w-4" aria-hidden />
               <span className="sr-only">Fermer le menu</span>
             </button>
-            <Sidebar onNavigate={() => setMenuOpen(false)} />
+            <Sidebar isAdmin={isAdmin} onNavigate={() => setMenuOpen(false)} />
           </div>
         </div>
       )}

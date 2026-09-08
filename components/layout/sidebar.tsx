@@ -5,7 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { LogOut, Search } from 'lucide-react';
 import { Logo } from '@/components/layout/logo';
 import { IconButton } from '@/components/ui/icon-button';
-import { PRIMARY_NAV, SECONDARY_NAV, type NavItem } from '@/lib/nav';
+import { ADMIN_NAV, PRIMARY_NAV, SECONDARY_NAV, type NavItem } from '@/lib/nav';
 import { useCompany } from '@/lib/company-context';
 import { useT } from '@/lib/i18n/context';
 import { signOut } from '@/lib/actions/auth';
@@ -40,7 +40,7 @@ function NavLink({ item, active, onNavigate }: { item: NavItem; active: boolean;
   );
 }
 
-export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
+export function Sidebar({ isAdmin = false, onNavigate }: { isAdmin?: boolean; onNavigate?: () => void }) {
   const pathname = usePathname();
   const router = useRouter();
   const { company, user } = useCompany();
@@ -96,6 +96,16 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
       </nav>
 
       <div className="space-y-0.5 px-3 py-3">
+        {/* L'entrée d'administration n'apparaît que pour qui y a droit. La
+            base refuserait de toute façon les données, mais montrer un lien
+            qui ramène d'où l'on vient serait un contrôle mort (§6.1). */}
+        {isAdmin && (
+          <NavLink
+            item={ADMIN_NAV}
+            active={isActive(pathname, ADMIN_NAV.href)}
+            onNavigate={onNavigate}
+          />
+        )}
         {SECONDARY_NAV.map((item) => (
           <NavLink key={item.href} item={item} active={isActive(pathname, item.href)} onNavigate={onNavigate} />
         ))}

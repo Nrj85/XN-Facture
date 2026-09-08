@@ -25,6 +25,7 @@ export const fr = {
     reports: 'Rapports',
     help: 'Aide et support',
     settings: 'Paramètres',
+    admin: 'Administration',
     menu: 'Menu',
     openMenu: 'Ouvrir le menu',
     closeMenu: 'Fermer le menu',

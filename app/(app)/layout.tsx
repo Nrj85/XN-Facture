@@ -3,6 +3,7 @@ import { CompanyProvider } from '@/lib/company-context';
 import { LocaleProvider } from '@/lib/i18n/context';
 import { getLocale } from '@/lib/i18n';
 import { requireSession } from '@/lib/db/queries';
+import { isPlatformAdmin } from '@/lib/db/admin-queries';
 
 /**
  * Coquille applicative.
@@ -21,6 +22,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // La langue est résolue ICI, une seule fois, comme l'entreprise. Chaque
   // composant client la reprend par contexte plutôt que de relire le cookie.
   const locale = getLocale();
+  // Résolu par la BASE, pas déduit du profil : `is_platform_admin()` interroge
+  // la table qui fait autorité, et c'est la même fonction qui garde les
+  // politiques RLS. Un seul verdict, pour l'affichage comme pour les données.
+  const admin = await isPlatformAdmin();
 
   return (
     <LocaleProvider locale={locale}>
@@ -36,7 +41,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           prononce de l'anglais avec la phonétique française.
         */}
         <div lang={locale}>
-          <AppShell>{children}</AppShell>
+          <AppShell isAdmin={admin}>{children}</AppShell>
         </div>
       </CompanyProvider>
     </LocaleProvider>

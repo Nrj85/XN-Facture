@@ -267,6 +267,50 @@ défaut), Encaissement (banque, compte, MTN MoMo, Orange Money). Suivi des modif
 enregistrées, validation, réinitialisation. Tout se répercute immédiatement sur les nouveaux
 documents ; **les documents existants gardent leur propre taux de TVA**.
 
+### Espace administrateur de plateforme — `/admin`
+
+Vue transversale de **toutes les entreprises**, en **lecture seule** : chiffres de la
+plateforme, liste des entreprises avec leurs volumes, comptes avec dernière connexion, et
+journal d'activité.
+
+**L'accès est appliqué par la BASE, pas par l'interface.** Migration `0004_admin.sql` :
+table `platform_admins`, fonction `is_platform_admin()`, et **huit politiques
+`*_admin_select` AJOUTÉES** — aucune politique existante n'est modifiée. Trois raisons, toutes
+importantes :
+
+- l'isolation entre entreprises reste exactement ce qu'elle était, et une relecture du fichier
+  montre d'un coup d'œil ce qui a été ajouté ;
+- `invoice_items_all` et `quote_items_all` sont des politiques `for all` : y glisser
+  `or is_platform_admin()` aurait ouvert **l'écriture** en même temps que la lecture ;
+- aucune politique d'insertion, de mise à jour ou de suppression n'est accordée à un
+  administrateur. **La clé `service_role` reste inutilisée** et absente de Vercel.
+
+**Vérifié après migration** : un compte ordinaire ne voit toujours qu'une entreprise, un
+client, une facture et trois lignes ; il ne voit pas la liste des administrateurs ; ses
+écritures croisées touchent zéro ligne ; l'écriture dans le journal et l'auto-promotion sont
+refusées en 403.
+
+**Ajout d'un administrateur : par la console SQL uniquement.** `platform_admins` n'a aucune
+politique d'écriture — ce n'est pas un oubli, c'est la protection principale.
+
+⚠️ **Trois pièges déjà payés :**
+- **`/admin` est dans son propre groupe `(admin)`, pas dans `(app)`.** La coquille
+  applicative appelle `requireSession()`, qui renvoie vers `/bienvenue` tout compte sans
+  entreprise — **or un administrateur de plateforme n'en a pas forcément**. Constaté : la base
+  répondait `is_platform_admin() = true` pendant que la page rendait un 307 vers
+  `/bienvenue`. `requireAdmin()` ne s'appuie donc PAS sur `getSession()`.
+- **PL/pgSQL ne court-circuite pas le `and`.** Le déclencheur testait
+  `tg_op = 'UPDATE' and new.status is distinct from old.status` : l'insertion d'un CLIENT
+  échouait aussitôt en `record "new" has no field "status"`, la table n'ayant pas cette
+  colonne. D'où une branche `if` par table, et des `if` imbriqués plutôt qu'une condition
+  combinée.
+- **Le journal n'a pas de clé étrangère sur `company_id`.** Délibéré : une contrainte ferait
+  disparaître l'historique en même temps que ce qu'il journalise.
+
+Les totaux de la page sont calculés **en TypeScript** par `computeTotals`, jamais en SQL —
+même règle qu'ailleurs. ⚠️ La lecture charge toutes les factures de toutes les entreprises
+avec leurs lignes : exact, mais **à revoir quand le volume grandira**.
+
 ### Pages légales — `/confidentialite`, `/conditions`, `/mentions-legales`
 Trois pages statiques (420 o chacune), bâties sur un gabarit unique
 (`marketing/legal-page.tsx`) : mêmes documents de texte long, même mise en page.
@@ -503,6 +547,8 @@ supabase/
   migrations/0002_functions.sql is_company_member, current_company_id,
                                 next_document_number, create_company_for_current_user
   migrations/0003_rls.sql       Politiques, toutes `to authenticated`
+  migrations/0004_admin.sql     platform_admins, is_platform_admin, journal, déclencheurs
+  migrations/0005_admin_actors.sql  Vue des comptes, réservée aux administrateurs
   seed.sql                      Jeu de démonstration, rejouable
 
 app/
@@ -512,6 +558,7 @@ app/
   (auth)/connexion|inscription|bienvenue/
   (auth)/mot-de-passe-oublie/   Demande du lien de réinitialisation
   (auth)/nouveau-mot-de-passe/  Choix du nouveau mot de passe (session déjà ouverte)
+  (admin)/admin/                Espace administrateur — coquille propre, sans entreprise
   (app)/layout.tsx              requireSession + CompanyProvider + AppShell
   (app)/dashboard|factures|devis|clients|parametres|paiements|rapports|aide/
   api/auth/confirmation         GET, jeton d'email → session (hors middleware)
