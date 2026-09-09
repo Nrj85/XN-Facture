@@ -240,10 +240,52 @@ Liste avec recherche, ajout et modification en modale (nom, contact, email, tél
 ville). **La suppression est refusée** si le client porte des factures ou des devis, avec le
 décompte exact : supprimer en cascade détruirait de la comptabilité.
 
-### Langue de l'interface — préférence personnelle
+### Préférences personnelles — nom et langue
 
-Sélecteur dans **Paramètres**, carte séparée du formulaire d'entreprise. Français par défaut,
-anglais disponible.
+Carte séparée du formulaire d'entreprise, dans **Paramètres** (`settings/personal-form.tsx`).
+Elle porte les deux réglages qui appartiennent à la personne au clavier et non à la société :
+son nom affiché, et la langue de son interface. Les mêler aux réglages d'entreprise aurait
+laissé croire qu'on renomme ses collègues ou qu'on change leur langue.
+
+#### Nom du titulaire du compte
+
+**Il n'y avait aucun moyen de le changer, jusqu'au 9 sept. 2026.** `full_name` était écrit une
+seule fois, à l'inscription (`lib/actions/auth.ts`), puis relu à chaque session pour alimenter
+la barre latérale et le « Bonjour … » du tableau de bord. Une faute de frappe à l'inscription
+était donc définitive. `updateUser` n'existait qu'une fois dans tout le projet, pour le mot de
+passe. Corrigé par `lib/actions/account.ts` → `updateDisplayNameAction`.
+
+⚠️ **Ne pas confondre avec le nom de l'ENTREPRISE.** Ce sont deux champs distincts, dans deux
+cartes distinctes : le nom commercial et la raison sociale vivent dans `companies` et signent
+les factures ; celui-ci vit dans `user_metadata` et ne quitte jamais l'écran. Deux associés
+d'une même société ont deux noms — les confondre aurait fait renommer l'un en renommant
+l'autre. **Le nom d'entreprise était et reste modifiable** : vérifié dans le navigateur et
+contre la base, ce n'était pas là que se trouvait le défaut.
+
+⚠️ **`Session` porte DEUX champs de nom, et il faut le bon.** `displayName` retombe sur
+l'email quand aucun nom n'est enregistré — juste pour AFFICHER, faux pour ÉDITER : le
+formulaire aurait préchargé une adresse email dans « Votre nom », et le premier enregistrement
+l'aurait gravée comme nom. `fullName` est le nom réellement enregistré, **vide s'il ne l'est
+pas**. C'est lui que reçoit le formulaire, et lui qui décide si le bouton est actif.
+
+⚠️ **Le nom a un bouton, la langue n'en a pas — c'est voulu.** La langue s'applique au choix :
+une seule valeur, réversible d'un clic, dont le résultat est immédiatement visible. Un nom se
+tape lettre par lettre : l'enregistrer à chaque frappe écrirait une fois par caractère et
+afficherait « Jea » dans la barre latérale.
+
+⚠️ **`user_metadata` est modifiable par son propriétaire, par construction.** Sans conséquence
+ici : chacun ne change que son propre nom d'affichage, et ce champ ne sert à aucune décision
+d'autorisation. **Ne jamais y ranger quoi que ce soit qui accorde un droit.**
+
+**Vérifié de bout en bout**, et non supposé : saisie → confirmation à l'écran en ~3 s →
+**rechargement complet** de `/parametres`, champ relu depuis la base → reconnexion en session
+neuve, barre latérale « Josue Rengou », avatar « JR », salutation « Bonjour Josue » (elle
+affichait auparavant `verif@example....`) → nom vide refusé, et la salutation reste intacte
+après la tentative → bascule en anglais, « Your name » / « Save ».
+
+#### Langue de l'interface
+
+Sélecteur dans la même carte. Français par défaut, anglais disponible.
 
 - **Préférence PERSONNELLE, pas réglage d'entreprise.** Deux associés partagent la même
   société sans forcément lire la même langue : le choix vit dans un cookie (`xn-langue`), pas
@@ -280,6 +322,10 @@ Coordonnées, Facturation (devise, taux de TVA, délai de règlement, préfixe, 
 défaut), Encaissement (banque, compte, MTN MoMo, Orange Money). Suivi des modifications non
 enregistrées, validation, réinitialisation. Tout se répercute immédiatement sur les nouveaux
 documents ; **les documents existants gardent leur propre taux de TVA**.
+
+Ces quatre sections décrivent l'ENTREPRISE et sont partagées par l'équipe. La carte
+« Préférences personnelles » qui les suit n'appartient qu'à la personne au clavier — voir
+plus haut.
 
 ### Espace administrateur de plateforme — `/admin`
 
@@ -598,7 +644,7 @@ components/
                record-payment-dialog, download-invoice-button
   quotes/      quote-form, quote-list, quote-detail, quote-editor, quote-quick-actions
   clients/     client-list
-  settings/    settings-form, logo-uploader
+  settings/    settings-form, logo-uploader, personal-form (nom + langue)
   documents/   status-menu, document-created-dialog, use-creation-notice   (facture + devis)
   pdf/         download-pdf-button
 
@@ -614,7 +660,8 @@ lib/
   supabase/         config (env typé), client (navigateur), server (RSC/actions), middleware
   db/               database.types (GÉNÉRÉ), types (alias de lignes), mappers (ligne ↔ domaine),
                     queries (lectures serveur, `getSession` et `requireSession`)
-  actions/          auth, company, clients, invoices, quotes · result, schemas, context
+  actions/          auth, account (nom affiché), company, clients, invoices, quotes
+                    · locale · result, schemas, context
   period.ts         Préréglages de période du tableau de bord (bornes en Date.UTC)
   calendar.ts       Grille du DatePicker (lundi en tête)
   nav.ts            Navigation et libellés de fil d'Ariane

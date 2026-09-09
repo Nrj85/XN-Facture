@@ -24,6 +24,15 @@ export interface Session {
   email: string;
   /** Nom affiché, tiré des métadonnées du compte. Retombe sur l'email. */
   displayName: string;
+  /**
+   * Le nom tel qu'il est réellement enregistré — **vide s'il ne l'est pas**.
+   *
+   * `displayName` retombe sur l'email, ce qui est juste pour AFFICHER mais faux
+   * pour ÉDITER : le formulaire de paramètres aurait préchargé une adresse email
+   * dans le champ « Votre nom », et le premier enregistrement l'aurait gravée
+   * comme nom. Les deux champs disent donc deux choses différentes.
+   */
+  fullName: string;
   companyId: string;
   company: Company;
 }
@@ -79,6 +88,7 @@ export async function getSession(): Promise<SessionResult> {
       userId: auth.user.id,
       email: auth.user.email ?? '',
       displayName: metadata?.full_name?.trim() || (auth.user.email ?? 'Utilisateur'),
+      fullName: metadata?.full_name?.trim() ?? '',
       companyId: company.id,
       company: toCompany(company),
     },

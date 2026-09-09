@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { LanguageForm } from '@/components/settings/language-form';
+import { PersonalForm } from '@/components/settings/personal-form';
 import { SettingsForm } from '@/components/settings/settings-form';
 import { createClient } from '@/lib/supabase/server';
 import { requireSession } from '@/lib/db/queries';
@@ -22,12 +22,12 @@ export default async function ParametresPage() {
     <div className="space-y-5">
       <SettingsForm issuedCount={count ?? 0} />
       {/*
-        La préférence de langue est posée APRÈS les réglages d'entreprise, dans
-        sa propre carte : elle ne concerne que la personne au clavier, alors que
-        tout ce qui précède est partagé par l'équipe. Les mêler aurait laissé
-        croire qu'on change la langue de ses collègues.
+        Les préférences personnelles — nom et langue — sont posées APRÈS les
+        réglages d'entreprise, dans leur propre carte : elles ne concernent que
+        la personne au clavier, alors que tout ce qui précède est partagé par
+        l'équipe. Les mêler aurait laissé croire qu'on renomme ses collègues.
       */}
-      <LanguageForm current={locale} />
+      <PersonalForm current={locale} fullName={session.fullName} />
     </div>
   );
 }

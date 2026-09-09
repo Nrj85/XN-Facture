@@ -196,7 +196,13 @@ export const fr = {
     language: 'Langue de l’interface',
     languageTitle: 'Préférences personnelles',
     languageHint:
-      'Ce réglage ne concerne que vous. Vos collègues gardent la leur, et vos factures restent en français.',
+      'Ces réglages ne concernent que vous. Vos collègues gardent les leurs, et vos factures restent en français.',
+    yourName: 'Votre nom',
+    yourNameHint:
+      'Le nom qui vous accueille et qui vous identifie dans l’application. Il n’apparaît pas sur les documents : ce sont la raison sociale et les mentions légales de l’entreprise qui les signent.',
+    yourNamePlaceholder: 'Prénom et nom',
+    nameSaved: 'Nom enregistré.',
+    nameRequired: 'Le nom est obligatoire.',
     languageWhyFrench:
       'Les documents PDF restent en français : ce sont des pièces comptables camerounaises, portant des mentions légales (NIU, RCCM) sans équivalent traduit.',
     languageSaved: 'Langue enregistrée.',

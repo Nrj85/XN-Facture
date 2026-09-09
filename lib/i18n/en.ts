@@ -181,7 +181,13 @@ export const en: typeof fr = {
     language: 'Interface language',
     languageTitle: 'Personal preferences',
     languageHint:
-      'This setting only affects you. Your colleagues keep theirs, and your invoices stay in French.',
+      'These settings only affect you. Your colleagues keep theirs, and your invoices stay in French.',
+    yourName: 'Your name',
+    yourNameHint:
+      'The name that greets you and identifies you inside the app. It does not appear on documents: those are signed by the company’s legal name and legal identifiers.',
+    yourNamePlaceholder: 'First and last name',
+    nameSaved: 'Name saved.',
+    nameRequired: 'Your name is required.',
     languageWhyFrench:
       'PDF documents stay in French: they are Cameroonian accounting records, carrying legal identifiers (NIU, RCCM) that have no translated equivalent.',
     languageSaved: 'Language saved.',
