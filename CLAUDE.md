@@ -347,16 +347,58 @@ un prix sur la page d'accueil et en réclamer un autre à la caisse.
 - L'inscription **annonce la formule choisie** et l'enregistre dans `subscriptions.requested`.
 - `/abonnement` montre l'état réel : formule active, échéance, formule demandée, journal.
 
+#### Le plafond de Découverte — APPLIQUÉ (migration 0007)
+
+**5 factures émises par mois**, tenu par le déclencheur `invoices_quota`.
+
+- **Un brouillon ne consomme rien**, exactement comme il ne consomme pas de numéro. Le
+  plafond ne mord qu'au passage à l'état émis.
+- **Le mois est celui de la DATE D'ÉMISSION**, pas de `now()` — sinon une facture antidatée
+  tomberait dans le mauvais mois, en désaccord avec le tableau de bord et les filtres.
+- **Modifier une facture déjà émise reste libre** : la bloquer serait revenir en douce sur une
+  décision verrouillée (§8).
+- **Les devis restent illimités**, comme la grille tarifaire le promet.
+- **Un abonnement expiré retombe en Découverte, sans rien fermer** : lecture, export PDF et
+  devis restent ouverts. Les factures d'un entrepreneur sont sa comptabilité.
+
+⚠️ **Le contrôle est dans la BASE, pas dans les Server Actions.** `invoices_insert` et
+`invoices_update` laissent tout membre écrire ses factures : un contrôle applicatif se
+sauterait d'un `PATCH /invoices?id=eq.…` avec `status=sent`. Un plafond qu'on saute en une
+commande curl n'est pas un plafond.
+
+⚠️ **Le message d'erreur du déclencheur est écrit EN FRANÇAIS, pour être lu à l'écran.**
+`describeDbError` a un cas `P0001` qui le relaie tel quel — c'est voulu. Toute nouvelle
+exception `raise` de ce type doit donc être rédigée comme un texte d'interface.
+
+⚠️ **La règle d'expiration existe en DEUX exemplaires** : `effectivePlan()` (`lib/plans.ts`)
+pour l'affichage, `enforce_invoice_quota()` (0007) pour l'appliquer. **Modifier l'une oblige à
+modifier l'autre**, sinon l'écran annonce « Pro » pendant que la base refuse.
+
+**Vérifié contre la base réelle**, et non supposé : 8 brouillons acceptés malgré le plafond ·
+5 émises acceptées, la 6ᵉ refusée · `PATCH` sur une facture déjà émise accepté · brouillon →
+envoyée refusé aussi (pas seulement l'`INSERT`) · plafond levé en formule Pro · plafond
+retrouvé quand l'abonnement est expiré, **lecture et devis toujours ouverts**. Puis, par le
+vrai chemin applicatif : clic sur « Envoyer » → message du déclencheur affiché en `role=alert`
+→ facture toujours brouillon, `number` toujours `null` en base.
+
 #### ⚠️ Ce qui n'existe PAS encore — ne pas le croire
 
-- **Aucune limite n'est appliquée.** « 5 factures par mois », « jusqu'à 5 utilisateurs » sont
-  déclarés dans `lib/plans.ts` et respectés par personne. Tout le monde a tout.
+- **`maxMembers` n'est pas appliqué.** Rien n'empêche une sixième personne de rejoindre une
+  entreprise. À faire avant de vendre la formule Entreprise sur cet argument.
 - **Aucun encaissement.** Pas de prestataire, pas de webhook, pas de bouton « Payer » — un
   bouton mort serait proscrit par le §6.1.
 
-**L'ordre compte** : appliquer les limites AVANT de brancher la caisse. Personne ne paiera
-pour ce qu'il a déjà gratuitement ; brancher le paiement d'abord, c'est installer une caisse
-devant une boutique aux portes ouvertes. Décision utilisateur en attente sur le curseur exact.
+#### Tarification annuelle — décidée le 14 sept. 2026
+
+**Pro 50 000 FCFA/an, Entreprise 150 000 FCFA/an : dix mois payés pour douze.** Ce n'est pas
+une promotion décorative. Le mobile money ne sait pas prélever automatiquement, donc chaque
+renouvellement est un paiement **manuel** qui peut ne pas venir : douze occasions de perdre un
+client par an contre une seule. La remise coûte moins cher que l'attrition qu'elle évite, et
+elle encaisse d'avance.
+
+⚠️ **L'annuel n'est PAS sur la page d'accueil**, seulement dans `lib/plans.ts` et sur
+`/abonnement`. Le porter sur la grille publique est une décision commerciale : à valider avec
+l'utilisateur avant.
 
 #### ⚠️ Pourquoi la formule n'est PAS une colonne de `companies`
 
@@ -685,6 +727,7 @@ supabase/
   migrations/0004_admin.sql     platform_admins, is_platform_admin, journal, déclencheurs
   migrations/0005_admin_actors.sql  Vue des comptes, réservée aux administrateurs
   migrations/0006_abonnements.sql   subscriptions + subscription_payments, request_plan
+  migrations/0007_quota_factures.sql invoices_quota — plafond Découverte, par déclencheur
   seed.sql                      Jeu de démonstration, rejouable
 
 app/
@@ -806,6 +849,8 @@ rien ne contourne :
 | On ne supprime pas un client rattaché à des documents | `on delete restrict` sur `invoices.client_id` et `quotes.client_id` |
 | Une facture émise porte un numéro | `check (status = 'draft' or number is not null)` |
 | Un devis ne se convertit qu'une fois | index unique partiel sur `quotes.invoice_id` |
+| La formule Découverte plafonne à 5 factures émises par mois | déclencheur `invoices_quota` (0007) |
+| Un client ne peut pas s'accorder une formule payante | `subscriptions`, aucune politique d'écriture (0006) |
 
 Et une garantie neuve : **la numérotation est atomique**. En mémoire, le numéro suivant se
 déduisait d'un balayage du tableau ; deux envois simultanés auraient obtenu le même. La

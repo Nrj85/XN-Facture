@@ -6,7 +6,7 @@ import { sortByRecency, toView } from '@/lib/invoices';
 import { sortQuotesByRecency, toQuoteView } from '@/lib/quotes';
 import { today } from '@/lib/today';
 import type { Client, Company, InvoiceView, QuoteView } from '@/lib/types';
-import { DEFAULT_PLAN, parsePlan, type PlanCode } from '@/lib/plans';
+import { DEFAULT_PLAN, parsePlan, planByCode, type PlanCode } from '@/lib/plans';
 
 /**
  * Lectures serveur.
@@ -289,4 +289,52 @@ export async function getSubscriptionPayments(
     periodEnd: row.period_end,
     createdAt: row.created_at,
   }));
+}
+
+export interface InvoiceQuota {
+  /** `null` = illimité. */
+  limit: number | null;
+  /** Factures ÉMISES ce mois-ci. Les brouillons ne comptent pas. */
+  used: number;
+  /** `null` = illimité. Jamais négatif. */
+  remaining: number | null;
+}
+
+/**
+ * Où en est l'entreprise de son plafond mensuel.
+ *
+ * ⚠️ **Ce compte est un AFFICHAGE, pas un contrôle.** Ce qui refuse réellement
+ * la sixième facture est le déclencheur `invoices_quota` (0007), dans la base,
+ * sur tous les chemins d'écriture. Le calcul ci-dessous ne sert qu'à prévenir
+ * l'utilisateur avant qu'il ne remplisse un formulaire pour rien — la règle
+ * qu'il reproduit est celle du déclencheur, mois de la DATE D'ÉMISSION compris.
+ */
+export async function getInvoiceQuota(
+  companyId: string,
+  plan: PlanCode,
+): Promise<InvoiceQuota> {
+  const limit = planByCode(plan).monthlyInvoices;
+  if (limit === null) return { limit: null, used: 0, remaining: null };
+
+  // Bornes du mois courant. Le premier jour du mois SUIVANT est calculé par
+  // `Date.UTC`, qui gère seul le passage d'une année à l'autre — écrire
+  // « le 31 » à la main donne une date inexistante en février, avril, juin,
+  // septembre et novembre. Piège déjà payé une fois, en test.
+  const now = today();
+  const annee = Number(now.slice(0, 4));
+  const mois = Number(now.slice(5, 7));
+  const debut = `${now.slice(0, 7)}-01`;
+  const suivant = new Date(Date.UTC(annee, mois, 1)).toISOString().slice(0, 10);
+
+  const supabase = createClient();
+  const { count } = await supabase
+    .from('invoices')
+    .select('id', { count: 'exact', head: true })
+    .eq('company_id', companyId)
+    .neq('status', 'draft')
+    .gte('issue_date', debut)
+    .lt('issue_date', suivant);
+
+  const used = count ?? 0;
+  return { limit, used, remaining: Math.max(0, limit - used) };
 }

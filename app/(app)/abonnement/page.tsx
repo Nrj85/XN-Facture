@@ -1,10 +1,23 @@
 import type { Metadata } from 'next';
 import { Check, Info } from 'lucide-react';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
-import { requireSession, getSubscription, getSubscriptionPayments } from '@/lib/db/queries';
-import { PLANS, planByCode, planPriceLabel } from '@/lib/plans';
+import {
+  requireSession,
+  getSubscription,
+  getSubscriptionPayments,
+  getInvoiceQuota,
+} from '@/lib/db/queries';
+import {
+  PLANS,
+  planByCode,
+  planPriceLabel,
+  planYearlyLabel,
+  planMonthsFree,
+  effectivePlan,
+} from '@/lib/plans';
 import { formatDate } from '@/lib/format';
 import { formatMoney } from '@/lib/money';
+import { today } from '@/lib/today';
 
 export const metadata: Metadata = { title: 'Abonnement' };
 
@@ -24,7 +37,17 @@ export default async function AbonnementPage() {
     getSubscriptionPayments(session.companyId),
   ]);
 
-  const active = planByCode(abonnement.plan);
+  // La formule affichée est celle qui s'applique VRAIMENT : un abonnement payé
+  // mais expiré retombe en Découverte, exactement comme le fait le déclencheur
+  // `invoices_quota` côté base. Afficher `abonnement.plan` brut ferait lire
+  // « Pro » à quelqu'un dont les factures sont déjà refusées.
+  const maintenant = today();
+  const codeActif = effectivePlan(abonnement.plan, abonnement.expiresAt, maintenant);
+  const active = planByCode(codeActif);
+  const expiree = codeActif !== abonnement.plan;
+
+  const quota = await getInvoiceQuota(session.companyId, codeActif);
+
   const demandee = abonnement.requested ? planByCode(abonnement.requested) : null;
   const enAttente = demandee !== null && demandee.code !== active.code;
 
@@ -59,7 +82,16 @@ export default async function AbonnementPage() {
           </div>
 
           <p className="text-[13px] text-ink-2">
-            {abonnement.expiresAt ? (
+            {expiree && abonnement.expiresAt ? (
+              <>
+                Votre formule {planByCode(abonnement.plan).name} a expiré le{' '}
+                <span className="tabular font-semibold text-ink">
+                  {formatDate(abonnement.expiresAt)}
+                </span>
+                . Vous êtes revenu en Découverte — vos factures et vos devis restent
+                consultables et exportables.
+              </>
+            ) : abonnement.expiresAt ? (
               <>
                 Valable jusqu’au{' '}
                 <span className="tabular font-semibold text-ink">
@@ -71,6 +103,42 @@ export default async function AbonnementPage() {
               <>Sans échéance : la formule Découverte n’expire pas.</>
             )}
           </p>
+
+          {/* Le quota AVANT d'avoir rempli un formulaire pour rien. Ce compte
+              n'est qu'un affichage : c'est la base qui refuse réellement. */}
+          {quota.limit !== null && (
+            <div className="space-y-1.5">
+              <div className="flex items-baseline justify-between gap-3">
+                <span className="text-[13px] text-ink-2">Factures émises ce mois-ci</span>
+                <span className="tabular text-[13px] font-semibold">
+                  {quota.used} / {quota.limit}
+                </span>
+              </div>
+              <div className="h-1.5 w-full overflow-hidden rounded-full bg-sand-deep">
+                <div
+                  className={`h-full rounded-full ${
+                    quota.remaining === 0 ? 'bg-status-overdue-dot' : 'bg-brand-bright'
+                  }`}
+                  style={{ width: `${Math.min(100, (quota.used / quota.limit) * 100)}%` }}
+                />
+              </div>
+              <p className="text-[12px] text-ink-3">
+                {quota.remaining === 0 ? (
+                  <>
+                    Plafond atteint. Vos brouillons et vos devis restent illimités ; l’envoi
+                    d’une nouvelle facture reprendra le mois prochain.
+                  </>
+                ) : (
+                  <>
+                    Il vous reste{' '}
+                    <span className="tabular font-semibold text-ink-2">{quota.remaining}</span>{' '}
+                    facture{quota.remaining !== null && quota.remaining > 1 ? 's' : ''} à
+                    émettre. Les brouillons et les devis ne comptent pas.
+                  </>
+                )}
+              </p>
+            </div>
+          )}
 
           {enAttente && demandee && (
             <div className="flex items-start gap-3 rounded-[10px] border border-line bg-sand px-3.5 py-3">
@@ -121,6 +189,12 @@ export default async function AbonnementPage() {
                 <p className="tabular mt-1 text-[13px] font-semibold text-ink-2">
                   {planPriceLabel(plan)}
                 </p>
+                {planYearlyLabel(plan) && (
+                  <p className="mt-0.5 text-[11.5px] text-ink-3">
+                    ou <span className="tabular">{planYearlyLabel(plan)}</span> —{' '}
+                    {planMonthsFree(plan)} mois offerts
+                  </p>
+                )}
 
                 <ul className="mt-3 space-y-1.5">
                   {plan.features.map((feature) => (

@@ -43,6 +43,13 @@ export function describeDbError(error: { code?: string; message: string }): stri
       return 'La base a refusé cette valeur : elle viole une règle du document.';
     case '42501':
       return 'Vous n’avez pas les droits nécessaires sur cette entreprise.';
+    case 'P0001':
+      // `raise exception` d'un déclencheur — aujourd'hui le plafond de la
+      // formule Découverte (`invoices_quota`, 0007). Le message est rédigé EN
+      // FRANÇAIS dans la base, à destination de l'utilisateur : le relayer tel
+      // quel est voulu, pas un oubli de traduction. Toute nouvelle exception
+      // de ce type doit donc être écrite pour être lue à l'écran.
+      return error.message;
     default:
       return error.message;
   }
