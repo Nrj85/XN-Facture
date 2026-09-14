@@ -5,6 +5,7 @@ import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { fail, ok, type ActionResult } from '@/lib/actions/result';
+import { parsePlan } from '@/lib/plans';
 
 /**
  * Actions d'authentification.
@@ -90,6 +91,7 @@ export async function signUp(
   password: string,
   fullName: string,
   companyName: string,
+  requestedPlan?: string | null,
 ): Promise<ActionResult<{ needsConfirmation: boolean }>> {
   const supabase = createClient();
 
@@ -119,6 +121,18 @@ export async function signUp(
 
   if (companyError) {
     return fail(`Compte créé, mais l’entreprise n’a pas pu l’être : ${companyError.message}`);
+  }
+
+  // La formule choisie sur la grille tarifaire, enregistrée telle qu'elle a été
+  // demandée. Elle n'accorde RIEN : tout le monde démarre en Découverte, et
+  // seule l'Edge Function de paiement pourra changer `subscriptions.plan`.
+  //
+  // ⚠️ Un échec ici ne doit pas faire échouer l'inscription. Le compte et
+  // l'entreprise existent déjà ; refuser maintenant laisserait l'utilisateur
+  // devant une erreur alors que tout ce qui compte a réussi.
+  const plan = parsePlan(requestedPlan);
+  if (plan) {
+    await supabase.rpc('request_plan', { p_plan: plan });
   }
 
   revalidatePath('/', 'layout');

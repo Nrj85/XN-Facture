@@ -22,6 +22,7 @@ export const en: typeof fr = {
     reports: 'Reports',
     help: 'Help and support',
     settings: 'Settings',
+    subscription: 'Subscription',
     admin: 'Administration',
     menu: 'Menu',
     openMenu: 'Open menu',

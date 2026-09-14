@@ -3,15 +3,23 @@
 import { useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Loader2, MailCheck } from 'lucide-react';
+import { BadgeCheck, Loader2, MailCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { AuthCard } from '@/components/auth/auth-card';
 import { signUp } from '@/lib/actions/auth';
+import { planByCode, planPriceLabel, type PlanCode } from '@/lib/plans';
 
-export function SignUpForm() {
+/**
+ * ⚠️ **`plan` ne donne aucun droit.** Il dit seulement quelle formule la
+ * personne est venue chercher depuis la grille tarifaire. Tout le monde
+ * démarre en Découverte ; la formule se gagne par un paiement encaissé, et
+ * c'est le webhook qui l'accordera — jamais le navigateur.
+ */
+export function SignUpForm({ plan = null }: { plan?: PlanCode | null }) {
   const router = useRouter();
+  const choisie = plan ? planByCode(plan) : null;
 
   const [fullName, setFullName] = useState('');
   const [companyName, setCompanyName] = useState('');
@@ -26,7 +34,7 @@ export function SignUpForm() {
     setError(undefined);
 
     startTransition(async () => {
-      const result = await signUp(email, password, fullName, companyName);
+      const result = await signUp(email, password, fullName, companyName, plan);
       if (!result.ok) {
         setError(result.error);
         return;
@@ -89,6 +97,31 @@ export function SignUpForm() {
         </>
       }
     >
+      {choisie && (
+        <div className="mb-4 flex items-start gap-3 rounded-[10px] border border-line bg-sand px-3.5 py-3">
+          <BadgeCheck className="mt-0.5 h-4 w-4 shrink-0 text-brand-hover" aria-hidden />
+          <p className="text-[12.5px] leading-relaxed text-ink-2">
+            Formule choisie :{' '}
+            <strong className="font-semibold text-ink">{choisie.name}</strong>
+            {choisie.monthlyPrice > 0 && (
+              <>
+                {' '}
+                — <span className="tabular">{planPriceLabel(choisie)}</span>
+              </>
+            )}
+            .{' '}
+            {choisie.monthlyPrice > 0 ? (
+              <>Créez d’abord votre compte : le paiement vient ensuite, rien n’est engagé.</>
+            ) : (
+              <>C’est la formule gratuite, sans engagement.</>
+            )}{' '}
+            <Link href="/#tarifs" className="font-semibold text-brand-hover hover:underline">
+              Changer
+            </Link>
+          </p>
+        </div>
+      )}
+
       <form onSubmit={submit} className="space-y-4">
         <Field label="Votre nom" required>
           {(props) => (

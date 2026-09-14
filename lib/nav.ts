@@ -1,4 +1,5 @@
 import {
+  BadgeCheck,
   BarChart3,
   FileText,
   LayoutDashboard,
@@ -38,6 +39,7 @@ export const PRIMARY_NAV: NavItem[] = [
 ];
 
 export const SECONDARY_NAV: NavItem[] = [
+  { href: '/abonnement', key: 'subscription', icon: BadgeCheck },
   { href: '/aide', key: 'help', icon: LifeBuoy },
   { href: '/parametres', key: 'settings', icon: Settings },
 ];
@@ -67,6 +69,7 @@ export const SEGMENT_KEYS: Record<string, NavKey> = {
   paiements: 'payments',
   rapports: 'reports',
   parametres: 'settings',
+  abonnement: 'subscription',
   admin: 'admin',
   aide: 'help',
   nouvelle: 'newInvoice',

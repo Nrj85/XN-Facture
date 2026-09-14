@@ -1,54 +1,8 @@
 import { Check } from 'lucide-react';
 import { CtaButton } from './cta-button';
+import { PLANS, planSignupHref } from '@/lib/plans';
+import { formatAmount } from '@/lib/money';
 import styles from './pricing.module.css';
-
-interface Plan {
-  name: string;
-  price: string;
-  unit: string;
-  pitch: string;
-  features: string[];
-  cta: string;
-  featured?: boolean;
-}
-
-const PLANS: Plan[] = [
-  {
-    name: 'Découverte',
-    price: '0',
-    unit: 'FCFA',
-    pitch: 'De quoi éprouver l’outil sur vos premières factures, sans rien engager.',
-    features: ['5 factures par mois', 'Devis illimités', 'Modèle PDF avec vos mentions légales'],
-    cta: 'Créer mon compte',
-  },
-  {
-    name: 'Pro',
-    price: '5 000',
-    unit: 'FCFA / mois',
-    pitch: 'Pour l’indépendant ou l’artisan qui facture toutes les semaines.',
-    features: [
-      'Factures et devis illimités',
-      'TVA et échéances automatiques',
-      'Suivi des encaissements et des retards',
-      'Relances par email',
-    ],
-    cta: 'Choisir Pro',
-    featured: true,
-  },
-  {
-    name: 'Entreprise',
-    price: '15 000',
-    unit: 'FCFA / mois',
-    pitch: 'Pour une équipe qui partage le même carnet de clients.',
-    features: [
-      'Jusqu’à 5 utilisateurs',
-      'Tableau de bord et encours par ancienneté',
-      'Export comptable',
-      'Support prioritaire',
-    ],
-    cta: 'Choisir Entreprise',
-  },
-];
 
 /**
  * Grille tarifaire.
@@ -56,6 +10,16 @@ const PLANS: Plan[] = [
  * Les prix sont en FCFA et sans centimes, comme partout ailleurs dans le
  * produit. Ils portent des chiffres tabulaires : trois montants alignés dans
  * trois colonnes doivent se comparer d'un coup d'œil.
+ *
+ * ⚠️ **Les formules viennent de `lib/plans.ts`, plus de ce fichier.** Elles y
+ * étaient en dur, et l'application en avait besoin de son côté : deux copies
+ * auraient fini par annoncer un prix sur la page d'accueil et en réclamer un
+ * autre à la caisse.
+ *
+ * ⚠️ **Chaque bouton porte désormais sa formule** — `?plan=pro`. Les trois
+ * pointaient vers `/inscription` tout court : cliquer « Choisir Pro » ou
+ * « Créer mon compte » menait exactement au même endroit, et le choix était
+ * perdu à la seconde où on le faisait.
  */
 export function Pricing() {
   return (
@@ -63,15 +27,17 @@ export function Pricing() {
       <div className={styles.grid}>
         {PLANS.map((plan) => (
           <div
-            key={plan.name}
+            key={plan.code}
             className={`${styles.plan} ${plan.featured ? styles.featured : ''}`}
           >
             {plan.featured && <span className={styles.ribbon}>Le plus choisi</span>}
 
             <p className={styles.name}>{plan.name}</p>
             <p className={styles.price}>
-              {plan.price}
-              <span className={styles.unit}>{plan.unit}</span>
+              {formatAmount(plan.monthlyPrice)}
+              <span className={styles.unit}>
+                {plan.monthlyPrice === 0 ? 'FCFA' : 'FCFA / mois'}
+              </span>
             </p>
             <p className={styles.pitch}>{plan.pitch}</p>
 
@@ -85,7 +51,7 @@ export function Pricing() {
             </ul>
 
             <CtaButton
-              href="/inscription"
+              href={planSignupHref(plan.code)}
               variant={plan.featured ? 'primary' : 'secondary'}
               showIcon={false}
               block

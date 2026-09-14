@@ -327,6 +327,81 @@ Ces quatre sections décrivent l'ENTREPRISE et sont partagées par l'équipe. La
 « Préférences personnelles » qui les suit n'appartient qu'à la personne au clavier — voir
 plus haut.
 
+### Abonnements — `/abonnement` (9 sept. 2026, PARTIEL)
+
+Monétisation de XN-Facture **par XN-Facture**, à ne pas confondre avec l'encaissement des
+factures de nos utilisateurs auprès de leurs clients. Nous vendons notre propre service, sur
+notre propre compte marchand : **aucune question d'agrément COBAC**, et à 5 000 / 15 000 FCFA
+les plafonds mobile money ne mordent pas.
+
+**Trois formules, définies UNE SEULE FOIS dans `lib/plans.ts`** — Découverte (gratuit),
+Pro (5 000/mois), Entreprise (15 000/mois). Elles n'existaient que dans le composant marketing,
+en dur ; l'application en avait besoin de son côté, et deux copies auraient fini par annoncer
+un prix sur la page d'accueil et en réclamer un autre à la caisse.
+
+#### Ce qui marche
+
+- **Chaque bouton de la grille porte sa formule** — `/inscription?plan=pro`. Les trois
+  pointaient vers `/inscription` tout court : « Choisir Pro » et « Créer mon compte » menaient
+  au même endroit, et le choix était perdu à la seconde où on cliquait.
+- L'inscription **annonce la formule choisie** et l'enregistre dans `subscriptions.requested`.
+- `/abonnement` montre l'état réel : formule active, échéance, formule demandée, journal.
+
+#### ⚠️ Ce qui n'existe PAS encore — ne pas le croire
+
+- **Aucune limite n'est appliquée.** « 5 factures par mois », « jusqu'à 5 utilisateurs » sont
+  déclarés dans `lib/plans.ts` et respectés par personne. Tout le monde a tout.
+- **Aucun encaissement.** Pas de prestataire, pas de webhook, pas de bouton « Payer » — un
+  bouton mort serait proscrit par le §6.1.
+
+**L'ordre compte** : appliquer les limites AVANT de brancher la caisse. Personne ne paiera
+pour ce qu'il a déjà gratuitement ; brancher le paiement d'abord, c'est installer une caisse
+devant une boutique aux portes ouvertes. Décision utilisateur en attente sur le curseur exact.
+
+#### ⚠️ Pourquoi la formule n'est PAS une colonne de `companies`
+
+`companies_update` (0003_rls.sql) autorise un membre à modifier **n'importe quelle colonne**
+de son entreprise. Une colonne `plan` y aurait été modifiable par son titulaire : un `PATCH`
+REST suffisait à s'offrir Pro. Elle vit donc dans `subscriptions`, **sans aucune politique
+d'écriture** — même protection que `platform_admins`.
+
+Le seul écrit ouvert au client est `request_plan(p_plan)`, `security definer`, qui n'écrit que
+`requested` et **ne prend pas d'identifiant d'entreprise** : elle agit sur celle de l'appelant,
+il n'y a rien à falsifier. `requested` n'accorde rien.
+
+**Six tentatives d'élévation, toutes repoussées** (vérifié, pas supposé) : `PATCH plan=pro`
+→ 0 ligne · `PATCH expires_at=2099` → 0 ligne · `INSERT` d'une formule → 403 · `INSERT` d'un
+faux paiement → 403 · `DELETE` de sa formule → **0 ligne supprimée** · `request_plan('gratuit-
+a-vie')` → 400. Après quoi la formule vaut toujours `discovery`.
+
+⚠️ Le `DELETE` renvoie **204 même quand la RLS n'a rien laissé passer** : c'est le
+comportement normal de PostgREST, et non une suppression réussie. Pour trancher, exiger
+`Prefer: return=representation` et compter les lignes rendues.
+
+#### Le mur qui vient : le webhook
+
+Un webhook de paiement n'a **pas de session** et doit pourtant écrire. Or `service_role` ne
+doit pas aller sur Vercel (voir « Déploiement »). La sortie est une **Edge Function Supabase**,
+qui détient la clé dans son propre environnement. Elle vérifiera la signature du prestataire,
+puis écrira `subscriptions.plan` et `expires_at`.
+
+⚠️ **L'idempotence tient sur `unique (provider, provider_reference)`**, dans
+`subscription_payments` — pas dans le code applicatif. Un webhook est rejoué.
+
+⚠️ **Le mobile money ne sait pas prélever automatiquement.** L'abonnement est donc à
+renouvellement **manuel** : une période payée, un accès jusqu'à une date, une relance avant
+échéance (Resend est déjà branché). À l'expiration, **redescendre en Découverte, jamais
+fermer** : les factures d'un entrepreneur sont sa comptabilité.
+
+**Prestataires pour le Cameroun** : prendre un agrégateur (CamPay, Fapshi, Monetbil, Tranzak,
+CinetPay) plutôt que les API MTN et Orange séparément — un seul contrat, un seul format.
+Ordre de grandeur des frais : 1,5 à 2,5 %, soit 100 FCFA sur un abonnement Pro.
+
+⚠️ **`/inscription` est devenue DYNAMIQUE** (elle était statique). Elle lit `?plan=` côté
+serveur. C'est délibéré, et meilleur que l'alternative : `useSearchParams` aurait imposé un
+`<Suspense>`, et le formulaire n'aurait plus existé qu'après hydratation — exactement ce qui
+vide le HTML statique de `/connexion`.
+
 ### Espace administrateur de plateforme — `/admin`
 
 Vue transversale de **toutes les entreprises**, en **lecture seule** : chiffres de la
@@ -609,6 +684,7 @@ supabase/
   migrations/0003_rls.sql       Politiques, toutes `to authenticated`
   migrations/0004_admin.sql     platform_admins, is_platform_admin, journal, déclencheurs
   migrations/0005_admin_actors.sql  Vue des comptes, réservée aux administrateurs
+  migrations/0006_abonnements.sql   subscriptions + subscription_payments, request_plan
   seed.sql                      Jeu de démonstration, rejouable
 
 app/
@@ -619,6 +695,7 @@ app/
   (auth)/mot-de-passe-oublie/   Demande du lien de réinitialisation
   (auth)/nouveau-mot-de-passe/  Choix du nouveau mot de passe (session déjà ouverte)
   (admin)/admin/                Espace administrateur — coquille propre, sans entreprise
+  (app)/abonnement/             Formule de l'entreprise (lecture seule, sans caisse)
   (app)/layout.tsx              requireSession + CompanyProvider + AppShell
   (app)/dashboard|factures|devis|clients|parametres|paiements|rapports|aide/
   api/auth/confirmation         GET, jeton d'email → session (hors middleware)
@@ -662,6 +739,7 @@ lib/
                     queries (lectures serveur, `getSession` et `requireSession`)
   actions/          auth, account (nom affiché), company, clients, invoices, quotes
                     · locale · result, schemas, context
+  plans.ts          Les trois formules — SOURCE UNIQUE (grille tarifaire + application)
   period.ts         Préréglages de période du tableau de bord (bornes en Date.UTC)
   calendar.ts       Grille du DatePicker (lundi en tête)
   nav.ts            Navigation et libellés de fil d'Ariane
@@ -1050,6 +1128,18 @@ doivent être identiques dans le formulaire, l'aperçu, le détail et le PDF.
 
 - **Chrome headless impose une largeur minimale d'environ 500 px sous Windows.** Une capture à
   390 px est **recadrée**, pas re-mise en page : tester le mobile à 500 px.
+- **Chrome 153 ignore l'URL passée à `PUT /json/new?<url>`** : l'onglet s'ouvre sur
+  `about:blank` et y reste. Créer l'onglet vide, puis **naviguer par `Page.navigate`**. Le
+  symptôme est trompeur — la connexion CDP réussit, seul le `waitFor` expire.
+- **`innerText` ne voit pas la landing.** Ses sections sont masquées par CSS jusqu'à
+  l'apparition au défilement (`marketing/reveal.tsx`), et `innerText` ignore ce qui est caché.
+  Pour vérifier la page d'accueil en headless, interroger le **DOM** (`textContent`,
+  `getAttribute`), jamais le texte rendu.
+- **`formatAmount` sépare les milliers par U+202F**, l'espace fine insécable — pas une espace
+  ASCII. Un `html.includes('15 000')` tapé au clavier échoue donc sur un montant parfaitement
+  correct. Normaliser avant de comparer (`replace(/\s+/g, ' ')` suffit : `\s` couvre U+202F),
+  ou comparer sur les octets. Piège payé une fois : le test criait au bug là où le rendu était
+  juste.
 - **Les heredocs Bash mangent les antislashs** (`\\` devient `\`). Pour tout fichier contenant
   une expression régulière, utiliser l'outil d'écriture, pas `cat > fichier <<'EOF'`.
 - Écrire une capture d'écran depuis Bash échoue en « Accès refusé » : passer par PowerShell.

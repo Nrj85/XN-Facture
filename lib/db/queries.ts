@@ -6,6 +6,7 @@ import { sortByRecency, toView } from '@/lib/invoices';
 import { sortQuotesByRecency, toQuoteView } from '@/lib/quotes';
 import { today } from '@/lib/today';
 import type { Client, Company, InvoiceView, QuoteView } from '@/lib/types';
+import { DEFAULT_PLAN, parsePlan, type PlanCode } from '@/lib/plans';
 
 /**
  * Lectures serveur.
@@ -206,4 +207,86 @@ export async function countDocumentsForClient(
   ]);
 
   return { invoices: invoices.count ?? 0, quotes: quotes.count ?? 0 };
+}
+
+// --- Abonnement --------------------------------------------------------------
+
+export interface Subscription {
+  plan: PlanCode;
+  /** Date civile `AAAA-MM-JJ`, ou `null` pour une formule qui n'expire pas. */
+  expiresAt: string | null;
+  /** La formule choisie sur la grille tarifaire. N'accorde rien. */
+  requested: PlanCode | null;
+}
+
+export interface SubscriptionPaymentRow {
+  id: string;
+  plan: PlanCode;
+  amount: number;
+  channel: string;
+  status: string;
+  periodStart: string | null;
+  periodEnd: string | null;
+  createdAt: string;
+}
+
+/**
+ * Formule en cours.
+ *
+ * Le déclencheur `companies_default_subscription` garantit une ligne par
+ * entreprise, et la migration a rattrapé les anciennes. Le repli sur Découverte
+ * couvre malgré tout le cas manquant : une page d'abonnement qui plante vaut
+ * moins qu'une page qui affiche la formule gratuite.
+ */
+export async function getSubscription(companyId: string): Promise<Subscription> {
+  const supabase = createClient();
+
+  const { data } = await supabase
+    .from('subscriptions')
+    .select('plan,expires_at,requested')
+    .eq('company_id', companyId)
+    .maybeSingle();
+
+  const row = data as { plan?: string; expires_at?: string | null; requested?: string | null } | null;
+
+  return {
+    plan: parsePlan(row?.plan) ?? DEFAULT_PLAN,
+    expiresAt: row?.expires_at ?? null,
+    requested: parsePlan(row?.requested),
+  };
+}
+
+/** Journal des paiements d'abonnement, le plus récent en tête. */
+export async function getSubscriptionPayments(
+  companyId: string,
+): Promise<SubscriptionPaymentRow[]> {
+  const supabase = createClient();
+
+  const { data } = await supabase
+    .from('subscription_payments')
+    .select('id,plan,amount,channel,status,period_start,period_end,created_at')
+    .eq('company_id', companyId)
+    .order('created_at', { ascending: false });
+
+  const rows = (data ?? []) as Array<{
+    id: string;
+    plan: string;
+    amount: number;
+    channel: string;
+    status: string;
+    period_start: string | null;
+    period_end: string | null;
+    created_at: string;
+  }>;
+
+  return rows.map((row) => ({
+    id: row.id,
+    plan: parsePlan(row.plan) ?? DEFAULT_PLAN,
+    amount: row.amount,
+    channel: row.channel,
+    status: row.status,
+    periodStart: row.period_start,
+    periodEnd: row.period_end,
+    createdAt: row.created_at,
+  }));
 }
