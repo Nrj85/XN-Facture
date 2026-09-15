@@ -411,12 +411,72 @@ retrouvé quand l'abonnement est expiré, **lecture et devis toujours ouverts**.
 vrai chemin applicatif : clic sur « Envoyer » → message du déclencheur affiché en `role=alert`
 → facture toujours brouillon, `number` toujours `null` en base.
 
+#### Commander une formule — `subscription_orders` (migration 0009)
+
+La grille montrait les trois formules **sans aucun bouton pour en prendre une** : la fenêtre de
+plafond y menait, et le parcours s'arrêtait là. `PlanChooser` porte désormais le choix
+mensuel / annuel et un bouton par formule payante ; `OrderSummary` affiche la commande, sa
+référence et les instructions de règlement.
+
+**Le règlement est mobile money MANUEL**, pas un débit : aucun agrégateur n'est branché. On
+commande, on reçoit une référence, on envoie l'argent, la formule s'ouvre au paiement constaté.
+C'est ainsi que démarrent la plupart des SaaS de la zone, et l'agrégateur remplacera l'étape
+de constat sans rien jeter du reste.
+
+⚠️ **Une commande n'est PAS un paiement**, d'où deux tables. `subscription_payments`
+journalise de l'argent réellement encaissé ; `subscription_orders` note une intention. Les
+confondre aurait fait figurer au journal des sommes jamais reçues.
+
+⚠️ **La commande ne porte AUCUN montant**, et c'est à la fois une règle de cohérence et une
+protection. Le prix vit dans `lib/plans.ts` ; le figer en base en ferait une seconde vérité.
+Et comme `start_subscription_order()` est appelable directement par tout client authentifié,
+un montant en paramètre aurait permis de se commander la formule Pro à 1 FCFA. Elle ne prend
+que `plan` et `period`, tous deux revalidés contre une liste fermée.
+
+⚠️ **Aucune politique d'écriture sur `subscription_orders`**, comme partout ailleurs ici. Une
+politique d'`update` aurait permis de faire passer sa propre commande en « payée ».
+
+⚠️ **Un index unique partiel** (`where status = 'pending'`) garantit une seule commande en
+attente par entreprise : la référence affichée est LA référence à rappeler. Recliquer le même
+choix rend la **même** référence — elle ne doit pas changer sous les yeux de quelqu'un qui la
+recopie sur son téléphone.
+
+⚠️ **Référence hexadécimale** (`XN-PRO-A3F91C`) : l'alphabet 0-9A-F ne contient ni O ni I,
+donc rien à confondre avec un zéro ou un un à la recopie.
+
+⚠️ **Les coordonnées d'encaissement viennent de l'ENVIRONNEMENT** (`lib/billing-config.ts` :
+`XN_MOMO_MTN`, `XN_MOMO_ORANGE`, `XN_PAYMENT_HOLDER`, `XN_BILLING_EMAIL`), **jamais du code**.
+Un numéro vers lequel des gens envoient de l'argent n'a rien à faire dans un dépôt public, et
+une faute de frappe versée mille fois ne se rattrape pas. **Tant qu'aucun n'est renseigné,
+aucune instruction de paiement n'est affichée** — un faux numéro serait bien pire qu'une
+absence. À ne pas confondre avec `companies.momo_mtn`, qui est le numéro de CHAQUE entreprise
+cliente, imprimé sur SES factures.
+
+**Activation après paiement — à la main, par la console SQL :**
+
+```sql
+update public.subscriptions
+set plan = 'pro', expires_at = current_date + interval '1 month'
+where company_id = (select company_id from public.subscription_orders
+                    where reference = 'XN-PRO-A3F91C');
+update public.subscription_orders set status = 'paid' where reference = 'XN-PRO-A3F91C';
+```
+
+**Vérifié contre la base réelle** : commander la formule gratuite refusé · période fantaisiste
+refusée · `INSERT` direct d'une commande « payée » refusé (403) · recliquer rend la même
+référence · changer de formule en crée une nouvelle et annule l'ancienne · une seule en attente
+· se marquer « payée » soi-même : 0 ligne · `DELETE` de ses commandes : 0 ligne · **la formule
+reste Découverte après commande**. Et à l'écran, sur 500 px : boutons présents, prix qui suit
+la période, référence affichée, instructions présentes quand un canal est configuré et repli
+honnête sinon, annulation qui rend le bouton « Choisir ».
+
 #### ⚠️ Ce qui n'existe PAS encore — ne pas le croire
 
 - **`maxMembers` n'est pas appliqué.** Rien n'empêche une sixième personne de rejoindre une
   entreprise. À faire avant de vendre la formule Entreprise sur cet argument.
-- **Aucun encaissement.** Pas de prestataire, pas de webhook, pas de bouton « Payer » — un
-  bouton mort serait proscrit par le §6.1.
+- **Aucun débit automatique.** Pas d'agrégateur, pas de webhook : l'activation est manuelle.
+- **Aucune relance avant échéance**, alors que le renouvellement est manuel — c'est ce qui
+  fera perdre des abonnés en silence. Resend est déjà branché.
 
 #### Tarification annuelle — décidée le 14 sept. 2026
 
@@ -759,6 +819,7 @@ supabase/
   migrations/0006_abonnements.sql   subscriptions + subscription_payments, request_plan
   migrations/0007_quota_factures.sql invoices_quota — plafond Découverte, par déclencheur
   migrations/0008_quota_hint.sql    hint = 'plan-limit' : refus reconnaissable par le code
+  migrations/0009_commandes.sql     subscription_orders + start/cancel_subscription_order
   seed.sql                      Jeu de démonstration, rejouable
 
 app/
@@ -796,7 +857,8 @@ components/
   quotes/      quote-form, quote-list, quote-detail, quote-editor, quote-quick-actions
   clients/     client-list
   settings/    settings-form, logo-uploader, personal-form (nom + langue)
-  subscription/ plan-limit (fenêtre de plafond + contexte, UN exemplaire)
+  subscription/ plan-limit (fenêtre de plafond), plan-chooser (choix + commande),
+                order-summary (référence et instructions de règlement)
   documents/   status-menu, document-created-dialog, use-creation-notice   (facture + devis)
   pdf/         download-pdf-button
 
@@ -814,7 +876,8 @@ lib/
                     queries (lectures serveur, `getSession` et `requireSession`)
   actions/          auth, account (nom affiché), company, clients, invoices, quotes
                     · locale · result, schemas, context
-  plans.ts          Les trois formules — SOURCE UNIQUE (grille tarifaire + application)
+  plans.ts          Les trois formules et leurs prix — SOURCE UNIQUE du montant
+  billing-config.ts Coordonnées d'encaissement de XN-Facture, lues de l'ENVIRONNEMENT
   period.ts         Préréglages de période du tableau de bord (bornes en Date.UTC)
   calendar.ts       Grille du DatePicker (lundi en tête)
   nav.ts            Navigation et libellés de fil d'Ariane
@@ -883,6 +946,8 @@ rien ne contourne :
 | Un devis ne se convertit qu'une fois | index unique partiel sur `quotes.invoice_id` |
 | La formule Découverte plafonne à 5 factures émises par mois | déclencheur `invoices_quota` (0007) |
 | Un client ne peut pas s'accorder une formule payante | `subscriptions`, aucune politique d'écriture (0006) |
+| Une commande ne peut pas se déclarer payée | `subscription_orders`, aucune politique d'écriture (0009) |
+| Une seule commande en attente par entreprise | index unique partiel `where status = 'pending'` (0009) |
 
 Et une garantie neuve : **la numérotation est atomique**. En mémoire, le numéro suivant se
 déduisait d'un balayage du tableau ; deux envois simultanés auraient obtenu le même. La

@@ -1,40 +1,37 @@
 import type { Metadata } from 'next';
-import { Check, Info } from 'lucide-react';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
+import { PlanChooser } from '@/components/subscription/plan-chooser';
+import { OrderSummary } from '@/components/subscription/order-summary';
 import {
   requireSession,
   getSubscription,
   getSubscriptionPayments,
   getInvoiceQuota,
+  getPendingOrder,
 } from '@/lib/db/queries';
-import {
-  PLANS,
-  planByCode,
-  planPriceLabel,
-  planYearlyLabel,
-  planMonthsFree,
-  effectivePlan,
-} from '@/lib/plans';
+import { planByCode, planPriceLabel, effectivePlan } from '@/lib/plans';
 import { formatDate } from '@/lib/format';
 import { formatMoney } from '@/lib/money';
 import { today } from '@/lib/today';
+import { paymentChannels, billingContactEmail } from '@/lib/billing-config';
 
 export const metadata: Metadata = { title: 'Abonnement' };
 
 /**
  * Formule de l'entreprise.
  *
- * ⚠️ **Aucun bouton « Payer » ici, et c'est délibéré.** L'encaissement n'est
- * pas branché : un bouton qui ne fait rien serait un contrôle mort, proscrit
- * par le §6.1 du design système. La page dit l'état réel — quelle formule est
- * active, laquelle a été demandée — et rien de plus. Le bouton viendra avec le
- * prestataire.
+ * ⚠️ **On commande ici, on ne paie pas ici.** Le bouton « Choisir » enregistre
+ * une commande et rend une référence de règlement ; la formule s'ouvre au
+ * paiement constaté, à la main aujourd'hui. Aucun débit automatique : aucun
+ * agrégateur n'est branché, et un bouton qui prétendrait débiter serait un
+ * contrôle mort, proscrit par le §6.1.
  */
 export default async function AbonnementPage() {
   const session = await requireSession();
-  const [abonnement, paiements] = await Promise.all([
+  const [abonnement, paiements, commande] = await Promise.all([
     getSubscription(session.companyId),
     getSubscriptionPayments(session.companyId),
+    getPendingOrder(session.companyId),
   ]);
 
   // La formule affichée est celle qui s'applique VRAIMENT : un abonnement payé
@@ -48,8 +45,6 @@ export default async function AbonnementPage() {
 
   const quota = await getInvoiceQuota(session.companyId, codeActif);
 
-  const demandee = abonnement.requested ? planByCode(abonnement.requested) : null;
-  const enAttente = demandee !== null && demandee.code !== active.code;
 
   return (
     <div className="animate-fade-in space-y-5">
@@ -140,78 +135,44 @@ export default async function AbonnementPage() {
             </div>
           )}
 
-          {enAttente && demandee && (
-            <div className="flex items-start gap-3 rounded-[10px] border border-line bg-sand px-3.5 py-3">
-              <Info className="mt-0.5 h-4 w-4 shrink-0 text-ink-3" aria-hidden />
-              <p className="text-[12.5px] leading-relaxed text-ink-2">
-                Vous aviez choisi la formule{' '}
-                <strong className="font-semibold text-ink">{demandee.name}</strong> à
-                l’inscription. Elle n’est pas encore active :{' '}
-                <strong className="font-semibold text-ink">
-                  le paiement en ligne n’est pas encore ouvert
-                </strong>
-                . Il s’ouvrira sur cette page, par MTN Mobile Money et Orange Money.
-              </p>
-            </div>
-          )}
         </div>
       </Card>
+
+      {/*
+        La commande passe AVANT la grille : quand il y en a une, c'est
+        l'information la plus utile de la page — la référence à rappeler dans
+        son règlement.
+      */}
+      {commande && (
+        <OrderSummary
+          plan={commande.plan}
+          period={commande.period}
+          reference={commande.reference}
+          channels={paymentChannels()}
+          contactEmail={billingContactEmail()}
+        />
+      )}
 
       <Card>
         <CardHeader>
           <div>
             <CardTitle>Les formules</CardTitle>
             <p className="mt-0.5 text-[12.5px] text-ink-3">
-              Ce que chacune ouvre. Les prix sont en FCFA, par mois.
+              Choisissez la vôtre. Les prix sont en FCFA, sans engagement de durée.
             </p>
           </div>
         </CardHeader>
 
-        <div className="grid gap-4 p-4 sm:p-5 lg:grid-cols-3">
-          {PLANS.map((plan) => {
-            const courante = plan.code === active.code;
-            return (
-              <div
-                key={plan.code}
-                className={`rounded-card border p-4 ${
-                  courante ? 'border-brand-bright bg-brand-soft' : 'border-line bg-surface'
-                }`}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-[15px] font-semibold">{plan.name}</p>
-                  {courante && (
-                    <span className="rounded-full bg-surface px-2 py-0.5 text-[11.5px] font-semibold text-brand-hover">
-                      En cours
-                    </span>
-                  )}
-                </div>
-
-                <p className="tabular mt-1 text-[13px] font-semibold text-ink-2">
-                  {planPriceLabel(plan)}
-                </p>
-                {planYearlyLabel(plan) && (
-                  <p className="mt-0.5 text-[11.5px] text-ink-3">
-                    ou <span className="tabular">{planYearlyLabel(plan)}</span> —{' '}
-                    {planMonthsFree(plan)} mois offerts
-                  </p>
-                )}
-
-                <ul className="mt-3 space-y-1.5">
-                  {plan.features.map((feature) => (
-                    <li key={feature} className="flex items-start gap-2 text-[12.5px] text-ink-2">
-                      <Check
-                        className="mt-0.5 h-3.5 w-3.5 shrink-0 text-status-paid-dot"
-                        strokeWidth={2.6}
-                        aria-hidden
-                      />
-                      {feature}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            );
-          })}
-        </div>
+        {/*
+          La grille est un composant CLIENT : elle porte le choix mensuel /
+          annuel et les boutons de commande. La page reste serveur pour tout
+          le reste — formule en cours, quota, commande, journal.
+        */}
+        <PlanChooser
+          currentPlan={codeActif}
+          pendingPlan={commande?.plan ?? null}
+          pendingPeriod={commande?.period ?? null}
+        />
       </Card>
 
       <Card>

@@ -158,3 +158,39 @@ export function effectivePlan(
   if (expiresAt !== null && expiresAt < today) return 'discovery';
   return plan;
 }
+
+// --- Périodicité de facturation ---------------------------------------------
+
+export const BILLING_PERIODS = ['monthly', 'yearly'] as const;
+export type BillingPeriod = (typeof BILLING_PERIODS)[number];
+
+export function parsePeriod(value: unknown): BillingPeriod | null {
+  if (typeof value !== 'string') return null;
+  const code = value.trim().toLowerCase();
+  return (BILLING_PERIODS as readonly string[]).includes(code) ? (code as BillingPeriod) : null;
+}
+
+/**
+ * Prix à régler pour une formule et une période.
+ *
+ * ⚠️ **C'est LA source du montant.** Une commande (`subscription_orders`) n'en
+ * stocke aucun, délibérément : un prix figé en base deviendrait une seconde
+ * vérité, et un jour la caisse réclamerait ce que la grille tarifaire
+ * n'annonce plus. Le montant se recalcule ici à chaque affichage.
+ *
+ * `null` pour la formule gratuite : elle ne se commande pas.
+ */
+export function priceFor(plan: PlanDefinition, period: BillingPeriod): number | null {
+  if (plan.monthlyPrice === 0) return null;
+  return period === 'yearly' ? plan.yearlyPrice : plan.monthlyPrice;
+}
+
+/** « 5 000 FCFA / mois » ou « 50 000 FCFA / an ». */
+export function priceLabelFor(plan: PlanDefinition, period: BillingPeriod): string {
+  const montant = priceFor(plan, period);
+  if (montant === null) return 'Gratuit';
+  return `${formatAmount(montant)} FCFA / ${period === 'yearly' ? 'an' : 'mois'}`;
+}
+
+/** Les formules réellement commandables — la gratuite est celle qu'on a déjà. */
+export const PAID_PLANS: PlanDefinition[] = PLANS.filter((plan) => plan.monthlyPrice > 0);

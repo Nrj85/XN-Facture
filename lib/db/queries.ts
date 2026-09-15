@@ -6,7 +6,14 @@ import { sortByRecency, toView } from '@/lib/invoices';
 import { sortQuotesByRecency, toQuoteView } from '@/lib/quotes';
 import { today } from '@/lib/today';
 import type { Client, Company, InvoiceView, QuoteView } from '@/lib/types';
-import { DEFAULT_PLAN, parsePlan, planByCode, type PlanCode } from '@/lib/plans';
+import {
+  DEFAULT_PLAN,
+  parsePlan,
+  parsePeriod,
+  planByCode,
+  type BillingPeriod,
+  type PlanCode,
+} from '@/lib/plans';
 
 /**
  * Lectures serveur.
@@ -337,4 +344,49 @@ export async function getInvoiceQuota(
 
   const used = count ?? 0;
   return { limit, used, remaining: Math.max(0, limit - used) };
+}
+
+export interface PendingOrder {
+  id: string;
+  plan: PlanCode;
+  period: BillingPeriod;
+  reference: string;
+  createdAt: string;
+}
+
+/**
+ * La commande en attente de règlement, s'il y en a une.
+ *
+ * Un index unique partiel garantit qu'il n'y en a jamais plus d'une par
+ * entreprise : la référence affichée à l'écran est LA référence à rappeler,
+ * pas une parmi plusieurs.
+ */
+export async function getPendingOrder(companyId: string): Promise<PendingOrder | null> {
+  const supabase = createClient();
+
+  const { data } = await supabase
+    .from('subscription_orders')
+    .select('id,plan,period,reference,created_at')
+    .eq('company_id', companyId)
+    .eq('status', 'pending')
+    .maybeSingle();
+
+  const row = data as {
+    id: string;
+    plan: string;
+    period: string;
+    reference: string;
+    created_at: string;
+  } | null;
+
+  if (!row) return null;
+
+  const plan = parsePlan(row.plan);
+  const period = parsePeriod(row.period);
+  // Une commande dont la formule ou la période ne se relisent pas est une
+  // donnée que l'application ne sait plus interpréter : mieux vaut ne rien
+  // afficher qu'un montant faux à côté d'une référence de paiement.
+  if (!plan || !period) return null;
+
+  return { id: row.id, plan, period, reference: row.reference, createdAt: row.created_at };
 }
