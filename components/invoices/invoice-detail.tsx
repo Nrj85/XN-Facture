@@ -1,5 +1,7 @@
 'use client';
 
+import { usePlanLimit } from '@/components/subscription/plan-limit';
+import type { ActionResult } from '@/lib/actions/result';
 import { useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -46,15 +48,26 @@ export function InvoiceDetail({
   const [pending, startTransition] = useTransition();
   // Le formulaire redirige ici avec un drapeau dans l'URL ; il est lu puis
   // effacé, et c'est lui qui déclenche la fenêtre de confirmation.
+  const planLimit = usePlanLimit();
   const { notice, dismiss } = useCreationNotice(`/factures/${invoice.id}`);
 
   const totals = computeTotals(invoice.items, invoice.vatRate);
 
   /** Enveloppe commune : toute écriture remonte son refus au même endroit. */
-  const run = (action: () => Promise<{ ok: boolean; error?: string }>) => {
+  const run = (action: () => Promise<ActionResult<unknown>>) => {
     startTransition(async () => {
       const result = await action();
-      setActionError(result.ok ? null : (result.error ?? 'Opération impossible.'));
+      if (result.ok) {
+        setActionError(null);
+        return;
+      }
+      // Un plafond de formule n'est pas une panne : il ouvre la fenêtre qui
+      // mène aux formules, et le bandeau rouge reste muet.
+      if (planLimit.report(result)) {
+        setActionError(null);
+        return;
+      }
+      setActionError(result.error);
     });
   };
 

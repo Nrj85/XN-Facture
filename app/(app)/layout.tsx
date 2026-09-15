@@ -1,4 +1,5 @@
 import { AppShell } from '@/components/layout/app-shell';
+import { PlanLimitProvider } from '@/components/subscription/plan-limit';
 import { CompanyProvider } from '@/lib/company-context';
 import { LocaleProvider } from '@/lib/i18n/context';
 import { getLocale } from '@/lib/i18n';
@@ -41,7 +42,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           prononce de l'anglais avec la phonétique française.
         */}
         <div lang={locale}>
-          <AppShell isAdmin={admin}>{children}</AppShell>
+          {/*
+            La fenêtre de plafond de formule est montée ICI, en un seul
+            exemplaire : quatre écrans peuvent la déclencher, et quatre copies
+            auraient divergé au premier ajustement de texte.
+          */}
+          <PlanLimitProvider>
+            <AppShell isAdmin={admin}>{children}</AppShell>
+          </PlanLimitProvider>
         </div>
       </CompanyProvider>
     </LocaleProvider>

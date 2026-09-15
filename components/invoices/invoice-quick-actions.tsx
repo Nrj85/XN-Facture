@@ -1,5 +1,6 @@
 'use client';
 
+import { usePlanLimit } from '@/components/subscription/plan-limit';
 import { useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { BadgeCheck, Pencil, Send, Trash2 } from 'lucide-react';
@@ -44,6 +45,7 @@ export function InvoiceQuickActions({
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const planLimit = usePlanLimit();
 
   const stop = (event: React.MouseEvent) => event.stopPropagation();
   const isDraft = invoice.status === 'draft';
@@ -66,7 +68,7 @@ export function InvoiceQuickActions({
             stop(event);
             startTransition(async () => {
               const result = await sendInvoiceAction(invoice.id);
-              if (!result.ok) onError(result.error);
+              if (!result.ok && !planLimit.report(result)) onError(result.error);
             });
           }}
         />
@@ -82,7 +84,7 @@ export function InvoiceQuickActions({
             stop(event);
             startTransition(async () => {
               const result = await setInvoiceStatusAction(invoice.id, 'paid');
-              if (!result.ok) onError(result.error);
+              if (!result.ok && !planLimit.report(result)) onError(result.error);
             });
           }}
         />

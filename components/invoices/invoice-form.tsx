@@ -1,5 +1,6 @@
 'use client';
 
+import { usePlanLimit } from '@/components/subscription/plan-limit';
 import { useEffect, useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
@@ -86,6 +87,7 @@ export function InvoiceForm({
   const [errors, setErrors] = useState<Errors>({});
   const [serverError, setServerError] = useState<string | undefined>(undefined);
   const [pending, startTransition] = useTransition();
+  const planLimit = usePlanLimit();
   const [showPreview, setShowPreview] = useState(true);
   // Champs dérivés des paramètres : on cesse de les recalculer dès que
   // l'utilisateur y a touché.
@@ -194,7 +196,9 @@ export function InvoiceForm({
       if (invoice) {
         const result = await updateInvoiceAction(invoice.id, draft);
         if (!result.ok) {
-          setServerError(result.error);
+          // Le plafond de formule ouvre une fenêtre qui mène aux formules ;
+          // il ne se lit pas comme une panne dans un bandeau rouge.
+          if (!planLimit.report(result)) setServerError(result.error);
           return;
         }
         router.push(`/factures/${invoice.id}?maj=1`);
@@ -203,7 +207,7 @@ export function InvoiceForm({
 
       const result = await createInvoiceAction(draft, { send });
       if (!result.ok) {
-        setServerError(result.error);
+        if (!planLimit.report(result)) setServerError(result.error);
         return;
       }
       // Le drapeau déclenche la fenêtre de confirmation sur la page de détail,

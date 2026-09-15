@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { requireCompanyId } from '@/lib/actions/context';
 import { firstIssue, invoiceDraftSchema } from '@/lib/actions/schemas';
-import { describeDbError, fail, ok, type ActionResult } from '@/lib/actions/result';
+import { describeDbError, fail, failFromDb, ok, type ActionResult } from '@/lib/actions/result';
 import { toInvoice, toItemRows } from '@/lib/db/mappers';
 import type { InvoiceWithItemsRow } from '@/lib/db/types';
 import { computeTotals } from '@/lib/invoice-calc';
@@ -136,7 +136,7 @@ export async function createInvoiceAction(
     .select('id')
     .single();
 
-  if (error || !created) return fail(describeDbError(error ?? { message: 'Création impossible.' }));
+  if (error || !created) return failFromDb(error ?? { message: 'Création impossible.' });
 
   const invoiceId = created.id as string;
   const { error: itemsError } = await supabase.from('invoice_items').insert(
@@ -148,7 +148,7 @@ export async function createInvoiceAction(
     // on annule la création : PostgREST n'offre pas de transaction sur
     // plusieurs requêtes, ce nettoyage en tient lieu.
     await supabase.from('invoices').delete().eq('id', invoiceId);
-    return fail(describeDbError(itemsError));
+    return failFromDb(itemsError);
   }
 
   revalidateInvoices(invoiceId);
@@ -178,7 +178,7 @@ export async function updateInvoiceAction(
     .eq('id', id)
     .eq('company_id', context.companyId);
 
-  if (error) return fail(describeDbError(error));
+  if (error) return failFromDb(error);
 
   // Les lignes sont remplacées en bloc : gérer un différentiel ligne à ligne
   // pour trois lignes coûterait plus cher en complexité qu'en performance.
@@ -186,12 +186,12 @@ export async function updateInvoiceAction(
     .from('invoice_items')
     .delete()
     .eq('invoice_id', id);
-  if (deleteError) return fail(describeDbError(deleteError));
+  if (deleteError) return failFromDb(deleteError);
 
   const { error: itemsError } = await supabase
     .from('invoice_items')
     .insert(toItemRows(parsed.data.items).map((row) => ({ ...row, invoice_id: id })));
-  if (itemsError) return fail(describeDbError(itemsError));
+  if (itemsError) return failFromDb(itemsError);
 
   revalidateInvoices(id);
   return ok();
@@ -208,7 +208,7 @@ export async function deleteInvoiceAction(id: string): Promise<ActionResult<unde
     .eq('id', id)
     .eq('company_id', context.companyId);
 
-  if (error) return fail(describeDbError(error));
+  if (error) return failFromDb(error);
 
   revalidateInvoices();
   return ok();
@@ -239,7 +239,7 @@ export async function sendInvoiceAction(id: string): Promise<ActionResult<{ numb
     .eq('id', id)
     .eq('company_id', context.companyId);
 
-  if (error) return fail(describeDbError(error));
+  if (error) return failFromDb(error);
 
   revalidateInvoices(id);
   return ok({ number });
@@ -281,7 +281,7 @@ export async function setInvoiceStatusAction(
     .eq('id', id)
     .eq('company_id', context.companyId);
 
-  if (error) return fail(describeDbError(error));
+  if (error) return failFromDb(error);
 
   revalidateInvoices(id);
   return ok();
@@ -336,7 +336,7 @@ export async function recordPaymentAction(
     .eq('id', id)
     .eq('company_id', context.companyId);
 
-  if (error) return fail(describeDbError(error));
+  if (error) return failFromDb(error);
 
   revalidateInvoices(id);
   return ok();

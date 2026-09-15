@@ -1,5 +1,6 @@
 'use client';
 
+import { usePlanLimit } from '@/components/subscription/plan-limit';
 import { useEffect, useState, useTransition } from 'react';
 import { Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -38,6 +39,7 @@ export function RecordPaymentDialog({
   const [text, setText] = useState('');
   const [error, setError] = useState<string | undefined>(undefined);
   const [pending, startTransition] = useTransition();
+  const planLimit = usePlanLimit();
 
   // Le solde restant est la réponse attendue dans la grande majorité des cas :
   // on la propose, sans l'imposer.
@@ -64,7 +66,10 @@ export function RecordPaymentDialog({
     startTransition(async () => {
       const result = await recordPaymentAction(invoice.id, amount);
       if (!result.ok) {
-        setError(result.error);
+        // Encaisser une facture sans numéro lui en attribue un : cette action
+        // peut donc buter sur le plafond, comme un envoi.
+        if (planLimit.report(result)) onClose();
+        else setError(result.error);
         return;
       }
       onClose();

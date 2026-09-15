@@ -1,3 +1,4 @@
+import type { ActionResult } from '@/lib/actions/result';
 import { BadgeCheck, Ban, Coins, RotateCcw, Send, Undo2 } from 'lucide-react';
 import type { StatusAction } from '@/components/documents/status-menu';
 import { sendInvoiceAction, setInvoiceStatusAction } from '@/lib/actions/invoices';
@@ -29,8 +30,17 @@ export function invoiceStatusActions({
   /** Total TTC, pour annoncer ce que « Marquer comme payée » va solder. */
   total: number;
   formatMoney: (amount: number) => string;
-  /** Enveloppe d'écriture de l'appelant : elle porte le `useTransition` et l'erreur. */
-  run: (action: () => Promise<{ ok: boolean; error?: string }>) => void;
+  /**
+   * Enveloppe d'écriture de l'appelant : elle porte le `useTransition` et
+   * l'erreur.
+   *
+   * ⚠️ Le type est `ActionResult`, pas une forme structurelle approchante.
+   * Une forme du genre `{ ok: boolean; error?: string }` laisse tomber
+   * `reason` en silence — et l'appelant ne peut alors plus distinguer un
+   * plafond de formule d'une panne, donc plus ouvrir la fenêtre qui mène aux
+   * formules. Il ne resterait qu'un bandeau rouge sans issue.
+   */
+  run: (action: () => Promise<ActionResult<unknown>>) => void;
   /** Un statut qui suppose un montant se saisit par son montant. */
   onRecordPayment: () => void;
 }): StatusAction[] {

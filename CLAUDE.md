@@ -370,6 +370,36 @@ commande curl n'est pas un plafond.
 `describeDbError` a un cas `P0001` qui le relaie tel quel — c'est voulu. Toute nouvelle
 exception `raise` de ce type doit donc être rédigée comme un texte d'interface.
 
+#### La fenêtre de plafond — `components/subscription/plan-limit.tsx`
+
+Le refus s'affichait en bandeau rouge, **sans le moindre lien vers la suite** : l'utilisateur
+apprenait que sa formule était épuisée au milieu d'un formulaire qu'il venait de remplir, et
+il ne lui restait qu'à fermer l'onglet. Un refus qui n'ouvre aucun chemin est un cul-de-sac.
+Une modale le remplace, avec ce que la formule Pro apporte et un bouton vers `/abonnement`.
+
+- **Un seul exemplaire**, monté dans `app/(app)/layout.tsx` et piloté par contexte
+  (`usePlanLimit()`). Cinq écrans peuvent la déclencher — formulaire de création, page de
+  détail, actions rapides de la liste, menu ⋯ du tableau de bord, dialogue d'encaissement —
+  et cinq copies auraient divergé au premier ajustement de texte.
+- **La saisie n'est pas perdue** : la fenêtre s'ouvre par-dessus le formulaire, qui reste en
+  place avec son contenu. Vérifié.
+- Elle ne décide rien : le refus vient du déclencheur. La fermer ne débloque rien.
+
+⚠️ **Le refus est reconnu par `hint`, jamais par le texte du message.** La migration 0008
+ajoute `hint = 'plan-limit'` au `raise`, et `failFromDb()` (`lib/actions/result.ts`) le traduit
+en `reason: 'plan-limit'` sur l'`ActionResult`. Comparer des chaînes aurait cassé à la première
+reformulation. `errcode` ne pouvait pas servir : PostgREST traduit `P0001` en 400, un SQLSTATE
+inventé retomberait en 500.
+
+⚠️ **Le plafond chiffré n'apparaît QUE dans le message venu de la base.** La fenêtre ne le
+répète pas depuis `lib/plans.ts` : deux sources auraient fini par annoncer un plafond que la
+base n'applique pas.
+
+⚠️ **Une enveloppe `run` typée `{ ok: boolean; error?: string }` PERD `reason` en silence.**
+C'est exactement ce qui est arrivé à `invoice-status-actions.ts` : la forme structurelle
+compilait, mais l'appelant ne pouvait plus distinguer un plafond d'une panne. Ces enveloppes
+prennent `ActionResult<unknown>`, pas une forme approchante.
+
 ⚠️ **La règle d'expiration existe en DEUX exemplaires** : `effectivePlan()` (`lib/plans.ts`)
 pour l'affichage, `enforce_invoice_quota()` (0007) pour l'appliquer. **Modifier l'une oblige à
 modifier l'autre**, sinon l'écran annonce « Pro » pendant que la base refuse.
@@ -728,6 +758,7 @@ supabase/
   migrations/0005_admin_actors.sql  Vue des comptes, réservée aux administrateurs
   migrations/0006_abonnements.sql   subscriptions + subscription_payments, request_plan
   migrations/0007_quota_factures.sql invoices_quota — plafond Découverte, par déclencheur
+  migrations/0008_quota_hint.sql    hint = 'plan-limit' : refus reconnaissable par le code
   seed.sql                      Jeu de démonstration, rejouable
 
 app/
@@ -765,6 +796,7 @@ components/
   quotes/      quote-form, quote-list, quote-detail, quote-editor, quote-quick-actions
   clients/     client-list
   settings/    settings-form, logo-uploader, personal-form (nom + langue)
+  subscription/ plan-limit (fenêtre de plafond + contexte, UN exemplaire)
   documents/   status-menu, document-created-dialog, use-creation-notice   (facture + devis)
   pdf/         download-pdf-button
 
@@ -1036,7 +1068,7 @@ mouvement décoratif sape la crédibilité.
 | `ui/action-menu.tsx` | Menu ⋯ en **portail** (`fixed` sur `document.body`) : le seul qui survive à un `overflow-x-auto`. Se replace au défilement |
 | `ui/combobox.tsx` | Sélecteur déroulant, `searchable`, `disabled`. **Remplace `<select>` partout** |
 | `ui/date-picker.tsx` | Calendrier. **Remplace `<input type="date">` partout** |
-| `ui/dialog.tsx` | `Dialog` et `ConfirmDialog` sur `<dialog>` natif — piège à focus, Échap, inertie gratuits |
+| `ui/dialog.tsx` | `Dialog` et `ConfirmDialog` sur `<dialog>` natif — piège à focus, Échap, inertie gratuits. ⚠️ **Son bouton « Fermer » fait 32 px**, sous le plancher de 36 px du §6.5 — mesuré, non corrigé : il touche toutes les modales |
 | `ui/field.tsx` · `input.tsx` · `switch.tsx` · `empty-state.tsx` | Champs et états |
 | `layout/logo.tsx` | Marque. **`href` la rend cliquable** ; sans lui elle reste un `<span>` — un logo qui ne mène nulle part ne doit pas se comporter comme un lien. Destination : `/` depuis les écrans d'authentification, `/dashboard` depuis l'application |
 | `layout/app-shell.tsx` · `sidebar` · `topbar` | Coquille et navigation. L'action principale de la barre supérieure **suit la section** (`primaryAction`) |

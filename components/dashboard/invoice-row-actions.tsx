@@ -1,5 +1,7 @@
 'use client';
 
+import { usePlanLimit } from '@/components/subscription/plan-limit';
+import type { ActionResult } from '@/lib/actions/result';
 import { useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Download, Pencil, Trash2 } from 'lucide-react';
@@ -42,11 +44,14 @@ export function InvoiceRowActions({
   const t = useT();
   const { download } = usePdfDownload();
   const [, startTransition] = useTransition();
+  const planLimit = usePlanLimit();
 
-  const run = (action: () => Promise<{ ok: boolean; error?: string }>) => {
+  const run = (action: () => Promise<ActionResult<unknown>>) => {
     startTransition(async () => {
       const result = await action();
-      if (!result.ok) onError(result.error ?? 'Opération impossible.');
+      if (result.ok) return;
+      if (planLimit.report(result)) return;
+      onError(result.error);
     });
   };
 
