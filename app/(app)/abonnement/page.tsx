@@ -26,8 +26,20 @@ export const metadata: Metadata = { title: 'Abonnement' };
  * agrégateur n'est branché, et un bouton qui prétendrait débiter serait un
  * contrôle mort, proscrit par le §6.1.
  */
-export default async function AbonnementPage() {
+export default async function AbonnementPage({
+  searchParams,
+}: {
+  searchParams: { commande?: string | string[] };
+}) {
   const session = await requireSession();
+
+  // Retour depuis le prestataire de paiement (`returnUrl`). On ne CONCLUT
+  // rien : revenir sur cette page ne prouve pas que le règlement a abouti, et
+  // annoncer un succès non constaté serait un mensonge que la formule
+  // toujours fermée démentirait aussitôt.
+  const retourBrut = Array.isArray(searchParams.commande)
+    ? searchParams.commande[0]
+    : searchParams.commande;
   const [abonnement, paiements, commande] = await Promise.all([
     getSubscription(session.companyId),
     getSubscriptionPayments(session.companyId),
@@ -48,6 +60,19 @@ export default async function AbonnementPage() {
 
   return (
     <div className="animate-fade-in space-y-5">
+      {/* Le retour n'est affiché que s'il correspond à la commande réellement
+          en attente : une référence quelconque dans l'URL ne doit rien faire
+          apparaître. */}
+      {retourBrut && commande && retourBrut === commande.reference && (
+        <p
+          role="status"
+          className="rounded-[10px] border border-line bg-sand px-4 py-3 text-[13px] leading-relaxed text-ink-2"
+        >
+          Merci — nous avons bien noté votre passage par le paiement. Votre formule s’ouvrira
+          dès que le règlement sera constaté ; cette page suit l’état de votre commande.
+        </p>
+      )}
+
       <header>
         <p className="label-caps">Compte</p>
         <h1 className="type-display mt-1.5 text-[26px] leading-none sm:text-[32px]">Abonnement</h1>
@@ -148,6 +173,7 @@ export default async function AbonnementPage() {
           plan={commande.plan}
           period={commande.period}
           reference={commande.reference}
+          links={commande.links}
           channels={paymentChannels()}
           contactEmail={billingContactEmail()}
         />

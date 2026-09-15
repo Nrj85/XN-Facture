@@ -452,6 +452,57 @@ aucune instruction de paiement n'est affichée** — un faux numéro serait bien
 absence. À ne pas confondre avec `companies.momo_mtn`, qui est le numéro de CHAQUE entreprise
 cliente, imprimé sur SES factures.
 
+#### Tara (Dikalo) — liens de paiement (migration 0010)
+
+`POST https://www.dikalo.co/api/tara/paymentlinks` rend **six liens** pour un même règlement :
+général, carte, WhatsApp, SMS, Telegram, Dikalo. Au Cameroun cette variété compte autant que le
+paiement lui-même — tout le monde n'a pas la même application.
+
+**La correspondance est directe** : `productId` = **notre référence de commande** (unique par
+construction, donc elle sert d'ancre d'idempotence) · `productPrice` = `priceFor()` calculé
+**côté serveur** · `returnUrl` = `/abonnement?commande=<ref>` · `webHookUrl` = notre route
+gardée par un secret.
+
+⚠️ **Appel SERVEUR uniquement.** La clé transite dans le CORPS de la requête : la poser dans
+un composant client la publierait. Jamais de préfixe `NEXT_PUBLIC_`.
+
+⚠️ **Un échec de Tara ne fait JAMAIS échouer la commande.** Elle existe déjà avec sa
+référence ; refuser laisserait l'utilisateur devant une erreur alors que le règlement manuel
+reste ouvert. Sans lien, l'écran retombe sur les coordonnées mobile money, puis sur le repli
+« nous revenons vers vous ». Délai de 15 s sur l'appel : un prestataire lent ne doit pas figer
+la Server Action.
+
+⚠️ **LES LIENS SONT FILTRÉS PAR SCHÉMA, et c'est indispensable.** Ils viennent d'une API tierce
+et finissent dans un `href` : un `javascript:` renvoyé par un serveur détourné s'exécuterait au
+clic. Seuls `https:`, `sms:`, `tg:`, `whatsapp:` passent — à l'écriture **et** à la relecture
+(`lienSur`, `readStoredLinks`). Un `http:` nu est écarté aussi. **Vérifié avec un lot piégé :
+le `javascript:` et le `http://` ne sont rendus nulle part dans la page.**
+
+⚠️ **Le retour de `returnUrl` ne CONCLUT rien.** Revenir sur la page ne prouve pas que le
+règlement a abouti ; annoncer un succès non constaté serait démenti par la formule toujours
+fermée. Le message est affiché seulement si la référence de l'URL correspond à la commande
+réellement en attente.
+
+**Ce que la documentation de Tara NE dit PAS — à demander avant d'activer automatiquement :**
+
+1. **Le contenu du webhook** — quels champs, quelles valeurs de statut.
+2. **Comment prouver qu'un appel vient de Tara** — signature, en-tête secret, liste d'IP.
+   Sans ça, l'URL du webhook est un sésame : qui la découvre s'offre la formule Pro.
+3. **Un point de vérification** pour interroger l'état d'un paiement plutôt que de croire ce
+   qu'on reçoit.
+
+En attendant, `TARA_WEBHOOK_SECRET` (24 caractères minimum) forme un segment imprévisible dans
+l'URL de notification. **Ce n'est PAS l'équivalent d'une signature** et ne prétend pas l'être :
+c'est ce qu'on peut faire sans la coopération du prestataire.
+
+**Variables d'environnement** : `TARA_API_KEY`, `TARA_BUSINESS_ID`, `TARA_WEBHOOK_SECRET`.
+Tant qu'elles sont vides, aucun appel n'est fait et le parcours manuel reste en place.
+
+⚠️ `siteOrigin()` a quitté `lib/actions/auth.ts` pour `lib/site-origin.ts` : deux copies en
+auraient divergé. Elle privilégie `NEXT_PUBLIC_SITE_URL` parce que les en-têtes viennent du
+client — un `Host` falsifié détournerait l'adresse du webhook vers un serveur choisi par
+l'attaquant.
+
 **Activation après paiement — à la main, par la console SQL :**
 
 ```sql
@@ -820,6 +871,7 @@ supabase/
   migrations/0007_quota_factures.sql invoices_quota — plafond Découverte, par déclencheur
   migrations/0008_quota_hint.sql    hint = 'plan-limit' : refus reconnaissable par le code
   migrations/0009_commandes.sql     subscription_orders + start/cancel_subscription_order
+  migrations/0010_liens_paiement.sql provider + payment_links, attach_payment_links
   seed.sql                      Jeu de démonstration, rejouable
 
 app/
@@ -877,7 +929,9 @@ lib/
   actions/          auth, account (nom affiché), company, clients, invoices, quotes
                     · locale · result, schemas, context
   plans.ts          Les trois formules et leurs prix — SOURCE UNIQUE du montant
-  billing-config.ts Coordonnées d'encaissement de XN-Facture, lues de l'ENVIRONNEMENT
+  billing-config.ts Coordonnées d'encaissement et secret du webhook (ENVIRONNEMENT)
+  site-origin.ts    Origine publique du site — source UNIQUE (emails, retours, webhook)
+  payments/tara.ts  Tara/Dikalo : création du lien, filtrage des URL par schéma
   period.ts         Préréglages de période du tableau de bord (bornes en Date.UTC)
   calendar.ts       Grille du DatePicker (lundi en tête)
   nav.ts            Navigation et libellés de fil d'Ariane

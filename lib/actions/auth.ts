@@ -1,11 +1,11 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { fail, ok, type ActionResult } from '@/lib/actions/result';
 import { parsePlan } from '@/lib/plans';
+import { siteOrigin } from '@/lib/site-origin';
 
 /**
  * Actions d'authentification.
@@ -161,28 +161,6 @@ export async function signOut(): Promise<void> {
   await supabase.auth.signOut();
   revalidatePath('/', 'layout');
   redirect('/connexion');
-}
-
-/**
- * Origine publique du site, pour composer le lien de retour des emails.
- *
- * `NEXT_PUBLIC_SITE_URL` prime, parce qu'elle est la seule valeur sûre en
- * production : les en-têtes de la requête sont fournis par le client. Supabase
- * refuse de toute façon toute destination absente de sa liste d'URL autorisées
- * (Authentication > URL Configuration), donc un en-tête falsifié ne détourne
- * rien — mais autant ne pas dépendre de ce dernier rempart.
- */
-function siteOrigin(): string {
-  const configured = process.env.NEXT_PUBLIC_SITE_URL?.trim();
-  if (configured) return configured.replace(/\/+$/, '');
-
-  const store = headers();
-  const origin = store.get('origin');
-  if (origin) return origin;
-
-  const host = store.get('x-forwarded-host') ?? store.get('host') ?? 'localhost:3000';
-  const protocol = store.get('x-forwarded-proto') ?? (host.startsWith('localhost') ? 'http' : 'https');
-  return `${protocol}://${host}`;
 }
 
 /**

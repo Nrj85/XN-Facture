@@ -2,13 +2,23 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Loader2, Smartphone } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { ExternalLink, Loader2, Smartphone } from 'lucide-react';
+import { Button, buttonClasses } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { cancelOrderAction } from '@/lib/actions/subscription';
 import { planByCode, priceFor, type BillingPeriod, type PlanCode } from '@/lib/plans';
 import { formatMoney } from '@/lib/money';
 import type { PaymentChannel } from '@/lib/billing-config';
+import type { PaymentLinks } from '@/lib/payments/tara';
+
+/** Les canaux secondaires, dans l'ordre d'utilité au Cameroun. */
+const AUTRES_CANAUX = [
+  { cle: 'whatsapp', libelle: 'WhatsApp' },
+  { cle: 'sms', libelle: 'SMS' },
+  { cle: 'card', libelle: 'Carte bancaire' },
+  { cle: 'dikalo', libelle: 'Dikalo' },
+  { cle: 'telegram', libelle: 'Telegram' },
+] as const;
 
 /**
  * La commande en attente de règlement.
@@ -27,12 +37,14 @@ export function OrderSummary({
   plan,
   period,
   reference,
+  links,
   channels,
   contactEmail,
 }: {
   plan: PlanCode;
   period: BillingPeriod;
   reference: string;
+  links: PaymentLinks | null;
   channels: PaymentChannel[];
   contactEmail: string | null;
 }) {
@@ -87,7 +99,59 @@ export function OrderSummary({
           </p>
         </div>
 
-        {channels.length > 0 ? (
+        {links ? (
+          <div className="space-y-3">
+            <p className="text-[13px] text-ink-2">
+              Réglez {montant !== null ? <strong className="font-semibold text-ink">{formatMoney(montant)}</strong> : 'votre abonnement'}{' '}
+              par le canal qui vous arrange. La référence est déjà attachée au lien.
+            </p>
+
+            {/*
+              ⚠️ Ces adresses viennent d'une API tierce et finissent dans un
+              `href`. Elles ont été filtrées par schéma à l'écriture ET à la
+              relecture (`lib/payments/tara.ts`) : un `javascript:` renvoyé par
+              un serveur détourné s'exécuterait au clic.
+
+              `rel="noreferrer"` en plus de `noopener` : l'adresse de retour
+              porte la référence de commande, inutile de la transmettre au
+              site de destination.
+            */}
+            {links.general && (
+              <a
+                href={links.general}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={buttonClasses({ className: 'w-full gap-2' })}
+              >
+                Payer maintenant
+                <ExternalLink className="h-4 w-4" aria-hidden />
+              </a>
+            )}
+
+            <div className="flex flex-wrap gap-2">
+              {AUTRES_CANAUX.map(({ cle, libelle }) => {
+                const href = links[cle];
+                if (!href) return null;
+                return (
+                  <a
+                    key={cle}
+                    href={href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={buttonClasses({ variant: 'secondary', size: 'sm' })}
+                  >
+                    {libelle}
+                  </a>
+                );
+              })}
+            </div>
+
+            <p className="text-[12px] leading-relaxed text-ink-3">
+              Votre formule s’ouvrira une fois le règlement constaté. Gardez cette page sous la
+              main : elle suit l’état de votre commande.
+            </p>
+          </div>
+        ) : channels.length > 0 ? (
           <div className="space-y-3">
             <p className="text-[13px] text-ink-2">
               Envoyez {montant !== null ? <strong className="font-semibold text-ink">{formatMoney(montant)}</strong> : 'le montant'}{' '}

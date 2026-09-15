@@ -3,7 +3,17 @@
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { failFromDb, fail, ok, type ActionResult } from '@/lib/actions/result';
-import { parsePlan, parsePeriod } from '@/lib/plans';
+import {
+  parsePlan,
+  parsePeriod,
+  planByCode,
+  priceFor,
+  type BillingPeriod,
+  type PlanCode,
+} from '@/lib/plans';
+import { createPaymentLink, taraConfig } from '@/lib/payments/tara';
+import { webhookUrl } from '@/lib/billing-config';
+import { siteOrigin } from '@/lib/site-origin';
 
 /**
  * Commander une formule.
@@ -38,8 +48,59 @@ export async function startOrderAction(
   if (error) return failFromDb(error);
   if (typeof data !== 'string') return fail('La commande n’a pas pu être enregistrée. Réessayez.');
 
+  await attacherLienDePaiement(supabase, data, formule, periode);
+
   revalidatePath('/abonnement');
   return ok({ reference: data });
+}
+
+/**
+ * Demande son lien de paiement au prestataire et le pose sur la commande.
+ *
+ * ⚠️ **Ne lève jamais et ne fait jamais échouer la commande.** Celle-ci existe
+ * déjà en base avec sa référence ; refuser ici laisserait l'utilisateur devant
+ * une erreur alors que le règlement manuel reste ouvert. Sans lien, l'écran
+ * retombe simplement sur les coordonnées mobile money.
+ */
+async function attacherLienDePaiement(
+  supabase: ReturnType<typeof createClient>,
+  reference: string,
+  plan: PlanCode,
+  period: BillingPeriod,
+): Promise<void> {
+  const config = taraConfig();
+  if (!config) return;
+
+  const formule = planByCode(plan);
+  // ⚠️ Le prix vient d'ICI, pas du navigateur. `lib/plans.ts` est la seule
+  // source du montant : c'est ce qui empêche de se commander Pro à 1 FCFA.
+  const montant = priceFor(formule, period);
+  if (montant === null) return;
+
+  const origin = siteOrigin();
+  const webhook = webhookUrl(origin);
+  // Pas de secret de notification posé : on ne donne aucune adresse de rappel
+  // plutôt qu'une adresse ouverte à tous. `webHookUrl` est obligatoire côté
+  // Tara, donc la demande est simplement abandonnée.
+  if (!webhook) return;
+
+  const duree = period === 'yearly' ? 'un an' : 'un mois';
+  const resultat = await createPaymentLink(config, {
+    reference,
+    name: `XN-Facture — Formule ${formule.name}`,
+    description: `Abonnement ${formule.name} pour ${duree}. Référence ${reference}.`,
+    price: montant,
+    returnUrl: `${origin}/abonnement?commande=${encodeURIComponent(reference)}`,
+    webhookUrl: webhook,
+  });
+
+  if (!resultat.ok) return;
+
+  await supabase.rpc('attach_payment_links', {
+    p_reference: reference,
+    p_provider: 'tara',
+    p_links: resultat.links,
+  });
 }
 
 /** Renoncer à une commande en attente. Sans effet sur une commande réglée. */

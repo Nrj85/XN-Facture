@@ -5,6 +5,7 @@ import type { ClientRow, CompanyRow, InvoiceWithItemsRow, QuoteWithItemsRow } fr
 import { sortByRecency, toView } from '@/lib/invoices';
 import { sortQuotesByRecency, toQuoteView } from '@/lib/quotes';
 import { today } from '@/lib/today';
+import { readStoredLinks, type PaymentLinks } from '@/lib/payments/tara';
 import type { Client, Company, InvoiceView, QuoteView } from '@/lib/types';
 import {
   DEFAULT_PLAN,
@@ -352,6 +353,8 @@ export interface PendingOrder {
   period: BillingPeriod;
   reference: string;
   createdAt: string;
+  /** Liens du prestataire, revalidés à la relecture. `null` si aucun. */
+  links: PaymentLinks | null;
 }
 
 /**
@@ -366,7 +369,7 @@ export async function getPendingOrder(companyId: string): Promise<PendingOrder |
 
   const { data } = await supabase
     .from('subscription_orders')
-    .select('id,plan,period,reference,created_at')
+    .select('id,plan,period,reference,created_at,payment_links')
     .eq('company_id', companyId)
     .eq('status', 'pending')
     .maybeSingle();
@@ -377,6 +380,7 @@ export async function getPendingOrder(companyId: string): Promise<PendingOrder |
     period: string;
     reference: string;
     created_at: string;
+    payment_links: unknown;
   } | null;
 
   if (!row) return null;
@@ -388,5 +392,12 @@ export async function getPendingOrder(companyId: string): Promise<PendingOrder |
   // afficher qu'un montant faux à côté d'une référence de paiement.
   if (!plan || !period) return null;
 
-  return { id: row.id, plan, period, reference: row.reference, createdAt: row.created_at };
+  return {
+    id: row.id,
+    plan,
+    period,
+    reference: row.reference,
+    createdAt: row.created_at,
+    links: readStoredLinks(row.payment_links),
+  };
 }
