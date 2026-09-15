@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { PersonalForm } from '@/components/settings/personal-form';
+import { SecurityForm } from '@/components/settings/security-form';
 import { SettingsForm } from '@/components/settings/settings-form';
 import { createClient } from '@/lib/supabase/server';
 import { requireSession } from '@/lib/db/queries';
@@ -28,6 +29,11 @@ export default async function ParametresPage() {
         l'équipe. Les mêler aurait laissé croire qu'on renomme ses collègues.
       */}
       <PersonalForm current={locale} fullName={session.fullName} />
+      {/*
+        L'accès au compte vient APRÈS le confort : on ne met pas un champ de
+        mot de passe à côté d'un sélecteur de langue.
+      */}
+      <SecurityForm currentEmail={session.email} />
     </div>
   );
 }

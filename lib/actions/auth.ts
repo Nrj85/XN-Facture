@@ -6,67 +6,8 @@ import { createClient } from '@/lib/supabase/server';
 import { fail, ok, type ActionResult } from '@/lib/actions/result';
 import { parsePlan } from '@/lib/plans';
 import { siteOrigin } from '@/lib/site-origin';
+import { translateAuthError } from '@/lib/auth-errors';
 
-/**
- * Actions d'authentification.
- *
- * Les messages d'erreur de Supabase sont en anglais et parfois cryptiques
- * (« Invalid login credentials »). On les traduit, sans jamais préciser si
- * c'est l'email ou le mot de passe qui est faux : le distinguer permettrait
- * d'énumérer les comptes existants.
- */
-
-function translateAuthError(message: string): string {
-  const normalized = message.toLowerCase();
-  if (normalized.includes('invalid login credentials')) {
-    return 'Email ou mot de passe incorrect.';
-  }
-  if (normalized.includes('email not confirmed')) {
-    return 'Adresse email non confirmée. Consultez votre boîte de réception.';
-  }
-  if (normalized.includes('user already registered')) {
-    return 'Un compte existe déjà avec cette adresse.';
-  }
-  // Avant le fourre-tout `password` ci-dessous, qui l'attraperait à tort et
-  // afficherait « trop court » sur un mot de passe parfaitement long.
-  if (normalized.includes('should be different from the old password')) {
-    return 'Ce mot de passe est identique à l’ancien. Choisissez-en un autre.';
-  }
-  if (normalized.includes('same_password')) {
-    return 'Ce mot de passe est identique à l’ancien. Choisissez-en un autre.';
-  }
-  if (
-    normalized.includes('token has expired') ||
-    normalized.includes('invalid token') ||
-    normalized.includes('expired or is invalid')
-  ) {
-    return 'Ce lien a expiré ou a déjà servi. Demandez-en un nouveau.';
-  }
-  if (normalized.includes('password')) {
-    return 'Mot de passe trop court : 8 caractères au minimum.';
-  }
-  if (normalized.includes('rate limit') || normalized.includes('too many')) {
-    return 'Trop de tentatives. Patientez quelques minutes.';
-  }
-  if (normalized.includes('is invalid') && normalized.includes('email')) {
-    return 'Cette adresse email n’est pas acceptée. Vérifiez-la, ou utilisez une autre adresse.';
-  }
-  if (normalized.includes('signups not allowed') || normalized.includes('signup is disabled')) {
-    return 'Les inscriptions sont désactivées sur ce serveur.';
-  }
-  // Cas rencontré en conditions réelles : Supabase crée le compte, échoue à
-  // envoyer l'email de confirmation, et renvoie un 500. L'inscription est
-  // impossible pour TOUT LE MONDE, et le message générique laissait croire à
-  // une faute de saisie — la personne réessayait indéfiniment.
-  if (normalized.includes('error sending') && normalized.includes('email')) {
-    return 'Le compte n’a pas pu être créé : l’envoi de l’email de confirmation a échoué. Ce n’est pas votre saisie, c’est un réglage du serveur. Réessayez plus tard ou contactez-nous.';
-  }
-  // Rien ne doit remonter en anglais : l'interface est entièrement en français,
-  // et un message brut de Supabase renseigne l'utilisateur sur l'infrastructure
-  // sans lui dire quoi faire. Observé une fois en conditions réelles :
-  // « Email address "..." is invalid » s'affichait tel quel sur /inscription.
-  return 'La demande n’a pas abouti. Vérifiez vos informations et réessayez.';
-}
 
 export async function signIn(
   email: string,

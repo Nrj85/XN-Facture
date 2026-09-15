@@ -180,6 +180,22 @@ export const en: typeof fr = {
 
   settings: {
     language: 'Interface language',
+    securityTitle: 'Security and sign-in',
+    securityHint: 'Your sign-in address and your password. They belong to you alone.',
+    emailLabel: 'Email address',
+    emailCurrent: (adresse: string) => `You currently sign in with ${adresse}.`,
+    emailHint: 'Nothing changes until you confirm: a link is sent to both your old AND your new address, and both must be followed.',
+    emailAction: 'Change address',
+    emailSent: 'Check both inboxes: the change applies once both links are followed.',
+    passwordLabel: 'Password',
+    currentPassword: 'Current password',
+    currentPasswordHint: 'Required so nobody can change your password from a session left open.',
+    newPassword: 'New password',
+    newPasswordHint: '8 characters minimum.',
+    confirmPassword: 'Confirm the new password',
+    passwordAction: 'Change password',
+    passwordSaved: 'Password changed.',
+    passwordMismatch: 'The two passwords do not match.',
     languageTitle: 'Personal preferences',
     languageHint:
       'These settings only affect you. Your colleagues keep theirs, and your invoices stay in French.',

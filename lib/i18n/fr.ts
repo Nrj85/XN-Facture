@@ -195,6 +195,22 @@ export const fr = {
 
   settings: {
     language: 'Langue de l’interface',
+    securityTitle: 'Sécurité et connexion',
+    securityHint: 'Votre adresse de connexion et votre mot de passe. Ils n’appartiennent qu’à vous.',
+    emailLabel: 'Adresse email',
+    emailCurrent: (adresse: string) => `Vous vous connectez aujourd’hui avec ${adresse}.`,
+    emailHint: 'Rien ne change tant que vous n’avez pas confirmé : un lien part vers votre ancienne ET votre nouvelle adresse, et les deux doivent être suivis.',
+    emailAction: 'Changer d’adresse',
+    emailSent: 'Vérifiez vos deux boîtes : le changement s’appliquera une fois les liens suivis.',
+    passwordLabel: 'Mot de passe',
+    currentPassword: 'Mot de passe actuel',
+    currentPasswordHint: 'Demandé pour que personne ne puisse changer votre mot de passe depuis une session laissée ouverte.',
+    newPassword: 'Nouveau mot de passe',
+    newPasswordHint: '8 caractères au minimum.',
+    confirmPassword: 'Confirmer le nouveau mot de passe',
+    passwordAction: 'Changer le mot de passe',
+    passwordSaved: 'Mot de passe changé.',
+    passwordMismatch: 'Les deux mots de passe ne correspondent pas.',
     languageTitle: 'Préférences personnelles',
     languageHint:
       'Ces réglages ne concernent que vous. Vos collègues gardent les leurs, et vos factures restent en français.',

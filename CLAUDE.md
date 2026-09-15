@@ -283,9 +283,62 @@ neuve, barre latérale « Josue Rengou », avatar « JR », salutation « Bonjou
 affichait auparavant `verif@example....`) → nom vide refusé, et la salutation reste intacte
 après la tentative → bascule en anglais, « Your name » / « Save ».
 
+#### Sécurité et connexion — `settings/security-form.tsx` (15 sept. 2026)
+
+Carte **distincte** des préférences personnelles : le nom et la langue sont du confort, ceci
+touche à l'accès au compte. Les mêler aurait mis un champ de mot de passe à côté d'un
+sélecteur de langue.
+
+Ni l'adresse ni le mot de passe n'étaient modifiables : l'adresse était figée à l'inscription,
+et le mot de passe ne se changeait qu'en se **déconnectant** pour passer par « mot de passe
+oublié » — pour une opération qu'on veut faire depuis son compte.
+
+⚠️ **L'ANCIEN mot de passe est exigé par NOUS, pas par Supabase.**
+`security_update_password_require_reauthentication` vaut `false` sur ce projet : **vérifié en
+conditions réelles, un `PUT /auth/v1/user` avec le seul jeton passe en 200**. Quelqu'un qui
+trouve un navigateur déverrouillé prend donc le compte et en verrouille le titulaire dehors.
+`updatePasswordAction` revalide en tentant une connexion avec l'ancien mot de passe — seule
+façon de le contrôler, Supabase ne stockant qu'une empreinte. Un échec de cette tentative ne
+touche pas la session en cours.
+
+⚠️ **Le message de refus dit « Mot de passe actuel incorrect », jamais celui de Supabase.**
+Le sien serait « Invalid login credentials », qui laisse croire que l'email est en cause.
+
+⚠️ **LE CHANGEMENT D'ADRESSE ÉCHOUE POUR TOUT LE MONDE, aujourd'hui.** Erreur exacte, relevée
+le 15 sept. 2026 :
+
+```
+500  unexpected_failure  "Error sending email change email"
+```
+
+**Même cause que l'échec d'inscription** : aucun domaine n'est vérifié chez Resend, et
+l'expéditeur d'essai ne délivre qu'au propriétaire du compte. Ce n'est PAS un défaut de
+`updateEmailAction` : le jour où un domaine est vérifié, elle fonctionne sans changer une
+ligne. `translateAuthError` porte un cas dédié — placé **avant** le cas générique d'envoi, qui
+parlerait sinon de création de compte à quelqu'un qui change d'adresse.
+
+`mailer_secure_email_change_enabled` vaut `true` : Supabase écrit à l'ANCIENNE **et** à la
+NOUVELLE adresse, les deux liens doivent être suivis. C'est ce qui rend inutile de demander le
+mot de passe ici — un intrus sur une session ouverte n'a pas l'ancienne boîte.
+
+⚠️ **`translateAuthError` a quitté `lib/actions/auth.ts` pour `lib/auth-errors.ts`.** Un module
+`'use server'` ne peut exporter que des fonctions **asynchrones** ; celle-ci est synchrone et
+deux modules d'actions en ont besoin.
+
+**Vérifié de bout en bout** : saisies divergentes refusées avant tout appel · mauvais mot de
+passe actuel refusé, **et l'ancien fonctionne toujours** · nouveau trop court refusé ·
+changement légitime → connexion au nouveau, ancien refusé, **les trois champs vidés** ·
+changement d'adresse → message français expliquant que c'est le serveur, adresse inchangée en
+base.
+
+⚠️ **Piège de test :** `/parametres` porte **deux** champs `input[type=email]` — celui des
+coordonnées de l'ENTREPRISE et celui de la carte Sécurité. Un `querySelector('input[type=email]')`
+attrape le premier, laisse le second vide, et le bouton reste désactivé : le test conclut à un
+bug là où l'application a raison. Cibler par le formulaire conteneur.
+
 #### Langue de l'interface
 
-Sélecteur dans la même carte. Français par défaut, anglais disponible.
+Sélecteur dans la même carte que le nom. Français par défaut, anglais disponible.
 
 - **Préférence PERSONNELLE, pas réglage d'entreprise.** Deux associés partagent la même
   société sans forcément lire la même langue : le choix vit dans un cookie (`xn-langue`), pas
@@ -759,8 +812,12 @@ qu'on ouvre le message dans l'application Gmail, c'est-à-dire le cas courant ic
 1. **Aucun domaine n'est vérifié chez Resend.** L'expéditeur `onboarding@resend.dev` ne livre
    qu'à l'adresse propriétaire du compte Resend. Tout autre destinataire est rejeté.
    Vérifier un domaine, puis remplacer `smtp_admin_email`.
-2. **`site_url` vaut `http://localhost:3000`**, donc les liens envoyés ne fonctionnent que sur
-   cette machine. À changer au déploiement, avec `NEXT_PUBLIC_SITE_URL` et `uri_allow_list`.
+2. ~~**`site_url` vaut `http://localhost:3000`**~~ — **RÉGLÉ.** Relevé le 15 sept. 2026 par
+   l'API de gestion : `site_url` vaut `https://xn-facture.vercel.app`, et `uri_allow_list`
+   couvre `https://xn-facture.vercel.app/**` et `http://localhost:3000/**`. Le paragraphe
+   ci-dessous est conservé pour mémoire ; il ne décrit plus l'état actuel.
+
+   *(Auparavant : les liens envoyés ne fonctionnaient que sur la machine de développement.)*
 
 **Vérifié de bout en bout**, et non supposé : demande depuis `/mot-de-passe-oublie` → journal
 Resend `statut=delivered` vers la boîte réelle, sujet « Réinitialisez votre mot de passe —
@@ -908,7 +965,8 @@ components/
                record-payment-dialog, download-invoice-button
   quotes/      quote-form, quote-list, quote-detail, quote-editor, quote-quick-actions
   clients/     client-list
-  settings/    settings-form, logo-uploader, personal-form (nom + langue)
+  settings/    settings-form, logo-uploader, personal-form (nom + langue),
+               security-form (adresse email + mot de passe)
   subscription/ plan-limit (fenêtre de plafond), plan-chooser (choix + commande),
                 order-summary (référence et instructions de règlement)
   documents/   status-menu, document-created-dialog, use-creation-notice   (facture + devis)
@@ -931,6 +989,7 @@ lib/
   plans.ts          Les trois formules et leurs prix — SOURCE UNIQUE du montant
   billing-config.ts Coordonnées d'encaissement et secret du webhook (ENVIRONNEMENT)
   site-origin.ts    Origine publique du site — source UNIQUE (emails, retours, webhook)
+  auth-errors.ts    translateAuthError — PAS 'use server' (fonction synchrone partagée)
   payments/tara.ts  Tara/Dikalo : création du lien, filtrage des URL par schéma
   period.ts         Préréglages de période du tableau de bord (bornes en Date.UTC)
   calendar.ts       Grille du DatePicker (lundi en tête)
