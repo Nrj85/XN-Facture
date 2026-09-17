@@ -135,7 +135,41 @@ Deux cookies seulement, tous deux strictement nécessaires : la session, et le c
 **Question :** cette absence complète de traceurs nous dispense-t-elle de tout bandeau de
 consentement ?
 
-### 2.8 Propriété des contenus
+### 2.8 Prospection commerciale à partir du fichier des inscrits
+
+L'espace d'administration comporte depuis le 17 septembre 2026 un bouton qui exporte, au format
+CSV, **la liste des entreprises inscrites avec l'adresse email de leur titulaire**, à des fins
+de campagnes marketing de l'éditeur.
+
+Précisions utiles à l'analyse :
+
+- l'export est réservé aux administrateurs de plateforme, et le contrôle est appliqué **par la
+  base de données**, pas seulement par l'interface ;
+- les destinataires sont **nos propres utilisateurs inscrits**, pas des tiers ni une liste
+  achetée ;
+- les campagnes porteraient sur **notre propre service** (nouveautés, formules), non sur des
+  offres de partenaires ;
+- **aucune donnée de facturation ne figure dans l'export** — ni clients, ni montants.
+
+⚠️ **La politique de confidentialité ne mentionne PAS la prospection commerciale parmi les
+finalités.** Elle énumère aujourd'hui le fonctionnement du service et l'envoi d'emails
+techniques. C'est une lacune à combler, et nous ne l'avons pas comblée d'office pour ne pas
+préjuger de votre réponse.
+
+**Questions :**
+
+- Faut-il **ajouter cette finalité** à la politique de confidentialité, et sous quelle
+  formulation ?
+- Un **consentement préalable** est-il exigé pour écrire à un utilisateur déjà inscrit au
+  sujet du service auquel il a souscrit, ou la relation contractuelle suffit-elle ?
+- Tout message de prospection doit-il comporter un **lien de désabonnement**, et devons-nous
+  tenir un registre des refus ? *(Aucun mécanisme de désabonnement n'existe aujourd'hui — c'est
+  le point que nous considérons comme le plus probable à devoir construire.)*
+- La distinction entre **email technique** (confirmation d'adresse, avis d'échéance
+  d'abonnement) et **email commercial** emporte-t-elle des obligations différentes ? Les avis
+  d'échéance, qui sont liés à l'exécution du contrat, relèvent selon nous du premier cas.
+
+### 2.9 Propriété des contenus
 
 Notre position, écrite noir sur blanc : les données saisies par l'utilisateur lui appartiennent,
 nous n'en acquérons aucun droit, nous ne les revendons pas et ne les communiquons à aucun tiers

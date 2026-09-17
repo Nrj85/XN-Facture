@@ -14,6 +14,7 @@ import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Input } from '@/components/ui/input';
 import { StatCard } from '@/components/dashboard/stat-card';
+import { ExportCompaniesButton } from '@/components/admin/export-companies-button';
 import { formatAmount, formatMoney } from '@/lib/money';
 import type {
   AdminActivityRow,
@@ -209,6 +210,14 @@ export function AdminView({
               placeholder="Nom, raison sociale ou ville"
             />
           </label>
+          {/*
+            ⚠️ L'export porte TOUTES les entreprises, pas le résultat du filtre
+            ci-contre. Un bouton placé près d'une recherche laisse croire qu'il
+            en dépend : son libellé et la phrase sous le tableau le disent donc
+            explicitement. Exporter le filtre serait défendable, mais il
+            faudrait alors le nommer autrement.
+          */}
+          <ExportCompaniesButton />
         </CardHeader>
 
         {filtrees.length === 0 ? (

@@ -753,6 +753,64 @@ client, une facture et trois lignes ; il ne voit pas la liste des administrateur
 écritures croisées touchent zéro ligne ; l'écriture dans le journal et l'auto-promotion sont
 refusées en 403.
 
+#### Export CSV des entreprises (17 sept. 2026)
+
+Bouton « Exporter tout (CSV) » dans l'en-tête de la carte Entreprises, pour les campagnes de
+prospection. Route `GET /api/admin/entreprises/export`, composition dans
+`lib/admin/company-export.ts`.
+
+⚠️ **C'est une LECTURE — l'espace reste en lecture seule.** Le bouton n'écrit rien, et la base
+ne le lui permettrait pas.
+
+⚠️ **La route REFUSE, elle ne redirige jamais** (401 sans session, 403 sans droit
+d'administrateur, en JSON). Une redirection 307 serait suivie par `fetch`, et le navigateur
+enregistrerait la page de connexion sous le nom `xn-facture-entreprises-….csv`. Même règle que
+les routes PDF.
+
+⚠️ **Le bouton passe par `fetch`, pas par une `<a download>`.** Une ancre qui reçoit un 403
+enregistre le JSON d'erreur dans un fichier `.csv` : l'administrateur croit tenir son export et
+ne découvre la surprise que dans son tableur.
+
+⚠️ **DEUX adresses email cohabitent, et il ne faut pas les confondre.** `companies.email` est
+l'adresse de facturation saisie dans les paramètres, imprimée sur les factures — **souvent
+vide**. L'adresse du **titulaire** est celle de son compte : elle existe toujours. Pour une
+campagne, seule la seconde est exploitable. Les deux figurent dans le fichier, sous des
+intitulés distincts.
+
+⚠️ **INJECTION CSV — `neutraliser()` n'est pas une coquetterie.** Les noms d'entreprise sont
+saisis par les utilisateurs, et Excel évalue toute cellule commençant par `=`, `+`, `-` ou
+`@`. Quelqu'un qui nomme son entreprise `=HYPERLINK(...)` attaquerait la machine de celui qui
+ouvre l'export — la nôtre. Le préfixe apostrophe force la lecture en texte. **Vérifié avec une
+entreprise délibérément nommée `=SUM(1+1) Piegee`.** Effet de bord assumé : un numéro de
+téléphone en `+237…` reçoit aussi l'apostrophe, que le tableur masque.
+
+⚠️ **Trois détails décident si le fichier s'ouvre proprement dans Excel** : séparateur
+**point-virgule** (Excel français empile tout en une colonne avec la virgule), **marque d'ordre
+d'octets** en tête (sans elle « Échéance » et « Société » sont illisibles), et fins de ligne
+**CRLF**.
+
+⚠️ **Piège de test :** `response.text()` **supprime la marque d'ordre d'octets** en décodant.
+Un test qui vérifie `charCodeAt(0) === 0xFEFF` échoue sur un fichier parfaitement correct.
+Contrôler les octets par `arrayBuffer()` — `EF BB BF`.
+
+⚠️ **Le bouton réemploie `usePdfDownload`**, qui n'a rien de spécifique au PDF. **Dette
+assumée : son nom ment.** Le renommer toucherait `download-pdf-button` et
+`invoice-row-actions` ; en écrire un second aurait dupliqué le garde-fou du corps vide et la
+gestion d'erreur, et un doublon est un bug.
+
+⚠️ **L'export porte TOUTES les entreprises, pas le filtre de recherche voisin.** D'où le mot
+« tout » dans le libellé : sans lui, la proximité des deux contrôles induit en erreur.
+
+⚠️ **Conséquence juridique, non tranchée.** La politique de confidentialité **ne mentionne pas
+la prospection commerciale** parmi les finalités, et **aucun mécanisme de désabonnement
+n'existe**. Question portée au juriste, section 2.8 de
+`docs/mentions-legales-questions-juriste.md`. À régler avant la première campagne.
+
+**Vérifié de bout en bout** : sans session → **401 JSON**, aucune page HTML · utilisateur
+ordinaire → **403, aucune adresse email dans la réponse** · administrateur → 200, `text/csv`,
+nom de fichier daté, 14 colonnes, les deux emails distingués, ville et formule présentes ·
+injection neutralisée · `EF BB BF` en tête et CRLF en fin, sur les octets bruts.
+
 **Ajout d'un administrateur : par la console SQL uniquement.** `platform_admins` n'a aucune
 politique d'écriture — ce n'est pas un oubli, c'est la protection principale.
 
@@ -1205,6 +1263,7 @@ app/
   (app)/abonnement/             Formule de l'entreprise (lecture seule, sans caisse)
   (app)/layout.tsx              requireSession + CompanyProvider + AppShell
   (app)/dashboard|factures|devis|clients|parametres|paiements|rapports|aide/
+  api/admin/entreprises/export  GET, CSV des entreprises (admins, refuse en JSON)
   api/auth/confirmation         GET, jeton d'email → session (hors middleware)
   api/factures/[id]/pdf         GET, lit la base (runtime Node)
   api/devis/[id]/pdf            GET, idem
@@ -1212,6 +1271,7 @@ app/
   globals.css                   Classes .type-display .label-caps .tabular, reduced-motion
 
 components/
+  admin/       admin-view, export-companies-button (export CSV des entreprises)
   ui/          Primitives : button, icon-button, card, input, field, switch, combobox,
                date-picker, dialog, popover, action-menu, status-badge, empty-state
   layout/      app-shell, sidebar, topbar, logo, page-placeholder
@@ -1249,6 +1309,7 @@ lib/
                     queries (lectures serveur, `getSession` et `requireSession`)
   actions/          auth, account (nom affiché), company, clients, invoices, quotes
                     · locale · result, schemas, context
+  admin/company-export.ts  Lignes et CSV de l export des entreprises (anti-injection)
   plans.ts          Les trois formules et leurs prix — SOURCE UNIQUE du montant
   billing-config.ts Coordonnées d'encaissement et secret du webhook (ENVIRONNEMENT)
   site-origin.ts    Origine publique du site — source UNIQUE (emails, retours, webhook)
