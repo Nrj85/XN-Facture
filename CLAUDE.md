@@ -949,6 +949,19 @@ injection neutralisée · `EF BB BF` en tête et CRLF en fin, sur les octets bru
 **Ajout d'un administrateur : par la console SQL uniquement.** `platform_admins` n'a aucune
 politique d'écriture — ce n'est pas un oubli, c'est la protection principale.
 
+⚠️ **UN SCRIPT DE TEST INTERROMPU LAISSE UN ADMINISTRATEUR DERRIÈRE LUI.** Constaté le
+17 sept. 2026 : un essai qui promeut un compte jetable en administrateur puis échoue avant son
+ménage laisse la ligne `platform_admins` en place. Le compte survit avec un **mot de passe
+connu** et la lecture de **toutes** les entreprises — ce n'est plus du résidu, c'est un accès.
+**Après tout ménage, relire `platform_admins` et vérifier qu'il ne contient que de vraies
+adresses**, avant même de compter les entreprises :
+
+```sql
+select u.email from public.platform_admins a join auth.users u on u.id = a.user_id;
+```
+
+Un test qui accorde ce droit devrait le retirer dans un `finally`, pas à la dernière ligne.
+
 ⚠️ **Trois pièges déjà payés :**
 - **`/admin` est dans son propre groupe `(admin)`, pas dans `(app)`.** La coquille
   applicative appelle `requireSession()`, qui renvoie vers `/bienvenue` tout compte sans
