@@ -4,11 +4,13 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { LogOut, Search } from 'lucide-react';
 import { Logo } from '@/components/layout/logo';
+import { AdminBadge, PlanBadge } from '@/components/layout/account-badge';
 import { IconButton } from '@/components/ui/icon-button';
 import { ADMIN_NAV, PRIMARY_NAV, SECONDARY_NAV, type NavItem } from '@/lib/nav';
 import { useCompany } from '@/lib/company-context';
 import { useT } from '@/lib/i18n/context';
 import { signOut } from '@/lib/actions/auth';
+import type { PlanCode } from '@/lib/plans';
 import { cn } from '@/lib/utils';
 
 function isActive(pathname: string, href: string): boolean {
@@ -40,7 +42,16 @@ function NavLink({ item, active, onNavigate }: { item: NavItem; active: boolean;
   );
 }
 
-export function Sidebar({ isAdmin = false, onNavigate }: { isAdmin?: boolean; onNavigate?: () => void }) {
+export function Sidebar({
+  isAdmin = false,
+  plan,
+  onNavigate,
+}: {
+  isAdmin?: boolean;
+  /** Formule EFFECTIVE de l'entreprise, resolue par le serveur. */
+  plan: PlanCode;
+  onNavigate?: () => void;
+}) {
   const pathname = usePathname();
   const router = useRouter();
   const { company, user } = useCompany();
@@ -111,7 +122,7 @@ export function Sidebar({ isAdmin = false, onNavigate }: { isAdmin?: boolean; on
         ))}
       </div>
 
-      <div className="border-t border-line px-4 py-3">
+      <div className="space-y-2 border-t border-line px-4 py-3">
         <div className="flex items-center gap-3">
           {/* `brand` sur `brand-soft` ne donne que 4,11:1 : le texte passe en
               `brand-hover`, conformément au tableau des couleurs. */}
@@ -138,6 +149,26 @@ export function Sidebar({ isAdmin = false, onNavigate }: { isAdmin?: boolean; on
             />
           </form>
         </div>
+
+        {/*
+          ⚠️ **Les badges ont leur PROPRE rangée, et ce n'est pas un choix
+          esthétique.** Posés à côté des noms, ils prenaient la place dans une
+          barre de 248 px : « Josue Rengou » devenait « Josu… » et « Atelier
+          Badge » devenait « At… ». Constaté en capture, pas supposé. Un badge
+          qui rend le nom illisible coûte plus qu'il n'apporte.
+
+          `pl-12` les aligne sous le texte : 36 px d'avatar + 12 px d'écart.
+
+          Le badge d'administrateur suit la PERSONNE, celui de formule suit
+          l'ENTREPRISE — deux attributs distincts, d'où deux badges et non un
+          seul. L'ordre est le même que celui des deux lignes au-dessus.
+        */}
+        {(isAdmin || plan !== 'discovery') && (
+          <div className="flex flex-wrap items-center gap-1.5 pl-12">
+            {isAdmin && <AdminBadge />}
+            <PlanBadge plan={plan} />
+          </div>
+        )}
       </div>
     </div>
   );

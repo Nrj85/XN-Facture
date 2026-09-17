@@ -3,7 +3,9 @@ import { PlanLimitProvider } from '@/components/subscription/plan-limit';
 import { CompanyProvider } from '@/lib/company-context';
 import { LocaleProvider } from '@/lib/i18n/context';
 import { getLocale } from '@/lib/i18n';
-import { requireSession } from '@/lib/db/queries';
+import { requireSession, getSubscription } from '@/lib/db/queries';
+import { effectivePlan } from '@/lib/plans';
+import { today } from '@/lib/today';
 import { isPlatformAdmin } from '@/lib/db/admin-queries';
 
 /**
@@ -28,6 +30,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // politiques RLS. Un seul verdict, pour l'affichage comme pour les données.
   const admin = await isPlatformAdmin();
 
+  // ⚠️ **La formule affichée est la formule EFFECTIVE**, celle que rend
+  // `effectivePlan()` : un abonnement payé mais expiré retombe en Découverte,
+  // exactement comme le fait le déclencheur `invoices_quota` côté base. Passer
+  // `abonnement.plan` brut collerait un badge « Pro » sur un compte dont la
+  // sixième facture du mois serait refusée — la divergence précise contre
+  // laquelle la section « Abonnements » met en garde.
+  const abonnement = await getSubscription(session.companyId);
+  const plan = effectivePlan(abonnement.plan, abonnement.expiresAt, today());
+
   return (
     <LocaleProvider locale={locale}>
       <CompanyProvider
@@ -48,7 +59,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             auraient divergé au premier ajustement de texte.
           */}
           <PlanLimitProvider>
-            <AppShell isAdmin={admin}>{children}</AppShell>
+            <AppShell isAdmin={admin} plan={plan}>{children}</AppShell>
           </PlanLimitProvider>
         </div>
       </CompanyProvider>

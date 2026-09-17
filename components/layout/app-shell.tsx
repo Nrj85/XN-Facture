@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { X } from 'lucide-react';
 import { Sidebar } from '@/components/layout/sidebar';
 import { Topbar } from '@/components/layout/topbar';
+import type { PlanCode } from '@/lib/plans';
 
 /**
  * Coquille applicative : sidebar fixe à partir de `lg`, tiroir coulissant en
@@ -14,10 +15,17 @@ import { Topbar } from '@/components/layout/topbar';
 export function AppShell({
   children,
   isAdmin = false,
+  plan,
 }: {
   children: React.ReactNode;
   /** Résolu côté serveur par la coquille applicative, jamais deviné ici. */
   isAdmin?: boolean;
+  /**
+   * Formule EFFECTIVE de l entreprise — celle que rend effectivePlan(), donc
+   * Découverte si l abonnement est expiré. Résolue côté serveur : la déduire
+   * ici ferait diverger le badge et le plafond appliqué par la base.
+   */
+  plan: PlanCode;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const pathname = usePathname();
@@ -43,7 +51,7 @@ export function AppShell({
   return (
     <div className="min-h-screen lg:grid lg:grid-cols-[248px_minmax(0,1fr)]">
       <aside className="hidden border-r border-line lg:sticky lg:top-0 lg:block lg:h-screen">
-        <Sidebar isAdmin={isAdmin} />
+        <Sidebar isAdmin={isAdmin} plan={plan} />
       </aside>
 
       {menuOpen && (
@@ -63,7 +71,7 @@ export function AppShell({
               <X className="h-4 w-4" aria-hidden />
               <span className="sr-only">Fermer le menu</span>
             </button>
-            <Sidebar isAdmin={isAdmin} onNavigate={() => setMenuOpen(false)} />
+            <Sidebar isAdmin={isAdmin} plan={plan} onNavigate={() => setMenuOpen(false)} />
           </div>
         </div>
       )}

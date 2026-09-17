@@ -604,6 +604,48 @@ honnête sinon, annulation qui rend le bouton « Choisir ».
 - ~~Aucune relance avant échéance~~ — **FAIT le 17 sept. 2026**, migration 0011. Voir
   « Relance avant échéance » ci-dessous.
 
+#### Badges de la barre latérale — `layout/account-badge.tsx` (17 sept. 2026)
+
+Deux badges au pied de la barre latérale : **Admin** et la **formule payante**.
+
+⚠️ **DEUX badges, parce que ce sont DEUX attributs distincts.** La formule appartient à
+l'**ENTREPRISE** — elle s'applique à toute l'équipe, et deux associés ne peuvent pas être l'un
+en Pro et l'autre en Découverte. Le rôle d'administrateur appartient à la **PERSONNE**
+(`platform_admins` est indexée par `user_id`). Les fondre en un seul aurait laissé croire que
+la formule se règle par utilisateur.
+
+⚠️ **Le badge d'administrateur ne vaut PAS un badge de formule, et ne le remplace jamais.**
+Être administrateur ne lève aucun plafond : `invoices_quota` s'applique à l'entreprise sans
+exception pour qui que ce soit. Afficher « Pro » à un administrateur dont l'entreprise est en
+Découverte serait un mensonge que la base démentirait à la sixième facture du mois.
+
+⚠️ **Le plan affiché est le plan EFFECTIF**, résolu par `effectivePlan()` dans
+`app/(app)/layout.tsx`. Passer `subscriptions.plan` brut mettrait un badge « Pro » sur un
+abonnement expiré — la divergence exacte contre laquelle cette section met en garde.
+**Vérifié : à J+1 après l'échéance, le badge de formule disparaît et seul Admin demeure.**
+
+⚠️ **Rien n'est affiché en Découverte** : c'est l'état par défaut, un badge n'y apprendrait
+rien et occuperait une place rare.
+
+⚠️ **PIÈGE DE MISE EN PAGE DÉJÀ PAYÉ — les badges ont leur PROPRE rangée.** Posés à côté des
+noms, ils prenaient la place dans une barre de 248 px : « Josue Rengou » devenait « Josu… » et
+« Atelier Badge » devenait « At… ». **Constaté en capture d'écran, pas supposé** — et c'est
+précisément ce que les trois commandes de vérification ne montrent jamais. Un badge qui rend le
+nom illisible coûte plus qu'il n'apporte. `pl-12` aligne la rangée sous le texte (36 px
+d'avatar + 12 px d'écart).
+
+**Vérifié à l'écran (14 contrôles)** : Pro seul · le libellé suit la formule (Entreprise) ·
+Admin apparaît **automatiquement** sans remplacer celui de la formule · **abonnement expiré →
+plus de badge de formule, Admin demeure** · Découverte → aucun badge · dans le **tiroir mobile
+à 500 px** : tiroir réellement ouvert, deux badges visibles, **ni le nom ni l'entreprise
+tronqués** avec « Atelier Nkolo Mobile ».
+
+⚠️ **Piège de test associé :** interroger `querySelectorAll` depuis le document entier trouve
+la barre latérale **masquée** (`hidden lg:block`) et fait croire que le tiroir est correct. Il
+faut filtrer sur la visibilité réelle (`getBoundingClientRect`), et vérifier que le tiroir s'est
+bien ouvert avant de conclure. Le libellé du bouton du tiroir est en `sr-only`, pas en
+`aria-label`.
+
 #### Ne pas renouveler — migration 0013 (17 sept. 2026)
 
 ⚠️ **LE MOT « RÉSILIER » EST ÉVITÉ PARTOUT, et ce n'est pas de la coquetterie.**
@@ -1395,7 +1437,8 @@ components/
   admin/       admin-view, export-companies-button (export CSV des entreprises)
   ui/          Primitives : button, icon-button, card, input, field, switch, combobox,
                date-picker, dialog, popover, action-menu, status-badge, empty-state
-  layout/      app-shell, sidebar, topbar, logo, page-placeholder
+  layout/      app-shell, sidebar, topbar, logo, page-placeholder,
+               account-badge (Admin + formule payante)
   marketing/   site-header, site-footer (+ FinalCta), hero, app-preview, reveal,
                section, info-card, cta-button, pricing, testimonials, legal-page
                — chacun avec son .module.css, hors Tailwind
