@@ -67,11 +67,9 @@ factures, devis, clients, puis l'entreprise, puis le compte. `invoices.client_id
 `Prefer: return=representation` et compter les lignes rendues, sinon on croit avoir effacé ce
 qui est toujours là.
 
-⚠️ **Quatre entreprises orphelines subsistent**, résidus de scripts de test dont le compte a été
-supprimé sans l'entreprise : « Entreprise Essai mtsfvjam », « Entreprise Abo mu1hntdr »,
-« Essai Sécurité », « Essai Adresse ». Aucun membre, aucune donnée, invisibles pour tout
-utilisateur — mais elles encombrent la vue d'administration. **À supprimer** ; la tentative du
-17 sept. a été refusée par la protection de l'environnement d'exécution.
+⚠️ **Les entreprises orphelines ont été supprimées elles aussi** (17 sept. 2026) — quatre
+résidus de scripts de test dont le compte avait été effacé sans l'entreprise. **État vérifié
+après ménage : 4 entreprises, 4 appartenances, 4 comptes, aucune orpheline.**
 
 Phases restantes : **5** envoi par email, lien public, avoirs, relances · **6** page d'accueil
 publique · **7** tests de bout en bout, sécurité, déploiement Vercel.
@@ -827,6 +825,29 @@ politique d'écriture — ce n'est pas un oubli, c'est la protection principale.
   combinée.
 - **Le journal n'a pas de clé étrangère sur `company_id`.** Délibéré : une contrainte ferait
   disparaître l'historique en même temps que ce qu'il journalise.
+
+  ⚠️ **Conséquence à connaître : supprimer une entreprise laisse ses lignes de journal
+  derrière elle.** Le 17 sept. 2026, après le retrait des comptes de démonstration, le journal
+  comptait **154 lignes dont 143 renvoyaient à des entreprises disparues** — l'écran, qui n'en
+  montre que 60, ne donnait plus à voir qu'un historique fantôme. L'affichage était pourtant
+  honnête (`entreprise supprimée` au lieu d'un nom) : le défaut était le **volume**, pas le
+  libellé. Après purge : 7 lignes, toutes réelles.
+
+  **Purge des lignes devenues orphelines — par la console SQL**, comme l'ajout d'un
+  administrateur :
+
+  ```sql
+  delete from public.activity_log a
+  where a.company_id is not null
+    and not exists (select 1 from public.companies c where c.id = a.company_id);
+  ```
+
+  ⚠️ **PAS de bouton de purge dans l'interface, et c'est délibéré.** L'espace d'administration
+  est en lecture seule par décision explicite de l'utilisateur (§8) : lui accorder une
+  politique de suppression sur `activity_log` rendrait le journal effaçable depuis l'écran par
+  celui-là même qu'il trace, ce qui lui ôterait sa valeur. La demande a été faite le
+  17 sept. 2026 et cette réponse lui a été exposée ; **ne pas ajouter ce bouton sans le lui
+  redemander.**
 
 Les totaux de la page sont calculés **en TypeScript** par `computeTotals`, jamais en SQL —
 même règle qu'ailleurs. ⚠️ La lecture charge toutes les factures de toutes les entreprises
