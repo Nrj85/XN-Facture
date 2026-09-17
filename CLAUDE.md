@@ -549,6 +549,45 @@ fait donc *augmenter* `scrollY`. Mesurer la position de la carte **dans l'écran
 (`getBoundingClientRect().top`), pas celle du document. Mon assertion inverse a crié au bug là
 où le rendu était juste.
 
+#### L'écran de commande doit proposer une ACTION (17 sept. 2026)
+
+Deuxième remontée de l'utilisateur sur le même écran : « le numéro apparaît bien mais aucun
+bouton ne redirige vers un moyen de paiement, c'est statique et il n'y a pas d'action à
+mener ».
+
+⚠️ **Un bouton « Payer » NE PEUT PAS exister tant qu'aucun lien de paiement n'est branché.**
+Ce serait le contrôle mort par excellence (§6.1). Ce qu'on peut offrir aujourd'hui, et qui
+répond au vrai besoin :
+
+- **Un bouton « Copier » sur la référence et sur chaque numéro.** Le règlement se termine dans
+  une AUTRE application, celle de l'opérateur, où il faut retaper neuf chiffres. Chaque
+  caractère retapé est une occasion de se tromper de destinataire, **et une somme envoyée au
+  mauvais numéro ne se rattrape pas**. Ce n'est donc pas du confort.
+- **Une marche à suivre numérotée en trois temps**, et non un paragraphe : l'écran se lit d'une
+  main pendant qu'on manipule son téléphone de l'autre.
+
+⚠️ **L'échec de copie est DIT, jamais avalé.** L'API du presse-papiers exige un contexte
+sécurisé et peut être refusée : le bouton affiche alors « Copie refusée », et la valeur est
+lue à voix haute pour les lecteurs d'écran — sans quoi la personne reste sans recours.
+
+⚠️ **Le bouton d'annulation est passé de `ghost` à `secondary`.** En `ghost` il n'avait ni
+bordure ni fond : il se lisait comme une phrase, et rien ne disait qu'on pouvait cliquer
+dessus. Il garde `secondary` et non primaire — ce n'est pas l'action qu'on attend de cet
+écran, seulement celle dont il ne faut pas priver — et **pas de ton `danger`** : rien n'est
+détruit, la commande se repasse d'un clic. Un filet l'écarte des instructions, sinon on le
+clique par erreur en suivant la marche à suivre.
+
+⚠️ **PIÈGE DE TEST — `element.click()` ne produit PAS d'activation utilisateur**, et l'API du
+presse-papiers l'exige. Un test qui clique ainsi observe un refus du navigateur et conclut à
+tort que le bouton ne marche pas. Passer par CDP `Input.dispatchMouseEvent`
+(`mousePressed` + `mouseReleased` au centre de l'élément), et accorder
+`clipboardReadWrite` par `Browser.grantPermissions`.
+
+**Vérifié à l'écran** : trois étapes numérotées · trois boutons « Copier » (référence + deux
+canaux) · **la référence et le numéro réellement présents dans le presse-papiers** après un
+vrai clic · le libellé passe à « Copié » puis revient à « Copier » · le bouton d'annulation
+porte une bordure, un fond, 36 px de haut (§6.5) et un filet le sépare.
+
 ⚠️ **Les coordonnées d'encaissement viennent de l'ENVIRONNEMENT** (`lib/billing-config.ts` :
 `XN_MOMO_MTN`, `XN_MOMO_ORANGE`, `XN_PAYMENT_HOLDER`, `XN_BILLING_EMAIL`), **jamais du code**.
 Un numéro vers lequel des gens envoient de l'argent n'a rien à faire dans un dépôt public, et

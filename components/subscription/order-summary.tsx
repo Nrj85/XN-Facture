@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useEffect, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { ExternalLink, Loader2, Smartphone } from 'lucide-react';
+import { Check, Copy, ExternalLink, Loader2, Smartphone, X } from 'lucide-react';
 import { Button, buttonClasses } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { cancelOrderAction } from '@/lib/actions/subscription';
@@ -10,6 +10,66 @@ import { planByCode, priceFor, type BillingPeriod, type PlanCode } from '@/lib/p
 import { formatMoney } from '@/lib/money';
 import type { PaymentChannel } from '@/lib/billing-config';
 import type { PaymentLinks } from '@/lib/payments/tara';
+
+/**
+ * Copie une valeur dans le presse-papiers.
+ *
+ * ⚠️ **C'est la seule action réellement disponible à ce stade, et elle n'est
+ * pas cosmétique.** Le règlement se fait dans une AUTRE application — celle de
+ * l'opérateur mobile — où il faut retaper un numéro de neuf chiffres et une
+ * référence. Chaque caractère retapé est une occasion de se tromper de
+ * destinataire, et une somme envoyée au mauvais numéro ne se rattrape pas.
+ *
+ * ⚠️ **Un bouton « Payer » serait un mensonge tant qu'aucun lien de paiement
+ * n'est branché.** Le §6.1 proscrit les contrôles morts : mieux vaut une
+ * action modeste qui marche qu'un bouton qui prétend débiter.
+ *
+ * L'API du presse-papiers exige un contexte sécurisé et peut être refusée par
+ * le navigateur : l'échec est donc dit à l'écran, jamais avalé.
+ */
+function Copier({ valeur, quoi }: { valeur: string; quoi: string }) {
+  const [etat, setEtat] = useState<'repos' | 'copie' | 'echec'>('repos');
+  const minuteur = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => () => {
+    if (minuteur.current) clearTimeout(minuteur.current);
+  }, []);
+
+  async function copier() {
+    if (minuteur.current) clearTimeout(minuteur.current);
+    try {
+      await navigator.clipboard.writeText(valeur);
+      setEtat('copie');
+    } catch {
+      setEtat('echec');
+    }
+    minuteur.current = setTimeout(() => setEtat('repos'), 2400);
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => void copier()}
+      className="inline-flex shrink-0 items-center gap-1.5 rounded-[10px] border border-line bg-surface px-2.5 py-1.5 text-[12px] font-semibold text-ink-2 transition-[background-color,border-color,color,transform] duration-150 ease-out hover:border-line-strong hover:bg-sand hover:text-ink active:scale-[0.97] active:duration-75 motion-reduce:transition-none motion-reduce:active:scale-100"
+    >
+      {etat === 'copie' ? (
+        <Check className="h-3.5 w-3.5 text-status-paid-dot" strokeWidth={2.6} aria-hidden />
+      ) : (
+        <Copy className="h-3.5 w-3.5" strokeWidth={2.2} aria-hidden />
+      )}
+      {etat === 'copie' ? 'Copié' : etat === 'echec' ? 'Copie refusée' : 'Copier'}
+      {/* Le changement de libellé doit être ANNONCÉ, pas seulement vu. */}
+      <span className="sr-only" aria-live="polite">
+        {etat === 'copie'
+          ? `${quoi} copié dans le presse-papiers`
+          : etat === 'echec'
+            ? `Le navigateur a refusé la copie. ${quoi} : ${valeur}`
+            : ''}
+      </span>
+      <span className="sr-only">{quoi}</span>
+    </button>
+  );
+}
 
 /** Les canaux secondaires, dans l'ordre d'utilité au Cameroun. */
 const AUTRES_CANAUX = [
@@ -90,13 +150,16 @@ export function OrderSummary({
           )}
         </div>
 
-        <div className="rounded-[10px] border border-line bg-sand px-4 py-3">
-          <p className="label-caps">Référence à rappeler</p>
-          {/* Hexadécimale en majuscules : aucun O ni I à confondre avec 0 ou 1
-              quand on la recopie sur un téléphone. */}
-          <p className="tabular mt-1 text-[20px] font-bold tracking-[0.06em] text-ink">
-            {reference}
-          </p>
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-[10px] border border-line bg-sand px-4 py-3">
+          <div className="min-w-0">
+            <p className="label-caps">Référence à rappeler</p>
+            {/* Hexadécimale en majuscules : aucun O ni I à confondre avec 0 ou 1
+                quand on la recopie sur un téléphone. */}
+            <p className="tabular mt-1 text-[20px] font-bold tracking-[0.06em] text-ink">
+              {reference}
+            </p>
+          </div>
+          <Copier valeur={reference} quoi="Référence de commande" />
         </div>
 
         {links ? (
@@ -153,16 +216,50 @@ export function OrderSummary({
           </div>
         ) : channels.length > 0 ? (
           <div className="space-y-3">
-            <p className="text-[13px] text-ink-2">
-              Envoyez {montant !== null ? <strong className="font-semibold text-ink">{formatMoney(montant)}</strong> : 'le montant'}{' '}
-              à l’un de ces numéros, en indiquant la référence ci-dessus :
-            </p>
+            {/*
+              ⚠️ **Une marche à suivre NUMÉROTÉE, pas un paragraphe.** Le
+              règlement se termine dans une autre application : l'écran doit
+              dire quoi faire, dans quel ordre, et se laisser suivre pendant
+              qu'on manipule son téléphone de l'autre main.
+            */}
+            <ol className="space-y-2 text-[13px] text-ink-2">
+              <li className="flex gap-2.5">
+                <span className="tabular grid h-5 w-5 shrink-0 place-items-center rounded-full bg-sand-deep text-[11.5px] font-bold text-ink-2">
+                  1
+                </span>
+                <span>Copiez le numéro ci-dessous, puis ouvrez votre application Mobile Money.</span>
+              </li>
+              <li className="flex gap-2.5">
+                <span className="tabular grid h-5 w-5 shrink-0 place-items-center rounded-full bg-sand-deep text-[11.5px] font-bold text-ink-2">
+                  2
+                </span>
+                <span>
+                  Envoyez{' '}
+                  {montant !== null ? (
+                    <strong className="font-semibold text-ink">{formatMoney(montant)}</strong>
+                  ) : (
+                    'le montant'
+                  )}{' '}
+                  à ce numéro.
+                </span>
+              </li>
+              <li className="flex gap-2.5">
+                <span className="tabular grid h-5 w-5 shrink-0 place-items-center rounded-full bg-sand-deep text-[11.5px] font-bold text-ink-2">
+                  3
+                </span>
+                <span>
+                  Indiquez la référence{' '}
+                  <strong className="tabular font-semibold text-ink">{reference}</strong> en motif
+                  du transfert — c’est elle qui rattache votre paiement à votre compte.
+                </span>
+              </li>
+            </ol>
 
             <ul className="space-y-2">
               {channels.map((canal) => (
                 <li
                   key={canal.code}
-                  className="flex items-center gap-3 rounded-[10px] border border-line bg-surface px-3.5 py-3"
+                  className="flex flex-wrap items-center gap-3 rounded-[10px] border border-line bg-surface px-3.5 py-3"
                 >
                   <span
                     className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-brand-soft text-brand-hover"
@@ -170,13 +267,14 @@ export function OrderSummary({
                   >
                     <Smartphone className="h-4 w-4" />
                   </span>
-                  <span className="min-w-0">
+                  <span className="min-w-0 flex-1">
                     <span className="block text-[12.5px] text-ink-3">{canal.label}</span>
                     <span className="tabular block text-[15px] font-semibold text-ink">
                       {canal.number}
                     </span>
                     <span className="block text-[11.5px] text-ink-3">{canal.holder}</span>
                   </span>
+                  <Copier valeur={canal.number} quoi={`Numéro ${canal.label}`} />
                 </li>
               ))}
             </ul>
@@ -217,10 +315,32 @@ export function OrderSummary({
           </p>
         )}
 
-        <div>
-          <Button variant="ghost" size="sm" onClick={annuler} disabled={pending} className="gap-2">
-            {pending && (
+        {/*
+          ⚠️ **`secondary` et non `ghost`.** En `ghost`, l'annulation n'avait ni
+          bordure ni fond : elle se lisait comme une phrase, et rien ne disait
+          qu'on pouvait cliquer dessus — remonté par l'utilisateur. Elle porte
+          donc désormais une vraie surface de bouton.
+
+          Elle reste `secondary` et non primaire : ce n'est pas l'action qu'on
+          attend de cet écran, seulement celle dont il ne faut pas priver. Et
+          pas de ton `danger` : rien n'est détruit, la commande se repasse d'un
+          clic.
+
+          Un filet la sépare de la marche à suivre : un bouton d'annulation
+          collé aux instructions de paiement se cliquerait par erreur.
+        */}
+        <div className="border-t border-line pt-4">
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={annuler}
+            disabled={pending}
+            className="gap-2"
+          >
+            {pending ? (
               <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden />
+            ) : (
+              <X className="h-4 w-4" strokeWidth={2.2} aria-hidden />
             )}
             Annuler cette commande
           </Button>
