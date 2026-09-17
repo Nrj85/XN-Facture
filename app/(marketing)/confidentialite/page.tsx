@@ -108,7 +108,7 @@ export default function ConfidentialitePage() {
 
       <LegalSection title="5. Où sont vos données, et qui y touche">
         <p>
-          Nous nous appuyons sur trois prestataires techniques, et sur aucun autre :
+          Nous nous appuyons sur quatre prestataires techniques, et sur aucun autre :
         </p>
         <ul>
           <li>
@@ -119,8 +119,15 @@ export default function ConfidentialitePage() {
             <strong>Vercel</strong> — exécution de l’application et distribution des pages.
           </li>
           <li>
-            <strong>Resend</strong> — acheminement des emails d’authentification, uniquement.
-            Aucune donnée de facturation ne lui est transmise.
+            <strong>Resend</strong> — acheminement de nos emails : confirmation d’adresse,
+            réinitialisation de mot de passe, et avis d’échéance d’abonnement. Ces messages lui
+            transmettent votre adresse email et le nom de votre entreprise.{' '}
+            <strong>Aucune donnée de facturation ne lui est transmise</strong> — ni vos clients,
+            ni vos montants, ni vos documents.
+          </li>
+          <li>
+            <strong>LWS</strong> — enregistrement du nom de domaine et gestion de la zone DNS.
+            Aucune donnée personnelle ne lui est confiée.
           </li>
         </ul>
         <p>

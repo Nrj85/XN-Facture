@@ -50,7 +50,7 @@ export function LegalPage({
         <div className={styles.contact}>
           <strong>Une question sur ce document ?</strong>
           <br />
-          Écrivez à <a href="mailto:contact@xn-facture.cm">contact@xn-facture.cm</a>. Nous
+          Écrivez à <a href="mailto:contact@xn-facture.com">contact@xn-facture.com</a>. Nous
           répondons sous cinq jours ouvrés.
         </div>
       </div>

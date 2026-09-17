@@ -47,13 +47,31 @@ migrations et le seed y sont appliqués. Ce qui a été **réellement vérifié*
 | Chiffres du tableau de bord | 25 000 166 / 11 211 550 / 13 788 616, tranches d'ancienneté = reste à encaisser |
 | Contrôle chiffré de référence, du formulaire au PDF | 2 110 000 · 406 175 · 2 516 175 |
 
-Deux comptes de démonstration existent, créés par l'API d'administration (donc déjà confirmés,
-sans passer par l'email) : `atelier@example.com`, rattaché à Atelier Nkolo, et
-`concurrent@example.com`, sans entreprise — il sert à rejouer les tests de RLS.
+⚠️ **LES COMPTES DE DÉMONSTRATION N'EXISTENT PLUS — supprimés le 17 sept. 2026.**
+`atelier@example.com` (Atelier Nkolo), `concurrent@example.com` et `verif@example.com` ont été
+effacés avec leurs entreprises et toutes leurs données, avant l'ouverture au public. Il ne
+reste que des comptes réels.
 
-> **Les mots de passe ne figurent pas ici : ce dépôt est public.** Ils ont été transmis
-> directement à l'utilisateur ; en cas de perte, les réinitialiser depuis le tableau de bord
-> Supabase (Authentication > Users). **Supprimer ces deux comptes avant toute mise en ligne.**
+**Conséquence pratique, à connaître avant d'écrire un test :** les chiffres du tableau de bord
+cités plus haut (25 000 166 / 11 211 550 / 13 788 616) venaient d'Atelier Nkolo. **Ils ne sont
+plus reproductibles en l'état** — `supabase/seed.sql` recrée le jeu de démonstration, mais il
+faut le rejouer, et lui rattacher un compte.
+
+⚠️ **Supprimer le compte d'authentification NE SUFFIT PAS.** `company_members.user_id` est en
+`on delete cascade`, mais `companies` ne l'est pas : l'entreprise survit, sans aucun membre,
+invisible sous RLS et pourtant bien présente. Descendre dans l'ordre des dépendances —
+factures, devis, clients, puis l'entreprise, puis le compte. `invoices.client_id` étant en
+`on delete restrict`, supprimer l'entreprise d'un bloc peut faire échouer la cascade.
+
+⚠️ **PostgREST renvoie 204 même quand rien n'a été supprimé.** Exiger
+`Prefer: return=representation` et compter les lignes rendues, sinon on croit avoir effacé ce
+qui est toujours là.
+
+⚠️ **Quatre entreprises orphelines subsistent**, résidus de scripts de test dont le compte a été
+supprimé sans l'entreprise : « Entreprise Essai mtsfvjam », « Entreprise Abo mu1hntdr »,
+« Essai Sécurité », « Essai Adresse ». Aucun membre, aucune donnée, invisibles pour tout
+utilisateur — mais elles encombrent la vue d'administration. **À supprimer** ; la tentative du
+17 sept. a été refusée par la protection de l'environnement d'exécution.
 
 Phases restantes : **5** envoi par email, lien public, avoirs, relances · **6** page d'accueil
 publique · **7** tests de bout en bout, sécurité, déploiement Vercel.
@@ -585,8 +603,76 @@ honnête sinon, annulation qui rend le bouton « Choisir ».
 - **`maxMembers` n'est pas appliqué.** Rien n'empêche une sixième personne de rejoindre une
   entreprise. À faire avant de vendre la formule Entreprise sur cet argument.
 - **Aucun débit automatique.** Pas d'agrégateur, pas de webhook : l'activation est manuelle.
-- **Aucune relance avant échéance**, alors que le renouvellement est manuel — c'est ce qui
-  fera perdre des abonnés en silence. Resend est déjà branché.
+- ~~Aucune relance avant échéance~~ — **FAIT le 17 sept. 2026**, migration 0011. Voir
+  « Relance avant échéance » ci-dessous.
+
+#### Relance avant échéance — migration 0011 (17 sept. 2026)
+
+Le mobile money ne sait pas prélever : chaque renouvellement est un paiement **manuel**, que
+rien ne déclenche. Sans relance, un abonné perdait sa formule un matin sans avoir rien décidé.
+**Trois messages** partent désormais : **J-7**, **J-1**, et **J-0**.
+
+⚠️ **TOUT VIT DANS LA BASE, et c'est la conséquence directe d'une règle du projet.** Un
+traitement périodique n'a **pas de session** et doit pourtant lire les abonnements de *toutes*
+les entreprises. Le faire depuis l'application imposerait `SUPABASE_SERVICE_ROLE_KEY` sur
+Vercel — ce que « Déploiement » interdit. Donc : **`pg_cron`** déclenche depuis Postgres,
+**`pg_net`** appelle Resend, et la clé d'API dort dans **`vault`**, chiffrée. Aucun secret ne
+quitte la base, et Vercel garde ses trois seules variables.
+
+⚠️ **LA CLÉ RESEND N'EST PAS DANS LA MIGRATION**, et ne doit jamais y être — ce dépôt est
+public. Elle est déposée à part :
+
+```sql
+select vault.create_secret('<la clé>', 'resend_api_key', 'Clé d''API Resend — relances');
+```
+
+Sans elle, `send_expiry_reminders()` **n'envoie rien, ne marque rien**, et le signale en
+`warning`. Elle ne tombe pas : un déploiement sans coffre ne casse pas la base.
+
+⚠️ **L'idempotence tient sur un index unique `(company_id, kind, expires_at)`**, pas sur du
+code. La tâche tourne tous les jours et rien n'empêche qu'elle tourne deux fois. **On RÉSERVE
+la ligne avant d'envoyer** : l'insertion sert de verrou, donc deux exécutions simultanées ne
+peuvent pas produire deux messages. L'ordre inverse — envoyer puis marquer — enverrait deux
+fois au moindre incident entre les deux.
+
+⚠️ **`expires_at` fait partie de la clé**, et c'est ce qui rend le renouvellement gratuit à
+gérer : dès que l'échéance change, la nouvelle période porte ses propres relances. Rien à
+purger, aucune tâche de nettoyage.
+
+⚠️ **Aucun PRIX dans le SQL.** Le message nomme la formule mais ne chiffre rien : le montant
+vit dans `lib/plans.ts`, source unique. L'inscrire aussi en base en ferait une seconde vérité,
+et une relance annoncerait un jour un tarif que la caisse ne pratique plus. Le message renvoie
+vers `/abonnement`, où le prix est celui qui sera réellement demandé.
+
+⚠️ **Le message J-0 doit RASSURER.** La règle du projet est de redescendre en Découverte,
+jamais de fermer — les factures d'un entrepreneur sont sa comptabilité. Le texte dit
+explicitement que rien n'est perdu, que tout reste consultable et exportable, et que seule
+l'émission redevient plafonnée. Un message alarmant ferait croire à une perte de données qui
+n'a pas lieu.
+
+⚠️ **La date est calculée en `Africa/Douala`**, comme `lib/today.ts`. En UTC, la relance
+« demain » serait partie le jour même pour qui vit à Douala.
+
+⚠️ **`pg_net` est ASYNCHRONE** : il rend un identifiant, la réponse arrive plus tard dans
+`net._http_response`. La fonction ne peut donc pas savoir si l'envoi a abouti. D'où la vue
+`subscription_reminders_status`, qui rapproche les deux — sans elle, un échec d'acheminement
+serait invisible.
+
+⚠️ **`subscription_reminders` n'a AUCUNE politique d'écriture**, comme partout ici. Lecture
+réservée aux administrateurs de plateforme. Une politique d'insertion permettrait à un client
+de se déclarer « déjà relancé » et de supprimer ses propres rappels.
+
+**Ne déclenchent PAS de relance**, et c'est vérifié : une formule Découverte · un abonnement
+sans échéance · une échéance à J-3 ou tout autre jalon · un abonnement **déjà expiré** depuis
+plusieurs jours — relancer au bout de cinq jours ne serait plus une relance, ce serait du
+harcèlement.
+
+**Vérifié contre la base réelle, 15 contrôles** : une relance à J-7 · **aucun doublon au
+second passage** · J-1 et J-0 distinctes · les quatre cas qui ne doivent rien déclencher ·
+retour à la même échéance sans nouveau message · **les trois emails réellement livrés**, sujets
+français portant le nom de la formule · **la base constate un HTTP 200 pour chacun** via la vue
+· tâche `relances-abonnement` planifiée à `0 7 * * *` et active · relances effacées en cascade
+avec l'entreprise.
 
 #### Tarification annuelle — décidée le 14 sept. 2026
 
@@ -694,14 +780,33 @@ Trois pages statiques (420 o chacune), bâties sur un gabarit unique
 **Elles sont dans les `PUBLIC_PATHS`** — des mentions légales derrière une authentification
 n'auraient aucun sens.
 
-⚠️ **Trois réserves assumées, à lever avant l'ouverture :**
+**Mentions légales réécrites le 17 sept. 2026**, en vue d'une relecture par un juriste :
+identification de l'éditeur rassemblée dans **un seul tableau** (dix champs, donc un seul
+endroit à remplir), liste **complète** des quatre sous-traitants avec leur rôle et leur
+localisation, propriété des contenus, cookies, disponibilité, droit applicable, signalement des
+failles. La note à emporter chez le juriste est dans
+`docs/mentions-legales-questions-juriste.md` — elle ne doit **pas** figurer sur la page
+publique, elle s'adresse au relecteur.
+
+⚠️ **`contact@xn-facture.cm` — mauvais domaine, corrigé en `.com`.** L'adresse était fausse aux
+trois endroits où elle apparaissait, dont le pied de page commun aux trois documents. **La boîte
+`contact@xn-facture.com` reste à créer et à relever** : une adresse de contact citée dans des
+mentions légales et qui ne répond pas est pire que pas d'adresse du tout.
+
+⚠️ **Réserves assumées, à lever avant l'ouverture :**
 - Chaque page porte un encart « document de travail, non validé juridiquement ». Il reste tant
   qu'un juriste n'a pas relu les textes.
-- Les champs d'identification de l'éditeur des mentions légales sont des **espaces réservés
-  visibles** (`[à compléter]`). Un produit qui impose le NIU et le RCCM sur chaque facture ne
-  peut pas en inventer pour lui-même.
-- Le contenu décrit l'infrastructure **réelle** (Supabase à Dublin, Vercel, Resend, isolation
-  par RLS). Décrire un traitement qui n'existe pas serait pire que de ne rien écrire.
+- Les champs d'identification de l'éditeur sont des **espaces réservés visibles**
+  (`[à compléter]`). Un produit qui impose le NIU et le RCCM sur chaque facture ne peut pas en
+  inventer pour lui-même — **ne jamais les remplir d'office.**
+- **Les CGU ne disent RIEN de l'abonnement** — ni prix, ni paiement, ni durée, ni
+  renouvellement, ni résiliation. Elles datent de l'époque où le service était gratuit. Le
+  chapitre est à écrire ; la note pour le juriste le signale en tête de sa section 2.5.
+- Le contenu décrit l'infrastructure **réelle** (Supabase en Irlande, Vercel, Resend, LWS,
+  isolation par RLS). Décrire un traitement qui n'existe pas serait pire que de ne rien écrire.
+  ⚠️ **Conséquence : toute évolution d'infrastructure oblige à relire ces pages.** La mise en
+  service des relances d'échéance a ainsi rendu fausse la phrase « Resend — emails
+  d'authentification, **uniquement** » de la politique de confidentialité.
 
 ### PDF
 Génération serveur — `GET /api/factures/[id]/pdf` et `GET /api/devis/[id]/pdf` — avec logo,
@@ -1081,6 +1186,12 @@ supabase/
   migrations/0008_quota_hint.sql    hint = 'plan-limit' : refus reconnaissable par le code
   migrations/0009_commandes.sql     subscription_orders + start/cancel_subscription_order
   migrations/0010_liens_paiement.sql provider + payment_links, attach_payment_links
+  migrations/0011_relances_echeance.sql subscription_reminders, send_expiry_reminders,
+                                pg_cron + pg_net + vault — la clé Resend N'Y EST PAS
+
+docs/
+  mentions-legales-questions-juriste.md  Note de relecture juridique (à emporter chez
+                                le juriste) — lacunes connues et points à trancher
   seed.sql                      Jeu de démonstration, rejouable
 
 app/
