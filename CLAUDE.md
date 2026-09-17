@@ -63,24 +63,30 @@ publique · **7** tests de bout en bout, sécurité, déploiement Vercel.
 - ~~Aucun SMTP propre~~ — **réglé le 4 sept. 2026 : Resend est branché**, voir « Envoi des
   emails » en section 2. `mailer_autoconfirm` reste à `false`, ce qui est le bon réglage
   maintenant que les emails partent réellement.
-- ⚠️ **Aucun domaine n'est vérifié chez Resend**, et c'est plus grave qu'il n'y paraît.
-  L'expéditeur d'essai `onboarding@resend.dev` ne délivre qu'à l'adresse propriétaire du
-  compte Resend. Tant que `mailer_autoconfirm` valait `false`, Supabase créait le compte,
-  échouait à envoyer l'email de confirmation, et renvoyait un **500** : l'inscription était
-  **impossible pour tout le monde**, avec à l'écran « La demande n'a pas abouti. Vérifiez vos
-  informations » — un message qui accusait la saisie de l'utilisateur.
+- ~~Aucun domaine vérifié chez Resend~~ — **RÉGLÉ le 17 sept. 2026.** `xn-facture.com` est
+  `verified`, l'expéditeur est `no-reply@xn-facture.com`, et **`mailer_autoconfirm` est
+  repassé à `false`** : les adresses sont de nouveau réellement vérifiées à l'inscription.
+  Le contournement du 8 sept. est levé. Détail en « Envoi des emails », section 2.
 
-  Erreur exacte, obtenue en appelant `/auth/v1/signup` en direct :
+  Le paragraphe qui suit est conservé **pour mémoire** : il décrit la panne guérie, et le
+  symptôme à reconnaître si un jour l'expédition retombe.
 
-  ```
-  500  unexpected_failure  Error sending confirmation email
-  ```
+  > L'expéditeur d'essai `onboarding@resend.dev` ne délivre qu'à l'adresse propriétaire du
+  > compte Resend. Tant que `mailer_autoconfirm` valait `false` **sans domaine vérifié**,
+  > Supabase créait le compte, échouait à envoyer l'email de confirmation, et renvoyait un
+  > **500** : l'inscription était **impossible pour tout le monde**, avec à l'écran « La
+  > demande n'a pas abouti. Vérifiez vos informations » — un message qui accusait la saisie
+  > de l'utilisateur. Erreur exacte, en appelant `/auth/v1/signup` en direct :
+  >
+  > ```
+  > 500  unexpected_failure  Error sending confirmation email
+  > ```
+  >
+  > Contournement alors employé : `mailer_autoconfirm = true`. **Ne plus y revenir sans
+  > nécessité** — il désactive la vérification des adresses pour tout le monde.
 
-  **Contournement en place (8 sept. 2026) : `mailer_autoconfirm = true`.** L'inscription
-  fonctionne, mais les adresses ne sont plus vérifiées. **À remettre à `false` le jour où un
-  domaine est vérifié chez Resend** — c'est le seul vrai correctif, et il tient en trois
-  enregistrements DNS. `translateAuthError` traduit désormais ce cas en clair, pour qu'un
-  échec d'envoi ne se lise plus comme une faute de frappe.
+  `translateAuthError` garde son cas dédié : si l'envoi échoue de nouveau, l'utilisateur lit
+  une phrase française qui désigne le serveur, et non sa saisie.
 - **Supabase refuse les domaines sans enregistrement MX** (`@example.com`, `@xnfacture.cm`) avec
   `email_address_invalid`. Ce n'est pas un défaut de l'application ; inutile de le rediagnostiquer.
 
@@ -795,11 +801,13 @@ Un SMTP personnalisé débloque les trois d'un coup : livraison, traduction, et 
 | Réglage | Valeur |
 |---|---|
 | `smtp_host` / `smtp_user` | `smtp.resend.com` / `resend` (mot de passe = `RESEND_API_KEY`) |
-| `smtp_admin_email` | `onboarding@resend.dev` — **expéditeur d'essai** |
+| `smtp_admin_email` | **`no-reply@xn-facture.com`** (17 sept. 2026 ; était `onboarding@resend.dev`) |
+| `mailer_autoconfirm` | **`false`** — les adresses sont réellement vérifiées |
 | `smtp_sender_name` | `XN-Facture` |
 | `rate_limit_email_sent` | 30/h (était 2) |
-| `uri_allow_list` | `http://localhost:3000/**` |
-| Gabarits | Français : `recovery`, `confirmation`, `password_changed_notification` |
+| `uri_allow_list` | `https://xn-facture.com/**`, `https://www.xn-facture.com/**`, `https://xn-facture.vercel.app/**`, `http://localhost:3000/**` |
+| `site_url` | `https://www.xn-facture.com` (16 sept. 2026) |
+| Gabarits | Français : `recovery`, `confirmation`, `password_changed_notification`, `email_change`, `email_changed_notification` |
 
 **Les gabarits pointent sur `{{ .TokenHash }}`, pas sur `{{ .ConfirmationURL }}`.** Le lien va
 donc directement à l'application et ne dépend d'aucun cookie : il s'ouvre depuis n'importe
@@ -807,36 +815,180 @@ quel appareil. Avec `ConfirmationURL` on héritait du flux PKCE, qui exige d'ouv
 dans le navigateur ayant fait la demande — intenable quand on demande depuis Chrome mobile et
 qu'on ouvre le message dans l'application Gmail, c'est-à-dire le cas courant ici.
 
-⚠️ **Deux limites à lever avant l'ouverture au public :**
+~~**Deux limites à lever avant l'ouverture au public**~~ — **LES DEUX SONT LEVÉES.**
 
-1. **Aucun domaine n'est vérifié chez Resend.** L'expéditeur `onboarding@resend.dev` ne livre
-   qu'à l'adresse propriétaire du compte Resend. Tout autre destinataire est rejeté.
-   Vérifier un domaine, puis remplacer `smtp_admin_email`.
-2. ~~**`site_url` vaut `http://localhost:3000`**~~ — **RÉGLÉ.** Relevé le 15 sept. 2026 par
-   l'API de gestion : `site_url` vaut `https://xn-facture.vercel.app`, et `uri_allow_list`
-   couvre `https://xn-facture.vercel.app/**` et `http://localhost:3000/**`. Le paragraphe
-   ci-dessous est conservé pour mémoire ; il ne décrit plus l'état actuel.
+1. ~~Aucun domaine vérifié chez Resend~~ — **RÉGLÉ le 17 sept. 2026.** Voir « Vérification du
+   domaine chez Resend » ci-dessous. `smtp_admin_email` est passé à `no-reply@xn-facture.com`
+   et `mailer_autoconfirm` est revenu à `false`.
+2. ~~**`site_url` vaut `http://localhost:3000`**~~ — **RÉGLÉ.** Il vaut
+   `https://www.xn-facture.com` depuis le 16 sept. 2026, et `uri_allow_list` couvre le nouveau
+   domaine, son apex, `xn-facture.vercel.app` et localhost.
 
    *(Auparavant : les liens envoyés ne fonctionnaient que sur la machine de développement.)*
 
-**Vérifié de bout en bout**, et non supposé : demande depuis `/mot-de-passe-oublie` → journal
-Resend `statut=delivered` vers la boîte réelle, sujet « Réinitialisez votre mot de passe —
-XN-Facture », expéditeur `"XN-Facture" <onboarding@resend.dev>` → lien du gabarit rendu avec
-un vrai jeton et suivi → `/nouveau-mot-de-passe`, compte reconnu.
+#### Vérification du domaine chez Resend — VÉRIFIÉ le 17 sept. 2026
 
-### Déploiement Vercel — `xn-facture.vercel.app`
+Domaine `xn-facture.com`, identifiant Resend `df95aeb0-dc85-4baa-ba4b-a576044a17fd`, région
+`eu-west-1` (Irlande). Les quatre enregistrements — TXT `resend._domainkey`, MX `send`,
+TXT `send`, CNAME `rsend` — sont publiés dans la zone LWS (voir `xn-facture.com.zone`) et
+tous `verified`.
+
+**La validation a mis environ 24 heures**, alors que la documentation de Resend annonce
+« souvent moins de 15 minutes ». Le DKIM et le CNAME sont passés en premier, la paire
+MX + TXT sur `send` bien plus tard. **Il n'y avait rien à corriger.**
+
+⚠️ **Deux explications ont été proposées puis RÉFUTÉES par la mesure. Ne pas les reprendre :**
+(1) le cache négatif des résolveurs — le TTL minimum du SOA vaut 3600 s, et passé ce délai les
+enregistrements étaient visibles sur 1.1.1.1, 8.8.8.8, 9.9.9.9 et OpenDNS pendant que Resend
+refusait toujours ; (2) les relances de vérification trop fréquentes — une heure de veille
+strictement passive n'a rien débloqué non plus. **La cause était l'attente, rien d'autre.**
+
+Ce qui a été vérifié entre-temps, et qui sert de protocole si le cas se reproduit : valeurs
+attendues par l'API comparées aux valeurs publiées, **priorité 10 comprise** · les quatre
+serveurs `ns17-20.lwsdns.com` · une seule chaîne TXT et un seul MX sur `send`, **aucun CNAME
+ni A parasite** qui invaliderait le nœud · aucun CAA · toute la liste de dépannage officielle
+de Resend (région, MX multiples, suffixe ajouté par le fournisseur, DNS géré à plusieurs
+endroits, CNAME proxifié) — aucune ne s'appliquait.
+
+⚠️ **`POST /domains/:id/verify` REMET TOUS LES ENREGISTREMENTS À `pending`** avant de les
+retester, y compris ceux déjà validés. Ne pas y lire une régression. `veille-resend.mjs`, au
+bloc-notes, observe sans jamais déclencher.
+
+⚠️ **Le statut ne se déduit pas, il se prouve par un envoi.** `POST /emails` répondait
+`403 validation_error` tant que la vérification n'était pas complète — c'est le seul contrôle
+qui tranche, et il doit être rejoué après toute modification de la zone.
+
+**Vérifié de bout en bout le 17 sept. 2026**, et non supposé : envoi réel depuis
+`no-reply@xn-facture.com` → `delivered` · **inscription** (qui renvoyait un 500 pour tout le
+monde) → compte créé, `email_verified: false`, email de confirmation livré, lien suivi jusqu'à
+`/bienvenue`, `email_confirmed_at` renseigné **en base** · **mot de passe oublié** → email
+livré, sujet français, lien vers `www.xn-facture.com` · **changement d'adresse** (qui renvoyait
+`500 Error sending email change email`) → deux emails livrés, les deux liens suivis, adresse
+réellement changée en base, connexion avec la nouvelle.
+
+##### Gabarits `email_change` et `email_changed_notification` (17 sept. 2026)
+
+Ils étaient restés **en anglais** — ils n'avaient jamais pu être éprouvés, la fonction
+échouant. Traduits, et leur lien passé de `{{ .ConfirmationURL }}` à `{{ .TokenHash }}` comme
+les autres : `ConfirmationURL` hérite du flux PKCE, qui exige d'ouvrir le lien dans le
+navigateur ayant fait la demande — intenable quand on demande depuis un navigateur et qu'on
+ouvre le message dans l'application Gmail du téléphone. `type=email_change` est bien accepté
+par `EmailOtpType`, donc par `/api/auth/confirmation` sans modification.
+
+⚠️ **`mailer_secure_email_change_enabled = true` : le gabarit part aux DEUX adresses**,
+l'ancienne et la nouvelle, et **les deux liens doivent être suivis** pour que le changement
+prenne effet. Le texte le dit à l'utilisateur, sans quoi il attend un effet qui ne vient pas.
+
+⚠️ **PIÈGE DE TEST — le service d'authentification garde les gabarits en cache une dizaine de
+minutes.** Deux essais lancés une et deux minutes après la modification ont reçu l'**ancien
+gabarit anglais**, alors que l'API de gestion renvoyait déjà le français et qu'aucune chaîne
+anglaise ne subsistait nulle part dans la configuration. Le troisième, treize minutes plus
+tard, est passé. **Attendre avant de conclure qu'un gabarit n'est pas pris en compte.**
+
+⚠️ `mailer_notifications_email_changed_enabled` vaut **`false`** : le gabarit
+`email_changed_notification` est traduit mais **ne part jamais**. À basculer si l'on veut
+qu'un changement d'adresse soit notifié — c'est une protection utile contre un détournement
+de compte.
+
+**Vérifié de bout en bout le 4 sept. 2026** *(relevé d'époque : l'expéditeur était encore
+`onboarding@resend.dev` — voir plus haut pour l'état actuel)* : demande depuis
+`/mot-de-passe-oublie` → journal Resend `statut=delivered` vers la boîte réelle, sujet
+« Réinitialisez votre mot de passe — XN-Facture » → lien du gabarit rendu avec un vrai jeton
+et suivi → `/nouveau-mot-de-passe`, compte reconnu.
+
+### Déploiement Vercel — `www.xn-facture.com`
 
 Dépôt **`github.com/Nrj85/XN-Facture`**, branche `main`, déployée automatiquement. **En ligne
 et vérifié le 4 sept. 2026** : connexion, destination mémorisée par `?suite=`, tableau de bord
 et factures lus depuis Supabase, lien « Mot de passe oublié ? » fonctionnel.
+
+#### Le domaine propre — `www.xn-facture.com` (16 sept. 2026)
+
+Domaine acheté chez **LWS**, qui reste l'hébergeur DNS. `xn-facture.vercel.app` continue de
+répondre et sert de filet.
+
+**`www` est l'adresse officielle, choisie par l'utilisateur**, et `xn-facture.com` redirige
+vers elle en 308 — réglage par défaut de Vercel quand on déclare les deux, conservé tel quel.
+`NEXT_PUBLIC_SITE_URL`, `site_url` et les liens d'email doivent tous porter la **forme www** :
+une divergence ferait traverser une redirection à chaque lien de réinitialisation.
+
+Quatre lignes de la zone LWS ont changé, et **seulement** quatre :
+
+| Ligne | Avant (LWS) | Après (Vercel) |
+|---|---|---|
+| `@` **A** | `193.203.239.78` | `216.198.79.1` |
+| `@` **AAAA** | `2a00:7ee0:8:0:3:3883:0:dab` | **supprimée** |
+| `ftp` | CNAME vers `@` | A `193.203.239.78` |
+| `www` | CNAME vers `@` | CNAME `48460a88f6a26d4d.vercel-dns-017.com.` |
+
+La zone complète est versionnée dans **`xn-facture.com.zone`**, et l'état antérieur dans
+**`xn-facture.com.zone.avant-vercel`**. Les deux servent de marche arrière.
+
+⚠️ **NE JAMAIS accepter l'onglet « Vercel DNS ».** Il propose de basculer les serveurs de noms
+sur `ns1/ns2.vercel-dns.com`, ce qui **déplace toute la zone** chez Vercel — lequel ne recrée
+que ce qui concerne le web. Disparaîtraient d'un coup le MX, SPF, DKIM, DMARC et **les quatre
+enregistrements Resend**. La messagerie du domaine cesserait d'arriver. Vercel n'a besoin que
+d'un enregistrement par domaine, pris dans l'onglet **« DNS Records »**.
+
+⚠️ **Supprimer la ligne AAAA est obligatoire, et c'est le piège le plus coûteux.** Elle n'est
+pas remplacée par une AAAA Vercel : si on la laisse pointer sur LWS, les visiteurs en **IPv6**
+atterrissent sur l'ancien hébergeur pendant que ceux en IPv4 voient l'application. Un site qui
+marche une fois sur deux selon le réseau du visiteur, et rien dans les journaux pour le dire.
+
+⚠️ **`ftp` pointait sur `@`** : il aurait suivi le domaine jusque chez Vercel. Figé sur
+l'adresse LWS. Même vigilance pour tout futur enregistrement défini comme CNAME vers `@`.
+
+⚠️ **La valeur du CNAME `www` est PROPRE AU PROJET** (`48460a88f6a26d4d.vercel-dns-017.com.`),
+elle ne se devine pas. `cname.vercel-dns.com` et `76.76.21.21` restent acceptés en héritage,
+mais **c'est l'onglet « DNS Records » du projet qui fait foi** — le recopier, pas le supposer.
+
+**Vérifié, et non supposé** : `https://www.xn-facture.com` → 200 avec le titre attendu et un
+certificat valide · `https://xn-facture.com` → 308 vers www · `/dashboard` sans session → 307
+vers `/connexion?suite=%2Fdashboard` · pages légales et `/connexion` → 200 · MX, SPF, DKIM,
+DMARC et `mail` relus **sur le serveur faisant autorité**, intacts · les quatre lignes Resend
+servies par **les quatre** serveurs LWS · aucune AAAA résiduelle · propagation constatée sur
+1.1.1.1, 8.8.8.8, 9.9.9.9 et OpenDNS.
+
+##### L'ancienne adresse redirige — `next.config.mjs`, `redirects()`
+
+Vercel continue de servir l'application sur `xn-facture.vercel.app` **et** sur le domaine
+propre, et **ne sait pas rediriger son propre sous-domaine `.vercel.app` depuis l'interface**.
+Un favori, un onglet resté ouvert ou un lien partagé avant la migration gardait donc
+l'ancienne adresse sous les yeux de l'utilisateur, indéfiniment. D'où une règle de
+redirection portée par le code, filtrée sur l'en-tête `host`.
+
+⚠️ **`permanent: false` (307), pas 308.** Un 308 est mis en cache durablement par le
+navigateur : le jour où le domaine propre poserait problème, `xn-facture.vercel.app` ne
+redonnerait plus accès à l'application pour quiconque l'a visitée une fois. **Le filet de
+secours doit rester praticable.** Le référencement n'en souffre pas — l'adresse `.vercel.app`
+n'est pas l'adresse de marque.
+
+⚠️ **`/api/` est EXCLU de la redirection**, pour la raison exacte qui l'exclut du `matcher` du
+middleware : `fetch` suit les redirections sans broncher, et le cookie de session est posé sur
+l'**ancien** domaine — une route PDF redirigée vers le nouveau répondrait 401, et le bouton
+enregistrerait cette erreur sous le nom du document. La règle du projet tient : **une route
+d'API refuse, elle ne redirige pas.**
+
+⚠️ **Les déploiements de prévisualisation ne sont pas touchés** : leur hôte
+(`xn-facture-git-<branche>-<compte>.vercel.app`) ne correspond pas à la valeur filtrée.
+
+**Vérifié sur le serveur de production local**, en forgeant l'en-tête `Host` : `/` → 307 ·
+`/dashboard` → 307 · `/factures/abc` → 307 · `/connexion?suite=%2Fdashboard` → 307 **avec les
+paramètres préservés** · `/api/factures/abc/pdf` → **401 sans redirection** · depuis
+`www.xn-facture.com` → 200 · depuis un hôte de prévisualisation → 200.
 
 **Trois variables, et seulement trois** — toutes en type **Config**, sur *All Environments* :
 
 ```
 NEXT_PUBLIC_SUPABASE_URL       https://tpzmmgcfpnsysaghdqrx.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY  (208 caractères)
-NEXT_PUBLIC_SITE_URL           https://xn-facture.vercel.app
+NEXT_PUBLIC_SITE_URL           https://www.xn-facture.com
 ```
+
+⚠️ **`NEXT_PUBLIC_SITE_URL` restait à `https://xn-facture.vercel.app` au 16 sept. 2026**, le
+changement étant à faire dans l'interface Vercel. Il décide de l'adresse inscrite dans les
+liens d'email (`siteOrigin()`). **Changer la valeur ne suffit pas** : voir le piège n° 3
+ci-dessous, il faut redéployer en décochant le cache de build.
 
 **`SUPABASE_SERVICE_ROLE_KEY` et `SUPABASE_ACCESS_TOKEN` ne doivent PAS y être.**
 `serviceRoleKey()` existe dans `lib/supabase/config.ts` mais n'est appelé nulle part ; la

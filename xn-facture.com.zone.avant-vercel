@@ -1,0 +1,20 @@
+@ 86400 IN NS ns17.lwsdns.com.
+@ 86400 IN NS ns18.lwsdns.com.
+@ 86400 IN NS ns19.lwsdns.com.
+@ 86400 IN NS ns20.lwsdns.com.
+@ 86400 IN MX 10 mail.xn-facture.com.
+@ 21600 IN A 193.203.239.78
+mail 21600 IN A 91.216.107.125
+@ 3600 IN AAAA 2a00:7ee0:8:0:3:3883:0:dab
+ftp 86400 IN CNAME @
+imap 86400 IN CNAME mail.xn-facture.com.
+pop 86400 IN CNAME mail.xn-facture.com.
+smtp 86400 IN CNAME mail.xn-facture.com.
+www 86400 IN CNAME @
+@ 86400 IN TXT v=spf1 mx:xn-facture.com a:mail.xn-facture.com a:mailphp.lws-hosting.com -all
+dkim._domainkey 3600 IN TXT v=DKIM1; k=rsa; p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQC8C8Xh049AFp+LuKVCUlwahtRFxO85rrJ0dE0idCfNAsI5Nlobf02gik8jesZ04clvZ0lxaM+L8IU50AKVHeFva83Y7LVJdeaXk14fO3gwQ1r/asNhzvg++88bfhSaLKD5M4Eid13mBrpsV3gP/MeGIzsty0AMUUNpDwe0otnv3wIDAQAB
+_dmarc 86400 IN TXT v=DMARC1; p=quarantine;
+resend._domainkey 3600 IN TXT p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDDTRYdb8WyDXfYXfNTt0kVIxt/cnj8LbPAhSQ0ybR/9vUvZlDx6ZBF5GEibR2hmIN6Lvlmk7Koup7VHTPKyWyYZd1NiGp5gswLLepPEB1rslDD8frxjLG3c80ZI8O42hxx2GvWeYoF5ogyqKoRGji/CS4qgvqm+Ee4jUsUbqee3QIDAQAB
+send 3600 IN TXT v=spf1 include:amazonses.com ~all
+send 3600 IN MX 10 feedback-smtp.eu-west-1.amazonses.com.
+rsend 3600 IN CNAME send.forge.rmta.net.
