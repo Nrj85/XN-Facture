@@ -519,6 +519,36 @@ recopie sur son téléphone.
 ⚠️ **Référence hexadécimale** (`XN-PRO-A3F91C`) : l'alphabet 0-9A-F ne contient ni O ni I,
 donc rien à confondre avec un zéro ou un un à la recopie.
 
+⚠️ **LA COMMANDE S'AFFICHE AU-DESSUS DE LA GRILLE — IL FAUT DONC Y EMMENER.**
+Piège d'ergonomie payé le 17 sept. 2026, et remonté par l'utilisateur en ces termes : « ça ne
+redirige vers rien… c'est statique et ça ne bouge pas ». La commande **était** créée, avec sa
+référence et les numéros mobile money ; simplement, elle apparaissait **hors de l'écran**, au
+-dessus du bouton qu'on venait de cliquer en bas de page. Du siège de l'utilisateur, le clic
+n'avait rien produit.
+
+Le placement reste le bon — la référence est l'information la plus utile de la page. C'est la
+**transition** qui manquait :
+
+- la carte porte `id="commande"`, `tabIndex={-1}` et `scroll-mt-20` (80 px : la barre
+  supérieure est collante et haute de 56 px, sans quoi la carte arrive dessous) ;
+- `PlanChooser` y défile après une commande réussie, et **y pose le focus** — sans ce focus, un
+  lecteur d'écran continue d'annoncer la grille, et le correctif ne vaudrait que pour ceux qui
+  voient ;
+- le défilement est **instantané** sous `prefers-reduced-motion`.
+
+⚠️ **`router.refresh()` NE REND PAS DE PROMESSE.** Au moment où il revient, le serveur n'a rien
+re-rendu et `#commande` n'existe pas encore : il faut guetter son apparition, avec une limite.
+
+⚠️ **Le bouton de la formule déjà commandée n'est PLUS désactivé.** Il affichait « Commande en
+attente » et ne faisait rien — un contrôle mort (§6.1), et la seule chose à l'écran qui
+répondait au clic. Il dit désormais **« Voir ma commande »** et y ramène.
+
+⚠️ **Piège de test associé : ne pas comparer `scrollY` avant/après.** La carte est **insérée**
+au-dessus de la grille, ce qui décale tout le document : un défilement parfaitement correct
+fait donc *augmenter* `scrollY`. Mesurer la position de la carte **dans l'écran**
+(`getBoundingClientRect().top`), pas celle du document. Mon assertion inverse a crié au bug là
+où le rendu était juste.
+
 ⚠️ **Les coordonnées d'encaissement viennent de l'ENVIRONNEMENT** (`lib/billing-config.ts` :
 `XN_MOMO_MTN`, `XN_MOMO_ORANGE`, `XN_PAYMENT_HOLDER`, `XN_BILLING_EMAIL`), **jamais du code**.
 Un numéro vers lequel des gens envoient de l'argent n'a rien à faire dans un dépôt public, et

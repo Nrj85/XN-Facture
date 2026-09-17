@@ -182,14 +182,28 @@ export default async function AbonnementPage({
         son règlement.
       */}
       {commande && (
-        <OrderSummary
-          plan={commande.plan}
-          period={commande.period}
-          reference={commande.reference}
-          links={commande.links}
-          channels={paymentChannels()}
-          contactEmail={billingContactEmail()}
-        />
+        /*
+          ⚠️ **`id` et `tabIndex` ne sont pas décoratifs.** La grille est PLUS
+          BAS dans la page : quelqu'un qui vient de cliquer « Choisir Pro » a
+          les yeux en bas, et la référence apparaît en haut, hors de son écran.
+          Il conclut que le bouton n'a rien fait — c'est exactement ce qui a
+          été remonté. `PlanChooser` amène donc ici après une commande, et y
+          pose le focus pour que la nouvelle soit aussi annoncée à qui n'y voit
+          pas.
+
+          `scroll-mt-20` (80 px) dégage la barre supérieure, qui est collante
+          et haute de 56 px : sans lui, la carte arrive sous elle.
+        */
+        <div id="commande" tabIndex={-1} className="scroll-mt-20 focus:outline-none">
+          <OrderSummary
+            plan={commande.plan}
+            period={commande.period}
+            reference={commande.reference}
+            links={commande.links}
+            channels={paymentChannels()}
+            contactEmail={billingContactEmail()}
+          />
+        </div>
       )}
 
       <Card>

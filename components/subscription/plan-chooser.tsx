@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Check, Loader2 } from 'lucide-react';
+import { ArrowUp, Check, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { startOrderAction } from '@/lib/actions/subscription';
 import {
@@ -13,6 +13,43 @@ import {
   type BillingPeriod,
   type PlanCode,
 } from '@/lib/plans';
+
+/**
+ * Amène à la carte « Votre commande », et y pose le focus.
+ *
+ * ⚠️ **Le défilement est instantané quand le système demande moins de
+ * mouvement.** Un défilement animé sur toute la hauteur d'une page est
+ * exactement ce que `prefers-reduced-motion` vise.
+ *
+ * ⚠️ **Le focus compte autant que le défilement.** Sans lui, un lecteur
+ * d'écran continue d'annoncer la grille : la personne entend que son clic n'a
+ * rien produit, et la correction ne vaudrait que pour ceux qui voient.
+ */
+function allerALaCommande(): boolean {
+  const cible = document.getElementById('commande');
+  if (!cible) return false;
+
+  const sobre = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  cible.scrollIntoView({ behavior: sobre ? 'auto' : 'smooth', block: 'start' });
+  cible.focus({ preventScroll: true });
+  return true;
+}
+
+/**
+ * Attend que la carte de commande existe, puis y va.
+ *
+ * ⚠️ **`router.refresh()` ne rend pas de promesse** : au moment où il revient,
+ * le serveur n'a encore rien re-rendu et `#commande` n'existe pas. On guette
+ * donc son apparition, avec une limite — au-delà, mieux vaut ne rien faire
+ * que défiler vers un élément qui ne viendra pas.
+ */
+async function rejoindreLaCommande(limiteMs = 5000): Promise<void> {
+  const debut = Date.now();
+  while (Date.now() - debut < limiteMs) {
+    if (allerALaCommande()) return;
+    await new Promise((r) => setTimeout(r, 80));
+  }
+}
 
 /**
  * Choix d'une formule, et commande.
@@ -62,6 +99,10 @@ export function PlanChooser({
       // La page relit la commande côté serveur pour afficher la référence et
       // les instructions de règlement.
       router.refresh();
+      // ...puis on y emmène l'utilisateur. Sans cela, la commande se crée bien
+      // mais s'affiche AU-DESSUS de la grille, hors de l'écran de qui vient de
+      // cliquer : il ne voit rien bouger et conclut que le bouton est inerte.
+      void rejoindreLaCommande();
     });
   }
 
@@ -154,23 +195,33 @@ export function PlanChooser({
                     {courante ? 'C’est votre formule actuelle.' : 'Formule de départ, sans frais.'}
                   </p>
                 ) : (
+                  /*
+                    ⚠️ **Sur la formule déjà commandée, le bouton n'est PLUS
+                    désactivé.** Il affichait « Commande en attente » et ne
+                    faisait rien : un contrôle mort, proscrit par le §6.1, et
+                    la seule chose à l'écran qui répondait au clic. Il mène
+                    désormais à la commande — qui se trouve plus haut dans la
+                    page, donc invisible d'ici.
+                  */
                   <Button
                     size="sm"
                     variant={plan.featured ? 'primary' : 'secondary'}
                     className="w-full gap-2"
-                    disabled={pending || courante || commandee}
-                    onClick={() => commander(plan.code)}
+                    disabled={pending || courante}
+                    onClick={() => (commandee ? allerALaCommande() : commander(plan.code))}
                   >
-                    {enCours === plan.code && (
+                    {enCours === plan.code ? (
                       <Loader2
                         className="h-4 w-4 animate-spin motion-reduce:animate-none"
                         aria-hidden
                       />
-                    )}
+                    ) : commandee ? (
+                      <ArrowUp className="h-4 w-4" aria-hidden />
+                    ) : null}
                     {courante
                       ? 'Formule en cours'
                       : commandee
-                        ? 'Commande en attente'
+                        ? 'Voir ma commande'
                         : `Choisir ${plan.name}`}
                   </Button>
                 )}
