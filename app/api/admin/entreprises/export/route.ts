@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { isPlatformAdmin } from '@/lib/db/admin-queries';
-import { exportFilename, getCompanyExportRows, toCsv } from '@/lib/admin/company-export';
+import { exportFilename, getCompanyExport, toCsv } from '@/lib/admin/company-export';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -32,9 +32,16 @@ export async function GET() {
     return NextResponse.json({ error: 'Cet export est réservé aux administrateurs.' }, { status: 403 });
   }
 
-  const rows = await getCompanyExportRows();
+  const { rows, excluded } = await getCompanyExport();
   if (rows.length === 0) {
-    return NextResponse.json({ error: 'Aucune entreprise à exporter.' }, { status: 404 });
+    return NextResponse.json(
+      {
+        error: excluded > 0
+          ? `Aucune entreprise à exporter : les ${excluded} titulaires se sont désabonnés.`
+          : 'Aucune entreprise à exporter.',
+      },
+      { status: 404 },
+    );
   }
 
   const nom = exportFilename();

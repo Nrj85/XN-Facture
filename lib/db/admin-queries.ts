@@ -267,3 +267,21 @@ export async function getAdminActivity(limit = 60): Promise<AdminActivityRow[]> 
     details: (row.details as Record<string, unknown> | null) ?? null,
   }));
 }
+
+/**
+ * Nombre de titulaires ayant refusé la prospection.
+ *
+ * Il est affiché près du bouton d'export, parce qu'un fichier qui compte moins
+ * de lignes qu'il n'y a d'entreprises doit s'expliquer. Sans ce chiffre,
+ * l'écart passerait pour un défaut de l'export — et on chercherait un bug là
+ * où le produit fait exactement ce qu'on lui demande.
+ */
+export async function getMarketingOptOutCount(): Promise<number> {
+  const supabase = createClient();
+  const { count, error } = await supabase
+    .from('email_preferences')
+    .select('user_id', { count: 'exact', head: true })
+    .eq('marketing', false);
+
+  return error ? 0 : (count ?? 0);
+}

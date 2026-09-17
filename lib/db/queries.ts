@@ -225,6 +225,14 @@ export interface Subscription {
   expiresAt: string | null;
   /** La formule choisie sur la grille tarifaire. N'accorde rien. */
   requested: PlanCode | null;
+  /**
+   * La personne a déclaré ne pas renouveler.
+   *
+   * ⚠️ **N'avance PAS l'échéance.** L'accès court jusqu'à `expiresAt` comme
+   * prévu : ce qui est payé reste dû. Seules les relances J-7 et J-1 cessent,
+   * et l'écran annonce la fin au lieu de proposer le renouvellement.
+   */
+  renewalDeclined: boolean;
 }
 
 export interface SubscriptionPaymentRow {
@@ -251,16 +259,22 @@ export async function getSubscription(companyId: string): Promise<Subscription> 
 
   const { data } = await supabase
     .from('subscriptions')
-    .select('plan,expires_at,requested')
+    .select('plan,expires_at,requested,renewal_declined')
     .eq('company_id', companyId)
     .maybeSingle();
 
-  const row = data as { plan?: string; expires_at?: string | null; requested?: string | null } | null;
+  const row = data as {
+    plan?: string;
+    expires_at?: string | null;
+    requested?: string | null;
+    renewal_declined?: boolean | null;
+  } | null;
 
   return {
     plan: parsePlan(row?.plan) ?? DEFAULT_PLAN,
     expiresAt: row?.expires_at ?? null,
     requested: parsePlan(row?.requested),
+    renewalDeclined: row?.renewal_declined === true,
   };
 }
 

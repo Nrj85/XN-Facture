@@ -22,6 +22,13 @@ const PUBLIC_PATHS = [
   '/bienvenue',
   '/mot-de-passe-oublie',
   '/nouveau-mot-de-passe',
+  // ⚠️ Le désabonnement DOIT être public. On clique depuis sa boîte mail, sur
+  // un appareil sans session — souvent depuis l'application Gmail du
+  // téléphone. Derrière `/connexion`, ce lien n'existerait pas pour les gens
+  // qui en ont le plus besoin, et il ne resterait qu'un bouton : « courrier
+  // indésirable », qui abîme la réputation du domaine d'envoi pour tout le
+  // monde. L'autorisation vient du jeton porté par l'URL, pas d'une session.
+  '/desabonnement',
 ];
 
 function isPublic(pathname: string): boolean {

@@ -604,6 +604,43 @@ honnête sinon, annulation qui rend le bouton « Choisir ».
 - ~~Aucune relance avant échéance~~ — **FAIT le 17 sept. 2026**, migration 0011. Voir
   « Relance avant échéance » ci-dessous.
 
+#### Ne pas renouveler — migration 0013 (17 sept. 2026)
+
+⚠️ **LE MOT « RÉSILIER » EST ÉVITÉ PARTOUT, et ce n'est pas de la coquetterie.**
+Le mobile money ne sait pas prélever : **il n'existe aucun débit récurrent à
+interrompre**. Un bouton « Résilier mon abonnement » laisserait croire à un arrêt immédiat, et
+l'accès qui continue jusqu'à l'échéance passerait pour un dysfonctionnement — ou pour un
+prélèvement qu'on n'a pas su arrêter. Le bouton dit donc **« Je ne souhaite pas renouveler »**.
+
+Ce que la déclaration fait **réellement** — sans quoi ce serait un contrôle mort (§6.1) :
+
+1. **les relances J-7 et J-1 cessent** — réclamer un paiement à qui a dit non est du
+   harcèlement ;
+2. **l'écran annonce la date de fin** au lieu de proposer le renouvellement.
+
+⚠️ **`expires_at` N'EST PAS TOUCHÉE.** Ce qui est payé reste dû : quelqu'un qui a réglé douze
+mois d'avance et renonce au mois suivant garde son accès jusqu'au terme. Avancer l'échéance
+reviendrait à lui reprendre son argent.
+
+⚠️ **La relance J-0 est CONSERVÉE**, même après refus. Elle ne réclame rien : elle constate le
+retour en Découverte et rassure sur ce qui est gardé. La supprimer ferait découvrir le plafond
+de cinq factures au milieu d'une saisie.
+
+⚠️ **`set_renewal_intent(p_renew)` ne prend PAS d'identifiant d'entreprise**, exactement comme
+`request_plan` : elle agit sur celle de l'appelant, il n'y a rien à falsifier. C'est ce qui
+permet d'ouvrir cette écriture alors que `subscriptions` n'a **aucune politique d'écriture**.
+
+⚠️ **Le bouton n'est pas en ton `danger` et n'est pas mis en avant.** Rien n'est détruit, et la
+décision se défait d'un clic ; un bouton rouge dramatiserait un geste réversible.
+
+**Vérifié contre la base réelle et à l'écran (19 contrôles)** : relance J-7 normale avant ·
+déclaration acceptée et enregistrée · **formule toujours Pro et échéance inchangée** · J-7 et
+J-1 supprimées · **J-0 envoyée quand même** · retour en arrière accepté, relances reprises ·
+refus sur Découverte avec un message **français** lisible à l'écran · `PATCH` direct de
+`renewal_declined` et `expires_at` → **0 ligne** · à l'écran sur 500 px : bouton présent et
+neutre, confirmation qui explique et dit la réversibilité, état « ne sera pas renouvelée » avec
+la date, bouton de reprise.
+
 #### Relance avant échéance — migration 0011 (17 sept. 2026)
 
 Le mobile money ne sait pas prélever : chaque renouvellement est un paiement **manuel**, que
@@ -663,7 +700,13 @@ de se déclarer « déjà relancé » et de supprimer ses propres rappels.
 **Ne déclenchent PAS de relance**, et c'est vérifié : une formule Découverte · un abonnement
 sans échéance · une échéance à J-3 ou tout autre jalon · un abonnement **déjà expiré** depuis
 plusieurs jours — relancer au bout de cinq jours ne serait plus une relance, ce serait du
-harcèlement.
+harcèlement · **un abonnement dont le titulaire a déclaré ne pas renouveler** (J-7 et J-1
+seulement ; le J-0 part quand même — voir 0013 ci-dessus).
+
+⚠️ **La migration 0013 REMPLACE `send_expiry_reminders()` en entier**, pour une seule ligne de
+`where`. C'est le prix de `create or replace` sur une fonction PL/pgSQL : il n'existe pas de
+modification partielle. **Toute évolution ultérieure doit repartir de la version de 0013, pas
+de celle de 0011** — sinon on réintroduit les relances à quelqu'un qui a dit non.
 
 **Vérifié contre la base réelle, 15 contrôles** : une relance à J-7 · **aucun doublon au
 second passage** · J-1 et J-0 distinctes · les quatre cas qui ne doivent rien déclencher ·
@@ -799,10 +842,62 @@ gestion d'erreur, et un doublon est un bug.
 ⚠️ **L'export porte TOUTES les entreprises, pas le filtre de recherche voisin.** D'où le mot
 « tout » dans le libellé : sans lui, la proximité des deux contrôles induit en erreur.
 
-⚠️ **Conséquence juridique, non tranchée.** La politique de confidentialité **ne mentionne pas
-la prospection commerciale** parmi les finalités, et **aucun mécanisme de désabonnement
-n'existe**. Question portée au juriste, section 2.8 de
-`docs/mentions-legales-questions-juriste.md`. À régler avant la première campagne.
+⚠️ **Conséquence juridique, à moitié réglée.** Le **désabonnement existe** depuis le
+17 sept. 2026 (migration 0012, voir ci-dessous). En revanche la **politique de confidentialité
+ne mentionne toujours pas la prospection commerciale** parmi les finalités — l'utilisateur a
+demandé d'y revenir plus tard. Question portée au juriste, section 2.8 de
+`docs/mentions-legales-questions-juriste.md`.
+
+#### Désabonnement des emails de prospection — migration 0012 (17 sept. 2026)
+
+Sans lui, une campagne n'offrait aucune issue : le seul recours du destinataire était le bouton
+« courrier indésirable », qui abîme la réputation du **domaine d'envoi** bien au-delà de la
+personne concernée.
+
+⚠️ **LE REFUS NE COUVRE QUE LE COMMERCIAL.** Confirmation d'adresse, mot de passe oublié et
+**avis d'échéance** continuent de partir : ce sont des messages liés à l'exécution du service.
+Laisser quelqu'un perdre sa formule faute d'avoir été prévenu serait lui nuire, pas le
+respecter. La page de désabonnement le dit **explicitement**, sinon un avis d'échéance reçu
+après coup se lit comme un désabonnement qui n'a pas marché.
+
+⚠️ **`/desabonnement` est dans les `PUBLIC_PATHS`, et doit y rester.** On clique depuis sa boîte
+mail, sur un appareil sans session. Derrière `/connexion`, se désabonner exigerait de se
+connecter — c'est-à-dire n'existerait pas pour qui a oublié son mot de passe. L'autorisation
+vient du **jeton** porté par l'URL, pas d'une session.
+
+⚠️ **Le jeton est distinct de `user_id`.** Publier l'identifiant de compte dans un lien d'email
+le ferait fuiter vers tout intermédiaire qui lit l'URL. Ce jeton n'ouvre qu'une porte : changer
+une préférence d'envoi.
+
+⚠️ **RIEN N'EST ENREGISTRÉ AU CHARGEMENT DE LA PAGE.** Les passerelles antispam et les clients
+de messagerie **visitent les liens** d'un message pour les inspecter. Une page qui se
+désabonnerait à l'ouverture retirerait des gens qui n'ont jamais cliqué, et qui attendraient
+ensuite des messages qu'ils ne recevraient plus. Le geste vient d'un **bouton**. Vérifié : après
+chargement de la page, la base dit toujours `marketing = true`.
+
+⚠️ **L'export RETIRE les désabonnés, il ne les signale pas par une colonne.** Un fichier de
+campagne contenant encore ces adresses n'attendrait qu'une inattention pour les démarcher quand
+même, et le désabonnement ne serait qu'un décor. Leur nombre est affiché **près du bouton**,
+sinon l'écart entre le nombre d'entreprises et le nombre de lignes passerait pour un défaut.
+
+⚠️ **Chaque ligne du CSV porte SON lien de désabonnement.** Les campagnes partent d'un outil
+externe à partir de ce fichier : sans cette colonne, le lien n'existerait dans aucun message.
+
+⚠️ **`marketing_recipients()` est `security definer`, donc la RLS y tombe : la garde
+`is_platform_admin()` est DANS la fonction.** Sans elle, n'importe quel compte authentifié
+obtiendrait les jetons de tout le monde — et pourrait désabonner autrui.
+
+⚠️ **PIÈGE PL/pgSQL déjà payé — `42702 column reference "user_id" is ambiguous`.** `returns
+table (user_id …)` déclare une **variable** homonyme de la colonne : `on conflict (user_id)`
+devient ambigu et la fonction échoue **à l'exécution**, pas à la création. Écrire
+`on conflict on constraint email_preferences_pkey`, et qualifier partout par l'alias.
+
+**Vérifié de bout en bout (17 contrôles)** : le CSV porte le lien, bien formé · **le chargement
+de la page ne désabonne pas** · le clic enregistre, affiche l'adresse concernée, dit ce qui
+continue d'arriver et offre le retour en arrière · **l'export exclut la ligne**, puis la remet
+au réabonnement · un utilisateur ordinaire ne peut ni lister les jetons (400), ni lire la table
+(RLS, `[]`), ni désabonner autrui (`PATCH` → 0 ligne) · jeton inconnu → message neutre qui ne
+dit pas s'il existe · lien sans jeton → page explicative.
 
 **Vérifié de bout en bout** : sans session → **401 JSON**, aucune page HTML · utilisateur
 ordinaire → **403, aucune adresse email dans la réponse** · administrateur → 200, `text/csv`,
@@ -1267,6 +1362,10 @@ supabase/
   migrations/0010_liens_paiement.sql provider + payment_links, attach_payment_links
   migrations/0011_relances_echeance.sql subscription_reminders, send_expiry_reminders,
                                 pg_cron + pg_net + vault — la clé Resend N'Y EST PAS
+  migrations/0012_desabonnement.sql email_preferences, set_marketing_preference,
+                                marketing_recipients — jeton d'URL, page publique
+  migrations/0013_resiliation.sql   renewal_declined + set_renewal_intent ; REMPLACE
+                                send_expiry_reminders (repartir de CE fichier)
 
 docs/
   mentions-legales-questions-juriste.md  Note de relecture juridique (à emporter chez
@@ -1280,6 +1379,7 @@ app/
   (auth)/connexion|inscription|bienvenue/
   (auth)/mot-de-passe-oublie/   Demande du lien de réinitialisation
   (auth)/nouveau-mot-de-passe/  Choix du nouveau mot de passe (session déjà ouverte)
+  (auth)/desabonnement/         PUBLIQUE — refus des emails de prospection, par jeton
   (admin)/admin/                Espace administrateur — coquille propre, sans entreprise
   (app)/abonnement/             Formule de l'entreprise (lecture seule, sans caisse)
   (app)/layout.tsx              requireSession + CompanyProvider + AppShell
@@ -1312,7 +1412,8 @@ components/
   settings/    settings-form, logo-uploader, personal-form (nom + langue),
                security-form (adresse email + mot de passe)
   subscription/ plan-limit (fenêtre de plafond), plan-chooser (choix + commande),
-                order-summary (référence et instructions de règlement)
+                order-summary (référence et instructions de règlement),
+                renewal-intent (ne pas renouveler / revenir dessus)
   documents/   status-menu, document-created-dialog, use-creation-notice   (facture + devis)
   pdf/         download-pdf-button
 
@@ -1329,6 +1430,7 @@ lib/
   db/               database.types (GÉNÉRÉ), types (alias de lignes), mappers (ligne ↔ domaine),
                     queries (lectures serveur, `getSession` et `requireSession`)
   actions/          auth, account (nom affiché), company, clients, invoices, quotes
+                    · email-preferences (désabonnement, SANS session)
                     · locale · result, schemas, context
   admin/company-export.ts  Lignes et CSV de l export des entreprises (anti-injection)
   plans.ts          Les trois formules et leurs prix — SOURCE UNIQUE du montant
@@ -1741,7 +1843,22 @@ doivent être identiques dans le formulaire, l'aperçu, le détail et le PDF.
   ou comparer sur les octets. Piège payé une fois : le test criait au bug là où le rendu était
   juste.
 - **Les heredocs Bash mangent les antislashs** (`\\` devient `\`). Pour tout fichier contenant
-  une expression régulière, utiliser l'outil d'écriture, pas `cat > fichier <<'EOF'`.
+  une expression régulière, utiliser l'outil d'écriture, pas `cat > fichier <<'EOF'`. Payé une
+  fois de plus le 17 sept. 2026 : un `node -e` de remplacement a inséré un **vrai retour à la
+  ligne au milieu d'un littéral regex**, et le script ne se chargeait plus.
+- ⚠️ **`Network.clearBrowserCookies` vide les cookies du NAVIGATEUR ENTIER, pas de l'onglet.**
+  Piège coûteux : appelé à l'ouverture de chaque onglet, il supprime la session ouverte dans
+  l'onglet précédent. Symptôme observé — la route d'export répondait **401**, et l'assertion
+  « la ligne a disparu du fichier » **passait à tort**, puisqu'un message d'erreur ne contient
+  évidemment pas l'adresse cherchée. **Toujours vérifier le code HTTP avant de conclure sur le
+  contenu d'une réponse.** Purger une seule fois, au début, ou créer un contexte de navigateur
+  séparé.
+- ⚠️ **`innerText` rend le texte TRANSFORMÉ par CSS.** `.type-display` et `.label-caps`
+  passent en capitales : `innerText.includes('Lien incomplet')` échoue sur une page qui affiche
+  correctement « LIEN INCOMPLET ». Comparer sans tenir compte de la casse, ou interroger le DOM.
+- **La première invocation d'une Server Action sur un serveur fraîchement démarré compile à
+  froid** : un test qui n'attend que 3 s conclut à un bouton mort. Précharger la route, ou
+  attendre par condition plutôt que par délai fixe.
 - Écrire une capture d'écran depuis Bash échoue en « Accès refusé » : passer par PowerShell.
 - En développement, Next compile chaque route au premier accès (~25 s) : `curl -m 90` avant de
   conclure qu'un serveur est en panne.

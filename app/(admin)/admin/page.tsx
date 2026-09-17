@@ -4,6 +4,7 @@ import {
   getAdminAccounts,
   getAdminActivity,
   getAdminOverview,
+  getMarketingOptOutCount,
   requireAdmin,
 } from '@/lib/db/admin-queries';
 
@@ -22,12 +23,13 @@ export const metadata: Metadata = { title: 'Espace administrateur' };
 export default async function AdminPage() {
   const admin = await requireAdmin();
 
-  // Les trois lectures sont indépendantes : les lancer en parallèle évite
-  // d'additionner trois allers-retours vers Dublin.
-  const [overview, accounts, activity] = await Promise.all([
+  // Les quatre lectures sont indépendantes : les lancer en parallèle évite
+  // d'additionner quatre allers-retours vers Dublin.
+  const [overview, accounts, activity, desabonnes] = await Promise.all([
     getAdminOverview(),
     getAdminAccounts(),
     getAdminActivity(60),
+    getMarketingOptOutCount(),
   ]);
 
   return (
@@ -36,6 +38,7 @@ export default async function AdminPage() {
       companies={overview.companies}
       accounts={accounts}
       activity={activity}
+      optedOut={desabonnes}
       adminEmail={admin.email}
     />
   );

@@ -23,7 +23,7 @@ import { usePdfDownload } from '@/lib/pdf/use-pdf-download';
  * C'est une LECTURE. L'espace d'administration reste en lecture seule : ce
  * bouton n'écrit rien, et la base ne le lui permettrait pas.
  */
-export function ExportCompaniesButton() {
+export function ExportCompaniesButton({ optedOut }: { optedOut: number }) {
   const { download, busy, error } = usePdfDownload();
 
   // Pas de `ml-auto` sur le conteneur : c'est le champ de recherche voisin qui
@@ -53,6 +53,18 @@ export function ExportCompaniesButton() {
         */}
         {busy ? 'Préparation…' : 'Exporter tout (CSV)'}
       </Button>
+
+      {/*
+        Un fichier qui compte moins de lignes qu'il n'y a d'entreprises doit
+        s'expliquer, sinon l'écart passe pour un défaut de l'export.
+      */}
+      {optedOut > 0 ? (
+        <p className="mt-1.5 text-[11.5px] text-ink-3">
+          {optedOut === 1
+            ? '1 titulaire désabonné, retiré du fichier'
+            : `${optedOut} titulaires désabonnés, retirés du fichier`}
+        </p>
+      ) : null}
 
       {error ? (
         <p

@@ -114,12 +114,15 @@ export function AdminView({
   companies,
   accounts,
   activity,
+  optedOut,
   adminEmail,
 }: {
   summary: AdminSummary;
   companies: AdminCompanyRow[];
   accounts: { id: string; email: string; createdAt: string; lastSignInAt: string | null; confirmed: boolean }[];
   activity: AdminActivityRow[];
+  /** Titulaires ayant refusé la prospection : ils sont retirés de l’export. */
+  optedOut: number;
   adminEmail: string;
 }) {
   const [recherche, setRecherche] = useState('');
@@ -217,7 +220,7 @@ export function AdminView({
             explicitement. Exporter le filtre serait défendable, mais il
             faudrait alors le nommer autrement.
           */}
-          <ExportCompaniesButton />
+          <ExportCompaniesButton optedOut={optedOut} />
         </CardHeader>
 
         {filtrees.length === 0 ? (

@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
+import { siteOrigin } from '@/lib/site-origin';
 
 /**
  * Export des entreprises inscrites, pour les campagnes de prospection.
@@ -34,6 +35,15 @@ export interface CompanyExportRow {
   quotes: number;
   createdAt: string;
   ownerLastSignIn: string;
+  /** Adresse complète de la page de désabonnement, propre à ce destinataire. */
+  unsubscribeUrl: string;
+}
+
+/** Ce que l'export a produit, et ce qu'il a volontairement laissé de côté. */
+export interface CompanyExport {
+  rows: CompanyExportRow[];
+  /** Titulaires ayant refusé la prospection, donc absents de `rows`. */
+  excluded: number;
 }
 
 const LIBELLES_FORMULE: Record<string, string> = {
@@ -66,8 +76,34 @@ function tally(rows: { company_id: string }[] | null): Map<string, number> {
   return compte;
 }
 
-export async function getCompanyExportRows(): Promise<CompanyExportRow[]> {
+/**
+ * Compose l'export.
+ *
+ * ⚠️ **LES DÉSABONNÉS SONT RETIRÉS, pas signalés par une colonne.** Un fichier
+ * de campagne qui contiendrait encore les adresses de gens ayant refusé
+ * n'attendrait qu'une inattention pour les démarcher quand même — et le
+ * désabonnement ne serait qu'un décor. Leur nombre est rendu à part, pour que
+ * l'écart entre le nombre d'entreprises et le nombre de lignes s'explique.
+ *
+ * ⚠️ **Chaque ligne porte SON lien de désabonnement.** Les campagnes partent
+ * d'un outil externe, à partir de ce fichier : si le lien n'y figurait pas, il
+ * n'y aurait aucun moyen de l'insérer dans les messages, et tout ce mécanisme
+ * ne servirait à rien.
+ */
+export async function getCompanyExport(): Promise<CompanyExport> {
   const supabase = createClient();
+
+  // Crée les lignes manquantes et rend le jeton de chacun. Réservée aux
+  // administrateurs : la garde est DANS la fonction, qui est `security definer`.
+  const { data: preferences } = await supabase.rpc('marketing_recipients');
+  const prefs = new Map(
+    ((preferences ?? []) as { user_id: string; token: string; marketing: boolean }[]).map((p) => [
+      p.user_id,
+      { token: p.token, marketing: p.marketing },
+    ]),
+  );
+
+  const origine = siteOrigin();
 
   const [companies, members, actors, subscriptions, clients, invoices, quotes] = await Promise.all([
     supabase
@@ -109,12 +145,22 @@ export async function getCompanyExportRows(): Promise<CompanyExportRow[]> {
   const nbFactures = tally(invoices.data as { company_id: string }[] | null);
   const nbDevis = tally(quotes.data as { company_id: string }[] | null);
 
-  return (companies.data ?? []).map((c) => {
-    const id = c.id as string;
-    const compte = parCompte.get(titulaire.get(id) ?? '');
-    const abo = abonnement.get(id);
+  let excluded = 0;
 
-    return {
+  const rows = (companies.data ?? []).flatMap((c) => {
+    const id = c.id as string;
+    const proprietaire = titulaire.get(id) ?? '';
+    const compte = parCompte.get(proprietaire);
+    const abo = abonnement.get(id);
+    const pref = prefs.get(proprietaire);
+
+    // Refus explicite : la ligne ne figure pas dans le fichier.
+    if (pref && pref.marketing === false) {
+      excluded += 1;
+      return [];
+    }
+
+    return [{
       name: (c.name as string) ?? '',
       legalName: (c.legal_name as string) ?? '',
       ownerEmail: compte?.email ?? '',
@@ -129,8 +175,11 @@ export async function getCompanyExportRows(): Promise<CompanyExportRow[]> {
       quotes: nbDevis.get(id) ?? 0,
       createdAt: jour(c.created_at as string),
       ownerLastSignIn: jour(compte?.lastSignIn),
-    };
+      unsubscribeUrl: pref ? `${origine}/desabonnement?jeton=${pref.token}` : '',
+    }];
   });
+
+  return { rows, excluded };
 }
 
 const COLONNES: { titre: string; lire: (r: CompanyExportRow) => string | number }[] = [
@@ -148,6 +197,10 @@ const COLONNES: { titre: string; lire: (r: CompanyExportRow) => string | number 
   { titre: 'Devis', lire: (r) => r.quotes },
   { titre: 'Inscription', lire: (r) => r.createdAt },
   { titre: 'Dernière connexion', lire: (r) => r.ownerLastSignIn },
+  // ⚠️ À INSÉRER DANS CHAQUE MESSAGE DE CAMPAGNE. C'est le seul endroit d'où
+  // l'outil d'envoi peut le tirer : sans cette colonne, le lien n'existerait
+  // dans aucun message et le désabonnement serait inatteignable.
+  { titre: 'Lien de désabonnement', lire: (r) => r.unsubscribeUrl },
 ];
 
 /**

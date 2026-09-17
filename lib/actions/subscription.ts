@@ -112,3 +112,29 @@ export async function cancelOrderAction(): Promise<ActionResult<undefined>> {
   revalidatePath('/abonnement');
   return ok();
 }
+
+/**
+ * Déclarer que l'on ne renouvellera pas — ou revenir sur cette décision.
+ *
+ * ⚠️ **Ce n'est PAS une résiliation immédiate, et le mot est évité partout.**
+ * Il n'existe aucun prélèvement à interrompre : le mobile money ne sait pas
+ * débiter d'office. L'accès court jusqu'à l'échéance déjà payée — la
+ * raccourcir reviendrait à reprendre de l'argent reçu.
+ *
+ * Deux effets réels, qui distinguent ce bouton d'un contrôle mort : les
+ * relances J-7 et J-1 cessent, et l'écran annonce la date de fin au lieu de
+ * réclamer un paiement.
+ *
+ * `set_renewal_intent` ne prend **pas d'identifiant d'entreprise** : elle agit
+ * sur celle de l'appelant, il n'y a rien à falsifier. C'est ce qui permet
+ * d'ouvrir cette écriture alors que `subscriptions` n'a aucune politique
+ * d'écriture.
+ */
+export async function setRenewalIntentAction(renew: boolean): Promise<ActionResult<undefined>> {
+  const supabase = createClient();
+  const { error } = await supabase.rpc('set_renewal_intent', { p_renew: renew });
+  if (error) return failFromDb(error);
+
+  revalidatePath('/abonnement');
+  return ok();
+}

@@ -163,8 +163,20 @@ préjuger de votre réponse.
 - Un **consentement préalable** est-il exigé pour écrire à un utilisateur déjà inscrit au
   sujet du service auquel il a souscrit, ou la relation contractuelle suffit-elle ?
 - Tout message de prospection doit-il comporter un **lien de désabonnement**, et devons-nous
-  tenir un registre des refus ? *(Aucun mécanisme de désabonnement n'existe aujourd'hui — c'est
-  le point que nous considérons comme le plus probable à devoir construire.)*
+  tenir un registre des refus ?
+
+  *Mise à jour du 17 septembre 2026 : **c'est construit**. Chaque ligne du fichier d'export
+  porte un lien de désabonnement propre à son destinataire, à insérer dans les messages. Le
+  lien mène à une page publique — aucune connexion n'est requise — qui demande une confirmation
+  explicite avant d'enregistrer le refus, et permet de revenir en arrière. Le refus est
+  conservé en base, et **les personnes concernées sont retirées des exports suivants**. Le
+  refus ne couvre que les messages commerciaux : confirmation d'adresse, réinitialisation de
+  mot de passe et avis d'échéance d'abonnement continuent d'être envoyés, ce que la page dit
+  explicitement au destinataire.*
+
+  **Questions qui subsistent :** ce dispositif est-il suffisant ? Devons-nous conserver une
+  **trace datée** de chaque refus, et pendant combien de temps ? Un délai maximal s'applique-t-il
+  entre le refus et sa prise en compte — chez nous elle est immédiate ?
 - La distinction entre **email technique** (confirmation d'adresse, avis d'échéance
   d'abonnement) et **email commercial** emporte-t-elle des obligations différentes ? Les avis
   d'échéance, qui sont liés à l'exécution du contrat, relèvent selon nous du premier cas.

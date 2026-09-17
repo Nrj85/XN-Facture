@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { PlanChooser } from '@/components/subscription/plan-chooser';
 import { OrderSummary } from '@/components/subscription/order-summary';
+import { RenewalIntent } from '@/components/subscription/renewal-intent';
 import {
   requireSession,
   getSubscription,
@@ -123,6 +124,18 @@ export default async function AbonnementPage({
               <>Sans échéance : la formule Découverte n’expire pas.</>
             )}
           </p>
+
+          {/* ⚠️ Seulement sur une formule PAYANTE et NON EXPIRÉE. Sur
+              Découverte il n'y a rien à ne pas renouveler ; sur une formule
+              déjà expirée, la question ne se pose plus — proposer alors « je ne
+              renouvelle pas » serait proposer d'annuler le passé. */}
+          {!expiree && abonnement.expiresAt && codeActif !== 'discovery' && (
+            <RenewalIntent
+              expiresAt={abonnement.expiresAt}
+              planName={active.name}
+              declined={abonnement.renewalDeclined}
+            />
+          )}
 
           {/* Le quota AVANT d'avoir rempli un formulaire pour rien. Ce compte
               n'est qu'un affichage : c'est la base qui refuse réellement. */}
