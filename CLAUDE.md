@@ -136,8 +136,14 @@ puis `startsWith(path + '/')` — soit `'//'`, qui ne correspond à aucun chemin
 `/dashboard`, `/factures`, `/devis`, `/clients`, `/parametres`, `/paiements` redirigent
 toujours vers `/connexion?suite=`.
 
-**La page est STATIQUE**, 1,42 ko de JS — seul l'en-tête est un composant client. C'est
-délibéré : la première page que voit un prospect sur un réseau lent ne doit rien attendre.
+**La page est STATIQUE**, **1,83 ko de JS** — seuls l'en-tête et le retour en haut sont des
+composants clients. C'est délibéré : la première page que voit un prospect sur un réseau lent
+ne doit rien attendre.
+
+⚠️ **Ce chiffre était 1,42 ko avant le 19 sept. 2026** : le bouton de retour en haut a coûté
+**410 octets**. Toute addition future doit être pesée de la même façon — `npm run build` donne
+la taille route par route, et **c'est le seul juge**. Un composant client de plus sur cette
+page n'est pas gratuit.
 
 **Elle n'utilise pas Tailwind mais des modules CSS.** C'est le seul endroit du projet dans ce
 cas, et c'était une demande explicite. La landing a des compositions longues, des dégradés et
@@ -189,6 +195,49 @@ lueur) sont longues, et toutes sont coupées par `prefers-reduced-motion`.
 classe + une pseudo-classe) — c'est l'ordre du fichier qui départage. Placée avant le survol,
 la règle d'enfoncement était écrasée et le bouton ne redescendait jamais. Constaté en forçant
 `:active` par CDP `CSS.forcePseudoState`, pas supposé.
+
+#### Retour en haut — `marketing/back-to-top.tsx` (19 sept. 2026)
+
+La landing fait plusieurs écrans, et les trois pages légales sont de longs textes : arrivé en
+bas, rien ne ramenait au début. L'en-tête est collant mais ne sert qu'à naviguer.
+
+⚠️ **Posé dans la COQUILLE `(marketing)/layout.tsx`**, donc présent sur la landing **et** sur
+les trois pages légales. Le besoin y est identique, et un seul exemplaire évite quatre copies
+qui auraient divergé.
+
+⚠️ **Le seuil est UNE HAUTEUR D'ÉCRAN**, pas un nombre de pixels.
+`window.scrollY > window.innerHeight` se règle tout seul du téléphone au grand moniteur, là où
+un seuil fixe serait juste sur l'un et faux sur l'autre. **Vérifié : caché à un écran moins
+50 px, visible au-delà.**
+
+⚠️ **`visibility: hidden`, et non `opacity: 0` seule.** L'opacité laisse l'élément dans l'ordre
+de tabulation : on tabulerait sur un bouton invisible. `visibility` l'en sort, et elle est
+retardée à la fin de la transition pour que la disparition reste visible — d'où le
+`transition: … visibility 0s linear 200ms`, remis à `0s` sur l'état visible. `tabIndex` et
+`aria-hidden` suivent l'état.
+
+⚠️ **LE CLIC DÉPLACE LE FOCUS, pas seulement la page.** Sans cela il resterait sur un bouton
+devenu invisible : au clavier on repartirait du bas, et un lecteur d'écran continuerait
+d'annoncer le pied de page. Il est posé sur l'ancre `#haut` — un `div` de hauteur nulle en
+`tabIndex={-1}`, au tout début de la coquille. **Vérifié : `document.activeElement.id` vaut
+bien `haut` après le clic.**
+
+⚠️ **Défilement instantané sous `prefers-reduced-motion`**, et plus aucun déplacement ni mise
+à l'échelle. Un défilement animé sur toute la hauteur d'une page est précisément ce que ce
+réglage vise. **Vérifié en forçant le média par CDP `Emulation.setEmulatedMedia`.**
+
+⚠️ **La marge suit `--gutter`** — 16 px sur téléphone, 24 px puis 32 px plus haut : le bouton
+respire comme le reste de la page au lieu de porter une valeur en dur. `env(safe-area-inset-*)`
+par-dessus, sinon il se pose sur la barre de gestes des iPhone.
+
+44 × 44 px — au-dessus du plancher de 36 px du §6.5, et la cible tactile confortable au pouce,
+là où il sert le plus.
+
+**Vérifié à l'écran (16 contrôles)** : absent de la vue et hors tabulation en haut · apparaît
+passé le seuil, `tabIndex` à 0 · toujours là au pied de page · le clic remonte à 0 et emmène le
+focus · le bouton s'efface ensuite de lui-même · mouvement réduit : aucun déplacement, remontée
+en moins de 250 ms · présent et visible sur les trois pages légales · sur 500 px : visible,
+44 × 44, marge de 16 px.
 
 ### Tableau de bord — `/dashboard`
 Quatre cartes de statistiques (Factures émises · Montant facturé · Montant encaissé · Reste à
@@ -1522,6 +1571,7 @@ components/
   layout/      app-shell, sidebar, topbar, logo, page-placeholder,
                account-badge (Admin + formule payante)
   marketing/   site-header, site-footer (+ FinalCta), hero, app-preview, reveal,
+               back-to-top (retour en haut, landing + pages légales),
                section, info-card, cta-button, pricing, testimonials, legal-page
                — chacun avec son .module.css, hors Tailwind
   auth/        auth-card (enveloppe commune), sign-in-form, sign-up-form,

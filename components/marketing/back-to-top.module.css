@@ -1,0 +1,112 @@
+/*
+ * Retour en haut — pages publiques uniquement.
+ *
+ * Les jetons viennent de `.marketing` (voir marketing.css) : le bouton est
+ * `fixed`, mais il reste un descendant de cette classe dans le DOM, donc les
+ * variables y descendent normalement.
+ */
+
+.bouton {
+  position: fixed;
+  /* `env()` tient compte de la barre de gestes des iPhone : sans elle, le
+     bouton se pose dessus et devient difficile à atteindre. Le `max()` garde
+     16 px partout ailleurs. */
+  right: max(var(--gutter), env(safe-area-inset-right));
+  bottom: max(var(--gutter), env(safe-area-inset-bottom));
+  z-index: 40;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* 44 px : au-dessus du plancher de 36 px du §6.5, et la cible tactile
+     confortable sur téléphone — c'est là qu'il servira le plus. */
+  width: 44px;
+  height: 44px;
+
+  border: 1px solid var(--line);
+  border-radius: var(--r-full);
+  background: var(--surface);
+  color: var(--ink-2);
+  box-shadow: var(--shadow-raised);
+  cursor: pointer;
+
+  /* Caché par défaut. `visibility` le sort de l'ordre de tabulation ; elle est
+     retardée à la fin de la transition pour que la disparition reste visible,
+     et remise à zéro à l'apparition pour qu'il soit cliquable tout de suite. */
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(8px);
+  transition:
+    opacity 200ms ease-out,
+    transform 200ms ease-out,
+    background-color 150ms ease-out,
+    border-color 150ms ease-out,
+    color 150ms ease-out,
+    visibility 0s linear 200ms;
+}
+
+.visible {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  transition:
+    opacity 200ms ease-out,
+    transform 200ms ease-out,
+    background-color 150ms ease-out,
+    border-color 150ms ease-out,
+    color 150ms ease-out,
+    visibility 0s;
+}
+
+.bouton:hover {
+  border-color: var(--line-strong);
+  background: var(--sand);
+  color: var(--ink);
+}
+
+/* L'enfoncement est la seule animation qui porte une information : il confirme
+   que le clic a été pris. 75 ms, comme partout ailleurs dans le produit. */
+.bouton:active {
+  transform: scale(0.94);
+  transition-duration: 75ms;
+}
+
+.bouton:focus-visible {
+  outline: 2px solid var(--brand-bright);
+  outline-offset: 2px;
+}
+
+.sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* On garde l'apparition en opacité — elle porte l'information « ce bouton
+     existe maintenant » — mais plus aucun déplacement ni mise à l'échelle. */
+  .bouton,
+  .visible {
+    transform: none;
+    transition:
+      opacity 200ms ease-out,
+      background-color 150ms ease-out,
+      border-color 150ms ease-out,
+      color 150ms ease-out,
+      visibility 0s linear 200ms;
+  }
+
+  .visible {
+    transition-delay: 0s;
+  }
+
+  .bouton:active {
+    transform: none;
+  }
+}
