@@ -3,10 +3,15 @@ import { redirect } from 'next/navigation';
 import { CreateCompanyForm } from '@/components/auth/create-company-form';
 import { createClient, currentUser } from '@/lib/supabase/server';
 import { isPlatformAdmin } from '@/lib/db/admin-queries';
+import { parsePlan } from '@/lib/plans';
 
 export const metadata: Metadata = { title: 'Votre entreprise' };
 
-export default async function BienvenuePage() {
+export default async function BienvenuePage({
+  searchParams,
+}: {
+  searchParams: { plan?: string | string[] };
+}) {
   const user = await currentUser();
   if (!user) redirect('/connexion');
 
@@ -27,5 +32,25 @@ export default async function BienvenuePage() {
   // d'atteindre son propre espace depuis l'interface. Il fallait taper l'URL.
   const admin = await isPlatformAdmin();
 
-  return <CreateCompanyForm isAdmin={admin} />;
+  /**
+   * La formule choisie sur la grille tarifaire, rattrapée ici parce que
+   * c'est le seul moment où l'entreprise existe enfin.
+   *
+   * ⚠️ **DEUX PORTEURS, un seul point d'écriture.** L'URL sert au retour de
+   * Google (`/bienvenue?plan=pro`, posé par le bouton d'inscription) ;
+   * `user_metadata.requested_plan` sert à l'inscription par email, dont le
+   * gabarit est fixe et ne peut rien transporter. L'URL l'emporte : c'est le
+   * choix le plus récent, celui qu'on vient de faire. Dans les deux cas,
+   * `createCompany` est le seul à appeler `request_plan`.
+   *
+   * `parsePlan` valide contre la liste fermée — `?plan=` vient du visiteur,
+   * et `user_metadata` est modifiable par son propriétaire. Ni l'un ni
+   * l'autre n'accorde quoi que ce soit : `requested` est une intention, tout
+   * le monde démarre en Découverte.
+   */
+  const metadata = user.user_metadata as { requested_plan?: string } | null;
+  const brut = Array.isArray(searchParams.plan) ? searchParams.plan[0] : searchParams.plan;
+  const plan = parsePlan(brut) ?? parsePlan(metadata?.requested_plan);
+
+  return <CreateCompanyForm isAdmin={admin} plan={plan} />;
 }

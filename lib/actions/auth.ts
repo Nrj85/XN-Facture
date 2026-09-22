@@ -162,16 +162,40 @@ export async function signUp(
     return fail('Le nom de l’entreprise est obligatoire.');
   }
 
+  const plan = parsePlan(requestedPlan);
+
   const { data, error } = await supabase.auth.signUp({
     email: email.trim(),
     password,
-    options: { data: { full_name: fullName.trim() } },
+    options: {
+      data: {
+        full_name: fullName.trim(),
+        // ⚠️ **DÉFAUT RÉPARÉ le 22 sept. 2026 : la formule choisie était
+        // perdue à chaque inscription.** Depuis que `mailer_autoconfirm` vaut
+        // `false`, il n'y a JAMAIS de session ici, donc le `request_plan`
+        // plus bas n'était plus jamais atteint : quelqu'un qui cliquait
+        // « Choisir Pro » sur la grille tarifaire arrivait en Découverte sans
+        // que rien n'en garde trace. Le gabarit d'email ne peut pas porter la
+        // valeur — il est fixe pour tout le projet — d'où ce dépôt, relu par
+        // `/bienvenue` au moment où l'entreprise est enfin créée.
+        //
+        // ⚠️ `user_metadata` est modifiable par son propriétaire, et la règle
+        // du projet interdit d'y ranger ce qui accorde un droit. **Celle-ci
+        // n'en accorde aucun** : `requested` est une intention commerciale,
+        // tout le monde reste en Découverte, et `request_plan` est de toute
+        // façon déjà appelable par n'importe quel compte authentifié avec
+        // n'importe quel code valide. Falsifier ce champ ne donne donc accès
+        // à rien de plus que l'écran d'abonnement.
+        ...(plan ? { requested_plan: plan } : {}),
+      },
+    },
   });
 
   if (error) return fail(translateAuthError(error.message));
 
   // Si la confirmation par email est exigée, il n'y a pas encore de session :
-  // l'entreprise sera créée à la première connexion, par /bienvenue.
+  // l'entreprise sera créée à la première connexion, par /bienvenue — qui
+  // relira `requested_plan` et posera la formule demandée.
   if (!data.session) return ok({ needsConfirmation: true });
 
   const { error: companyError } = await supabase.rpc('create_company_for_current_user', {
@@ -190,7 +214,6 @@ export async function signUp(
   // ⚠️ Un échec ici ne doit pas faire échouer l'inscription. Le compte et
   // l'entreprise existent déjà ; refuser maintenant laisserait l'utilisateur
   // devant une erreur alors que tout ce qui compte a réussi.
-  const plan = parsePlan(requestedPlan);
   if (plan) {
     await supabase.rpc('request_plan', { p_plan: plan });
   }
@@ -199,8 +222,19 @@ export async function signUp(
   return ok({ needsConfirmation: false });
 }
 
-/** Crée l'entreprise d'un compte qui n'en a pas encore. Utilisé par /bienvenue. */
-export async function createCompany(name: string): Promise<ActionResult<undefined>> {
+/**
+ * Crée l'entreprise d'un compte qui n'en a pas encore. Utilisé par /bienvenue.
+ *
+ * ⚠️ **C'est le SEUL endroit qui enregistre la formule demandée hors de
+ * l'inscription directe**, et il couvre les deux chemins qui passent par ici :
+ * la confirmation par email (formule relue dans `user_metadata`) et la
+ * connexion Google (formule portée par `?plan=` jusqu'à `/bienvenue`). Deux
+ * appels séparés à `request_plan` auraient fini par diverger.
+ */
+export async function createCompany(
+  name: string,
+  requestedPlan?: string | null,
+): Promise<ActionResult<undefined>> {
   const supabase = createClient();
 
   if (!name.trim()) return fail('Le nom de l’entreprise est obligatoire.');
@@ -211,6 +245,14 @@ export async function createCompany(name: string): Promise<ActionResult<undefine
   });
 
   if (error) return fail(error.message);
+
+  // Même règle qu'à l'inscription : un échec ne remonte pas. L'entreprise
+  // existe, et `requested` n'accorde rien — refuser maintenant priverait la
+  // personne de son espace pour une note commerciale.
+  const plan = parsePlan(requestedPlan);
+  if (plan) {
+    await supabase.rpc('request_plan', { p_plan: plan });
+  }
 
   revalidatePath('/', 'layout');
   return ok();

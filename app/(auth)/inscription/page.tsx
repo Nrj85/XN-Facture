@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { SignUpForm } from '@/components/auth/sign-up-form';
+import { googleSignInEnabled } from '@/lib/auth-providers';
 import { parsePlan } from '@/lib/plans';
 
 export const metadata: Metadata = { title: 'Créer un compte' };
@@ -21,5 +22,5 @@ export default function InscriptionPage({
   searchParams: { plan?: string | string[] };
 }) {
   const brut = Array.isArray(searchParams.plan) ? searchParams.plan[0] : searchParams.plan;
-  return <SignUpForm plan={parsePlan(brut)} />;
+  return <SignUpForm plan={parsePlan(brut)} googleEnabled={googleSignInEnabled()} />;
 }

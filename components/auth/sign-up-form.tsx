@@ -3,13 +3,15 @@
 import { useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { BadgeCheck, Loader2, MailCheck } from 'lucide-react';
+import { Loader2, MailCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { AuthCard } from '@/components/auth/auth-card';
+import { ChosenPlan } from '@/components/auth/chosen-plan';
+import { GoogleButton } from '@/components/auth/google-button';
 import { signUp } from '@/lib/actions/auth';
-import { planByCode, planPriceLabel, type PlanCode } from '@/lib/plans';
+import { type PlanCode } from '@/lib/plans';
 
 /**
  * ⚠️ **`plan` ne donne aucun droit.** Il dit seulement quelle formule la
@@ -17,9 +19,22 @@ import { planByCode, planPriceLabel, type PlanCode } from '@/lib/plans';
  * démarre en Découverte ; la formule se gagne par un paiement encaissé, et
  * c'est le webhook qui l'accordera — jamais le navigateur.
  */
-export function SignUpForm({ plan = null }: { plan?: PlanCode | null }) {
+export function SignUpForm({
+  plan = null,
+  googleEnabled = false,
+}: {
+  plan?: PlanCode | null;
+  googleEnabled?: boolean;
+}) {
   const router = useRouter();
-  const choisie = plan ? planByCode(plan) : null;
+
+  // ⚠️ **La formule doit SURVIVRE à l'aller-retour chez Google.** Un compte
+  // créé par Google arrive sans entreprise et passe par `/bienvenue` : sans ce
+  // paramètre, le choix fait sur la grille tarifaire serait perdu en route, et
+  // quelqu'un qui a cliqué « Choisir Pro » se retrouverait en Découverte sans
+  // que rien n'en garde trace. C'est le pendant de `requested_plan`, que
+  // l'inscription par email dépose dans `user_metadata`.
+  const apresGoogle = plan ? `/bienvenue?plan=${plan}` : '/bienvenue';
 
   const [fullName, setFullName] = useState('');
   const [companyName, setCompanyName] = useState('');
@@ -97,28 +112,24 @@ export function SignUpForm({ plan = null }: { plan?: PlanCode | null }) {
         </>
       }
     >
-      {choisie && (
-        <div className="mb-4 flex items-start gap-3 rounded-[10px] border border-line bg-sand px-3.5 py-3">
-          <BadgeCheck className="mt-0.5 h-4 w-4 shrink-0 text-brand-hover" aria-hidden />
-          <p className="text-[12.5px] leading-relaxed text-ink-2">
-            Formule choisie :{' '}
-            <strong className="font-semibold text-ink">{choisie.name}</strong>
-            {choisie.monthlyPrice > 0 && (
-              <>
-                {' '}
-                — <span className="tabular">{planPriceLabel(choisie)}</span>
-              </>
-            )}
-            .{' '}
-            {choisie.monthlyPrice > 0 ? (
-              <>Créez d’abord votre compte : le paiement vient ensuite, rien n’est engagé.</>
-            ) : (
-              <>C’est la formule gratuite, sans engagement.</>
-            )}{' '}
-            <Link href="/#tarifs" className="font-semibold text-brand-hover hover:underline">
-              Changer
-            </Link>
-          </p>
+      <ChosenPlan plan={plan} />
+
+      {/* Même placement que sur /connexion : en tête, parce que c'est le
+          chemin le plus court — quatre champs contre un clic. Rien ne
+          s'affiche sans `XN_AUTH_GOOGLE` (§6.1). */}
+      {googleEnabled && (
+        <div className="mb-5 space-y-5">
+          <GoogleButton
+            suite={apresGoogle}
+            label="S’inscrire avec Google"
+            onError={setError}
+          />
+
+          <div className="flex items-center gap-3">
+            <span className="h-px flex-1 bg-line" />
+            <span className="text-[11.5px] text-ink-3">ou</span>
+            <span className="h-px flex-1 bg-line" />
+          </div>
         </div>
       )}
 

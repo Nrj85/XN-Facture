@@ -1217,11 +1217,12 @@ vers `/connexion` en mémorisant la destination dans `?suite=`. L'inscription cr
 projet exige une confirmation par email, il n'y a pas encore de session à l'inscription et
 `/bienvenue` rattrape le cas — un compte sans entreprise serait un cul-de-sac.
 
-#### Connexion avec un compte Google (22 sept. 2026) — CODE PRÊT, NON ACTIVÉ
+#### Connexion et inscription avec un compte Google (22 sept. 2026) — CODE PRÊT, NON ACTIVÉ
 
-Bouton « Continuer avec Google » en tête de `/connexion`, au-dessus du
-formulaire email et séparé par un « ou ». Au-dessus, parce que le placer
-dessous en ferait un chemin de repli alors que c'est le plus court.
+Bouton en tête de **`/connexion`** (« Continuer avec Google ») **et de
+`/inscription`** (« S'inscrire avec Google »), au-dessus du formulaire email et
+séparé par un « ou ». Au-dessus, parce que le placer dessous en ferait un
+chemin de repli alors que c'est le plus court — un clic contre quatre champs.
 
 ⚠️ **RIEN N'EST ACTIF AUJOURD'HUI : `external_google_enabled = false` sur le
 projet Supabase**, et ni identifiant ni secret ne sont renseignés. Il faut un
@@ -1294,22 +1295,62 @@ d'usage de Google interdisent d'en changer la teinte. lucide ne fournit plus
 les logos de marque, d'où le tracé en ligne — pas une image chargée chez
 Google, qui coûterait une requête réseau.
 
-⚠️ **`/inscription` n'a PAS le bouton**, la demande portait sur la page de
-connexion. `GoogleButton` est prévu pour : `onError` + `suite` en props, une
-ligne à ajouter. **À trancher avec l'utilisateur**, parce que la grille
-tarifaire passe `?plan=` à l'inscription et qu'un parcours Google ne le
-transporterait pas en l'état.
+##### La formule choisie doit survivre au trajet — et elle était PERDUE
 
-**Vérifié à l'écran et en conditions réelles (14 contrôles)** : sans la
-variable, **aucun bouton et pas de séparateur orphelin** · avec elle, libellé
-exact, 40 px, `type=button` (il ne soumet pas le formulaire), les quatre
-couleurs du G, séparateur présent · tabulation Google → email → mot de passe ·
-sur 500 px : tient, aucun débordement, placé avant le formulaire · **clic
-réel : message français sur notre page, on ne quitte pas le site** · callback
-`access_denied` → `/connexion` sans motif · autre erreur → `?motif=fournisseur`
-· **`retour=//evil.example.com` et `retour=https://evil…` → repli sur
-`/mot-de-passe-oublie`, aucune redirection ouverte** · sans `retour`, le
-comportement des liens d'email est inchangé.
+⚠️ **DÉFAUT PRÉEXISTANT TROUVÉ ET RÉPARÉ le 22 sept. 2026, sans rapport avec
+Google.** `signUp` sort sur `if (!data.session) return ok({ needsConfirmation:
+true })` **avant** d'appeler `request_plan`. Depuis que `mailer_autoconfirm`
+est repassé à `false` (17 sept.), il n'y a **jamais** de session à ce moment :
+le `request_plan` de `signUp` n'était plus jamais atteint. Quelqu'un qui
+cliquait « Choisir Pro » sur la grille tarifaire arrivait en Découverte
+**sans que rien n'en garde trace** — et l'écart ne se voyait nulle part, ni à
+l'écran ni dans un journal.
+
+**Deux porteurs, UN SEUL point d'écriture.** `createCompany()` est désormais le
+seul à appeler `request_plan` hors inscription directe, et il couvre les deux
+chemins qui aboutissent à `/bienvenue` :
+
+| Chemin | Porteur | Pourquoi celui-là |
+|---|---|---|
+| Google | `?plan=` dans `suite` → `/bienvenue?plan=pro` | Nous fabriquons le `redirect_to`, donc nous pouvons y mettre ce que nous voulons |
+| Email | `user_metadata.requested_plan`, déposé par `signUp` | **Le gabarit d'email est FIXE pour tout le projet** (`suite=%2Fbienvenue` en dur) : il ne peut rien transporter de propre à une personne |
+
+L'URL l'emporte sur `user_metadata` : c'est le choix le plus récent.
+
+⚠️ **`requested_plan` dans `user_metadata` ne viole PAS la règle du projet**,
+qui interdit d'y ranger ce qui accorde un droit. Il n'en accorde aucun :
+`requested` est une intention commerciale, tout le monde reste en Découverte,
+et `request_plan` est de toute façon **déjà** appelable par n'importe quel
+compte authentifié avec n'importe quel code valide. Falsifier ce champ ne donne
+accès à rien de plus que l'écran d'abonnement. **Ne pas généraliser** : c'est
+l'analyse de CE champ, pas une levée de la règle.
+
+⚠️ **`components/auth/chosen-plan.tsx` est extrait de `sign-up-form.tsx`**,
+parce qu'il en fallait un second exemplaire sur `/bienvenue` — c'est là
+qu'atterrit un compte Google, et là que l'entreprise est réellement créée. Deux
+copies auraient divergé sur un texte qui parle d'argent.
+
+**Vérifié à l'écran et contre la base réelle (26 contrôles)** :
+
+- **sans la variable**, sur les DEUX écrans : aucun bouton, pas de séparateur
+  orphelin, formulaires intacts (2 et 4 champs), formule toujours annoncée ;
+- **avec elle** : libellés distincts par écran, 40 px, `type=button` (il ne
+  soumet pas le formulaire), les quatre couleurs du G, séparateur présent,
+  placé avant le formulaire · tabulation Google → email → mot de passe · sur
+  500 px : tient, aucun débordement ;
+- **clic réel, Google non activé** : message français sur notre page, **on ne
+  quitte pas le site** ;
+- **`redirect_to` observé** : `…/api/auth/confirmation?suite=/bienvenue?plan=pro&retour=/connexion`, avec `prompt=select_account` ;
+- callback `access_denied` → `/connexion` **sans motif** · autre erreur →
+  `?motif=fournisseur` · **`retour=//evil.example.com` et
+  `retour=https://evil…` → repli sur `/mot-de-passe-oublie`, aucune redirection
+  ouverte** · sans `retour`, les liens d'email sont inchangés ;
+- **bout en bout contre la base, deux comptes jetables** : porteur URL →
+  `requested = 'pro'` · porteur `user_metadata` → `requested = 'business'` ·
+  **`plan` reste `discovery` dans les deux cas — rien n'a été accordé** ·
+  formule rappelée à l'écran sur `/bienvenue` ·
+  **ménage vérifié : 0 entreprise, 0 compte, 0 orpheline, 1 administrateur
+  (le vrai)**.
 
 ⚠️ **CE QUI N'A PAS PU ÊTRE ÉPROUVÉ : le parcours qui RÉUSSIT.** Il exige un
 client OAuth Google réel. Ce qui est vérifié, c'est la construction de l'URL
@@ -1691,7 +1732,8 @@ components/
                — chacun avec son .module.css, hors Tailwind
   auth/        auth-card (enveloppe commune), sign-in-form, sign-up-form,
                create-company-form, forgot-password-form, reset-password-form,
-               google-button (connexion Google — masqué sans XN_AUTH_GOOGLE)
+               google-button (connexion Google — masqué sans XN_AUTH_GOOGLE),
+               chosen-plan (rappel de la formule — inscription ET /bienvenue)
   dashboard/   dashboard-view, dashboard-filters, stat-card, recent-invoices,
                invoice-row-actions, receivables-panel
   invoices/    invoice-form, invoice-list, invoice-detail, invoice-editor, invoice-preview,
@@ -2139,6 +2181,17 @@ doivent être identiques dans le formulaire, l'aperçu, le détail et le PDF.
   une expression régulière, utiliser l'outil d'écriture, pas `cat > fichier <<'EOF'`. Payé une
   fois de plus le 17 sept. 2026 : un `node -e` de remplacement a inséré un **vrai retour à la
   ligne au milieu d'un littéral regex**, et le script ne se chargeait plus.
+
+  ⚠️ **AGGRAVATION PAYÉE LE 22 sept. 2026 : l'antislash est mangé DEUX fois.** Un script CDP
+  écrit par heredoc, dont l'expression est un **littéral gabarit** passé à `Runtime.evaluate` :
+  le heredoc retire le premier antislash, le gabarit retire le second. `/\\s+/g` arrive chez
+  Chrome en **`/s+/g`** — qui remplace chaque lettre « s » par une espace. Symptôme observé :
+  `innerText.includes('Formule choisie')` échouait sur une page qui l'affichait parfaitement,
+  pendant que `/Pro/` passait (aucun « s »). **Le test criait au bug là où le rendu était
+  juste**, pour la seconde fois de ce document. Ne jamais écrire `\s`, `\d` ou `\w` dans une
+  expression destinée à `Runtime.evaluate` : classes explicites (`[ \t\n]`), ou fichier écrit
+  par l'outil d'écriture. Contrôle qui tranche en un appel :
+  `evaluate(t, "(/\\s+/).source")` doit rendre `\s+`, pas `s+`.
 - ⚠️ **`Network.clearBrowserCookies` vide les cookies du NAVIGATEUR ENTIER, pas de l'onglet.**
   Piège coûteux : appelé à l'ouverture de chaque onglet, il supprime la session ouverte dans
   l'onglet précédent. Symptôme observé — la route d'export répondait **401**, et l'assertion
