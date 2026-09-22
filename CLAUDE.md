@@ -1217,6 +1217,106 @@ vers `/connexion` en mémorisant la destination dans `?suite=`. L'inscription cr
 projet exige une confirmation par email, il n'y a pas encore de session à l'inscription et
 `/bienvenue` rattrape le cas — un compte sans entreprise serait un cul-de-sac.
 
+#### Connexion avec un compte Google (22 sept. 2026) — CODE PRÊT, NON ACTIVÉ
+
+Bouton « Continuer avec Google » en tête de `/connexion`, au-dessus du
+formulaire email et séparé par un « ou ». Au-dessus, parce que le placer
+dessous en ferait un chemin de repli alors que c'est le plus court.
+
+⚠️ **RIEN N'EST ACTIF AUJOURD'HUI : `external_google_enabled = false` sur le
+projet Supabase**, et ni identifiant ni secret ne sont renseignés. Il faut un
+client OAuth créé dans **Google Cloud Console** par le titulaire du compte —
+cela ne peut pas se faire depuis le code. Le bouton reste donc invisible, ce
+qui est le comportement voulu, pas une panne.
+
+⚠️ **DEUX RÉGLAGES DOIVENT S'ACCORDER**, et l'un ne suffit jamais :
+
+1. **Supabase** — *Authentication > Sign In / Providers > Google*, avec le
+   *Client ID* et le *Client Secret* de Google Cloud. C'est ce qui fait
+   marcher la connexion.
+2. **`XN_AUTH_GOOGLE=1`** (`lib/auth-providers.ts`) — décide seulement si le
+   bouton s'affiche. Même motif que `lib/billing-config.ts` : sans la
+   variable, aucun contrôle n'apparaît (§6.1).
+
+Dans Google Cloud, l'URI de redirection autorisée est celle de **Supabase**,
+pas la nôtre : `https://tpzmmgcfpnsysaghdqrx.supabase.co/auth/v1/callback`.
+
+⚠️ **PIÈGE MESURÉ, et c'est le plus coûteux de cette fonctionnalité.**
+`signInWithOAuth` **ne contacte personne** : elle fabrique l'URL en local et
+rend la main. Quand le fournisseur n'est pas activé, c'est le navigateur qui
+découvre le refus — et **Supabase ne redirige pas, il RÉPOND** :
+
+```
+{"code":400,"error_code":"validation_failed",
+ "msg":"Unsupported provider: provider is not enabled"}
+```
+
+L'utilisateur reste planté sur une URL `supabase.co`, devant du JSON anglais,
+hors du site, sans autre issue que le bouton « précédent ». Poser
+`XN_AUTH_GOOGLE=1` avant de configurer Supabase suffisait à produire cela.
+D'où le contrôle **mesuré** de `providerActif()` : `GET /auth/v1/settings`
+(publique, clé `anon`) rend `{ external: { google: … } }`, interrogé avant
+d'envoyer qui que ce soit chez Google, en cache 5 minutes. **Un échec réseau
+répond `false`, jamais `true`** — dans le doute on refuse chez nous, en
+français, avec le formulaire email juste dessous.
+
+⚠️ **Le callback est `/api/auth/confirmation`, celui des emails — PAS un
+second.** Google emploie le même `?code=` PKCE ; un deuxième échangeur aurait
+divergé. Seule la destination d'échec change, portée par **`?retour=`**.
+Renvoyer vers « mot de passe oublié » quelqu'un qui n'a jamais eu de mot de
+passe chez nous n'aurait aucun sens. `retour` est validé comme `suite` (chemin
+interne, `//` refusé) et **réduit à son `pathname`**, sinon un `?` déjà présent
+casserait le `?motif=` ajouté.
+
+⚠️ **`access_denied` ne produit AUCUN bandeau.** Fermer l'écran de Google est
+une décision, pas une panne : on repose la personne sur `/connexion`, d'où elle
+partait. Un message rouge lui reprocherait son propre choix.
+
+⚠️ **Le vérificateur PKCE est posé par la Server Action, en cookie.** C'est la
+raison pour laquelle l'appel est côté serveur : déclenché depuis le navigateur,
+le cookie serait posé ailleurs et l'échange échouerait au retour.
+
+⚠️ **`prompt: 'select_account'` est délibéré.** Le téléphone est souvent
+partagé ici, et Google réutilise sinon en silence le dernier compte connecté :
+on créerait une entreprise sous l'identité de quelqu'un d'autre. Cet écran de
+choix est le dernier moment où l'erreur est rattrapable.
+
+**Il n'y a pas d'inscription distincte** : le premier passage crée le compte,
+qui arrive **sans entreprise**, et `requireSession()` l'emmène sur
+`/bienvenue`. Chemin déjà existant, rien à ajouter. `user_metadata.full_name`
+est rempli par Google, donc la barre latérale affiche le bon nom sans code
+supplémentaire, et `email_preferences` se crée à la volée dans
+`marketing_recipients()` (0012).
+
+⚠️ **Les couleurs du logo sont EN DUR, seule exception admise au §6.2.** Ce
+n'est pas une couleur de produit mais une marque déposée : les conditions
+d'usage de Google interdisent d'en changer la teinte. lucide ne fournit plus
+les logos de marque, d'où le tracé en ligne — pas une image chargée chez
+Google, qui coûterait une requête réseau.
+
+⚠️ **`/inscription` n'a PAS le bouton**, la demande portait sur la page de
+connexion. `GoogleButton` est prévu pour : `onError` + `suite` en props, une
+ligne à ajouter. **À trancher avec l'utilisateur**, parce que la grille
+tarifaire passe `?plan=` à l'inscription et qu'un parcours Google ne le
+transporterait pas en l'état.
+
+**Vérifié à l'écran et en conditions réelles (14 contrôles)** : sans la
+variable, **aucun bouton et pas de séparateur orphelin** · avec elle, libellé
+exact, 40 px, `type=button` (il ne soumet pas le formulaire), les quatre
+couleurs du G, séparateur présent · tabulation Google → email → mot de passe ·
+sur 500 px : tient, aucun débordement, placé avant le formulaire · **clic
+réel : message français sur notre page, on ne quitte pas le site** · callback
+`access_denied` → `/connexion` sans motif · autre erreur → `?motif=fournisseur`
+· **`retour=//evil.example.com` et `retour=https://evil…` → repli sur
+`/mot-de-passe-oublie`, aucune redirection ouverte** · sans `retour`, le
+comportement des liens d'email est inchangé.
+
+⚠️ **CE QUI N'A PAS PU ÊTRE ÉPROUVÉ : le parcours qui RÉUSSIT.** Il exige un
+client OAuth Google réel. Ce qui est vérifié, c'est la construction de l'URL
+d'autorisation (observée une fois, `redirect_to` portant `suite` et `retour`),
+et tous les chemins d'échec. L'échange du code est celui qui sert déjà en
+production aux liens de réinitialisation.
+
 ### Mot de passe oublié — `/mot-de-passe-oublie`, `/nouveau-mot-de-passe`
 Trois étapes : demande (adresse email) → lien reçu par email → choix du nouveau mot de passe,
 suivi d'une connexion immédiate. Le lien passe par **`GET /api/auth/confirmation`**, qui
@@ -1429,13 +1529,28 @@ d'API refuse, elle ne redirige pas.**
 paramètres préservés** · `/api/factures/abc/pdf` → **401 sans redirection** · depuis
 `www.xn-facture.com` → 200 · depuis un hôte de prévisualisation → 200.
 
-**Trois variables, et seulement trois** — toutes en type **Config**, sur *All Environments* :
+**Trois variables indispensables** — toutes en type **Config**, sur *All Environments* :
 
 ```
 NEXT_PUBLIC_SUPABASE_URL       https://tpzmmgcfpnsysaghdqrx.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY  (208 caractères)
 NEXT_PUBLIC_SITE_URL           https://www.xn-facture.com
 ```
+
+⚠️ **Ce paragraphe disait « et seulement trois » — c'est devenu faux.** S'y ajoutent les
+variables **facultatives** qui n'ouvrent une fonctionnalité que si on les pose, et dont
+l'absence est un comportement prévu, jamais une panne :
+
+```
+XN_MOMO_MTN, XN_MOMO_ORANGE, XN_PAYMENT_HOLDER, XN_BILLING_EMAIL   encaissement
+TARA_API_KEY, TARA_BUSINESS_ID, TARA_WEBHOOK_SECRET                liens de paiement
+XN_AUTH_GOOGLE                                                     bouton Google
+```
+
+⚠️ **Les trois de Tara sont « Sensitive », Production seulement.** Elles ne sont **jamais**
+préfixées `NEXT_PUBLIC_` : la clé Tara transite dans le corps de la requête, la publier la
+donnerait à tout visiteur. La liste des variables **interdites** sur Vercel n'a pas changé —
+voir juste dessous.
 
 ⚠️ **`NEXT_PUBLIC_SITE_URL` restait à `https://xn-facture.vercel.app` au 16 sept. 2026**, le
 changement étant à faire dans l'interface Vercel. Il décide de l'adresse inscrite dans les
@@ -1575,7 +1690,8 @@ components/
                section, info-card, cta-button, pricing, testimonials, legal-page
                — chacun avec son .module.css, hors Tailwind
   auth/        auth-card (enveloppe commune), sign-in-form, sign-up-form,
-               create-company-form, forgot-password-form, reset-password-form
+               create-company-form, forgot-password-form, reset-password-form,
+               google-button (connexion Google — masqué sans XN_AUTH_GOOGLE)
   dashboard/   dashboard-view, dashboard-filters, stat-card, recent-invoices,
                invoice-row-actions, receivables-panel
   invoices/    invoice-form, invoice-list, invoice-detail, invoice-editor, invoice-preview,
@@ -1612,6 +1728,8 @@ lib/
   billing-config.ts Coordonnées d'encaissement et secret du webhook (ENVIRONNEMENT)
   site-origin.ts    Origine publique du site — source UNIQUE (emails, retours, webhook)
   auth-errors.ts    translateAuthError — PAS 'use server' (fonction synchrone partagée)
+  auth-providers.ts Affichage du bouton Google (XN_AUTH_GOOGLE) — l'activation
+                    RÉELLE est chez Supabase, vérifiée par /auth/v1/settings
   payments/tara.ts  Tara/Dikalo : création du lien, filtrage des URL par schéma
   period.ts         Préréglages de période du tableau de bord (bornes en Date.UTC)
   calendar.ts       Grille du DatePicker (lundi en tête)
