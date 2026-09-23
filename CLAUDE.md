@@ -1246,27 +1246,51 @@ l'extérieur : `external.google = true` sur `/auth/v1/settings`, bouton servi
 sur `/connexion` et `/inscription`, et **le clic mène réellement à
 `accounts.google.com` sans écran de blocage**.
 
-⚠️ **GOOGLE AFFICHE `tpzmmgcfpnsysaghdqrx.supabase.co`, PAS « XN-Facture ».**
-Constaté en capture d'écran sur la production, pas supposé : l'écran de Google
-dit « Accéder à l'application **tpzmmgcfpnsysaghdqrx.supabase.co** ». Ce n'est
-pas un défaut de configuration — le nom de l'application n'apparaît qu'une fois
-l'application **validée par Google** ; tant qu'elle ne l'est pas, Google
-affiche le domaine de l'URI de redirection, qui est celui de Supabase.
+##### L'écran de Google affiche « XN-Facture » — validation obtenue le 23 sept. 2026
 
-Rien n'est cassé, et les liens « Règles de confidentialité » / « Conditions
-d'utilisation » de cet écran pointent bien vers **nos** pages. Mais une chaîne
-de 20 caractères aléatoires inspire peu confiance sur un produit qui manipule
-de l'argent. **Deux sorties, aucune gratuite :**
+⚠️ **AVANT validation, il affichait `tpzmmgcfpnsysaghdqrx.supabase.co`.** Ce
+n'était pas un défaut de configuration : **le nom de l'application n'apparaît
+qu'une fois la marque validée par Google**. Tant qu'elle ne l'est pas, Google
+montre le domaine de l'URI de redirection — celui de Supabase. Une chaîne de
+20 caractères aléatoires sur l'écran où l'on confie son compte Google, pour un
+produit qui manipule de l'argent : c'est ce qui a motivé la démarche.
 
-1. **Validation de marque par Google** (« Centre de validation ») — gratuite,
-   exige de prouver la propriété de `xn-facture.com` dans Search Console, et
-   prend des jours à des semaines. Affiche ensuite le nom **et** le logo.
-2. **Domaine d'authentification propre chez Supabase** — option payante ; le
-   retour devient `auth.xn-facture.com`, et c'est ce domaine que Google
-   affiche. Plus rapide, mais ce reste un domaine, pas le nom.
+**La validation a été instantanée**, et c'est la conséquence directe des
+autorisations demandées. Supabase ne réclame que `email` et `profile`, qui ne
+sont **pas sensibles** : ni examen manuel, ni vidéo de démonstration, ni délai.
+La documentation et l'interface parlent pourtant de « jours à semaines » et
+affichent une bannière d'avertissement — **ne pas s'y fier, elle est générique
+et vise les autorisations sensibles.** Si un jour une demande d'accès sensible
+était ajoutée, tout cela changerait.
 
-**Décision à prendre avec l'utilisateur. Ne pas engager la validation Google
-sans lui demander** — elle met le projet sous examen.
+**Ce qu'il a fallu, dans l'ordre :** écran de consentement Externe → **En
+production** (le bouton reste grisé tant que page d'accueil et politique de
+confidentialité manquent) → propriété de `xn-facture.com` prouvée dans **Google
+Search Console** par un **deuxième TXT sur l'apex** → domaine autorisé accepté
+dans *Branding* → « Vérifier le branding ».
+
+⚠️ **LE TXT DE GOOGLE S'AJOUTE AU SPF, il ne le remplace pas.** Deux TXT sur
+`@` est normal et valide. Écraser
+`v=spf1 mx:xn-facture.com a:mail.xn-facture.com a:mailphp.lws-hosting.com -all`
+ferait tomber les emails du domaine en indésirables, et le symptôme
+n'apparaîtrait que chez les destinataires, des jours plus tard. La ligne est
+versionnée dans `xn-facture.com.zone` avec le commentaire qui le rappelle.
+
+**Vérifié après validation, en production** : l'écran dit « Accéder à
+l'application **XN-Facture** », la chaîne `supabase.co` a disparu, aucun
+avertissement · TXT servi par **les quatre** serveurs `ns17-20.lwsdns.com` et
+vu par **8.8.8.8, 1.1.1.1, 9.9.9.9 et OpenDNS** · **SPF, MX, DKIM Resend et
+DMARC relus intacts** sur le serveur faisant autorité.
+
+⚠️ **Le logo est rendu dans un carré d'environ 36 px.** Le logo horizontal
+(tuile + mot « FACTURE ») y est **illisible** — constaté en capture, pas
+supposé. Une version carrée, la tuile « XN » seule, y serait nette. Simple
+remplacement d'image dans *Branding*, non fait.
+
+**Alternative écartée, pour mémoire :** le domaine d'authentification propre de
+Supabase (option payante) aurait fait afficher `auth.xn-facture.com`. Plus
+rapide en apparence, mais payant, récurrent, et cela reste un domaine — pas le
+nom de l'application. La validation était gratuite et a mieux répondu.
 
 ⚠️ **DEUX RÉGLAGES DOIVENT S'ACCORDER**, et l'un ne suffit jamais :
 
