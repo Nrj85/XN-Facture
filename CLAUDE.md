@@ -1101,6 +1101,21 @@ Un test qui accorde ce droit devrait le retirer dans un `finally`, pas à la der
   honnête (`entreprise supprimée` au lieu d'un nom) : le défaut était le **volume**, pas le
   libellé. Après purge : 7 lignes, toutes réelles.
 
+  ⚠️ **PURGER LE JOURNAL AVANT DE SUPPRIMER L'ENTREPRISE NE SERT À RIEN — payé le
+  23 sept. 2026.** Le déclencheur écrit une ligne `company / deleted` **pendant** la
+  suppression : une purge placée plus haut dans la même transaction s'exécute avant que
+  cette ligne n'existe, et le `delete from public.companies` la recrée aussitôt derrière.
+  **La purge vient APRÈS, en dernier.** Constaté sur une suppression pourtant menée dans
+  le bon ordre de dépendances : tout était propre, et le journal comptait une orpheline
+  de plus.
+
+  ⚠️ **Un script de test qui supprime ses entreprises laisse SES lignes de journal.**
+  Quatre résidus du 22 sept. 2026 (deux comptes jetables, `created` + `deleted`) ont
+  survécu à un ménage qui vérifiait pourtant entreprises, comptes, appartenances,
+  orphelines et `platform_admins` — mais pas le journal. **Ajouter le décompte des
+  lignes de journal orphelines à tout contrôle de ménage**, c'est une colonne de plus
+  dans la même requête.
+
   **Purge des lignes devenues orphelines — par la console SQL**, comme l'ajout d'un
   administrateur :
 
