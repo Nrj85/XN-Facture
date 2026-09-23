@@ -1217,18 +1217,41 @@ vers `/connexion` en mémorisant la destination dans `?suite=`. L'inscription cr
 projet exige une confirmation par email, il n'y a pas encore de session à l'inscription et
 `/bienvenue` rattrape le cas — un compte sans entreprise serait un cul-de-sac.
 
-#### Connexion et inscription avec un compte Google (22 sept. 2026) — CODE PRÊT, NON ACTIVÉ
+#### Connexion et inscription avec un compte Google (22 sept. 2026) — **ACTIF EN PRODUCTION depuis le 23 sept. 2026**
 
 Bouton en tête de **`/connexion`** (« Continuer avec Google ») **et de
 `/inscription`** (« S'inscrire avec Google »), au-dessus du formulaire email et
 séparé par un « ou ». Au-dessus, parce que le placer dessous en ferait un
 chemin de repli alors que c'est le plus court — un clic contre quatre champs.
 
-⚠️ **RIEN N'EST ACTIF AUJOURD'HUI : `external_google_enabled = false` sur le
-projet Supabase**, et ni identifiant ni secret ne sont renseignés. Il faut un
-client OAuth créé dans **Google Cloud Console** par le titulaire du compte —
-cela ne peut pas se faire depuis le code. Le bouton reste donc invisible, ce
-qui est le comportement voulu, pas une panne.
+**Activé le 23 sept. 2026.** Projet Google Cloud `xn-facture`
+(numéro 1066202177367), écran de consentement **Externe**, état **En
+production** — donc sans limite de 100 utilisateurs de test. Vérifié depuis
+l'extérieur : `external.google = true` sur `/auth/v1/settings`, bouton servi
+sur `/connexion` et `/inscription`, et **le clic mène réellement à
+`accounts.google.com` sans écran de blocage**.
+
+⚠️ **GOOGLE AFFICHE `tpzmmgcfpnsysaghdqrx.supabase.co`, PAS « XN-Facture ».**
+Constaté en capture d'écran sur la production, pas supposé : l'écran de Google
+dit « Accéder à l'application **tpzmmgcfpnsysaghdqrx.supabase.co** ». Ce n'est
+pas un défaut de configuration — le nom de l'application n'apparaît qu'une fois
+l'application **validée par Google** ; tant qu'elle ne l'est pas, Google
+affiche le domaine de l'URI de redirection, qui est celui de Supabase.
+
+Rien n'est cassé, et les liens « Règles de confidentialité » / « Conditions
+d'utilisation » de cet écran pointent bien vers **nos** pages. Mais une chaîne
+de 20 caractères aléatoires inspire peu confiance sur un produit qui manipule
+de l'argent. **Deux sorties, aucune gratuite :**
+
+1. **Validation de marque par Google** (« Centre de validation ») — gratuite,
+   exige de prouver la propriété de `xn-facture.com` dans Search Console, et
+   prend des jours à des semaines. Affiche ensuite le nom **et** le logo.
+2. **Domaine d'authentification propre chez Supabase** — option payante ; le
+   retour devient `auth.xn-facture.com`, et c'est ce domaine que Google
+   affiche. Plus rapide, mais ce reste un domaine, pas le nom.
+
+**Décision à prendre avec l'utilisateur. Ne pas engager la validation Google
+sans lui demander** — elle met le projet sous examen.
 
 ⚠️ **DEUX RÉGLAGES DOIVENT S'ACCORDER**, et l'un ne suffit jamais :
 
@@ -1237,7 +1260,19 @@ qui est le comportement voulu, pas une panne.
    marcher la connexion.
 2. **`XN_AUTH_GOOGLE=1`** (`lib/auth-providers.ts`) — décide seulement si le
    bouton s'affiche. Même motif que `lib/billing-config.ts` : sans la
-   variable, aucun contrôle n'apparaît (§6.1).
+   variable, aucun contrôle n'apparaît (§6.1). Posée sur Vercel en **Config**,
+   **Production seulement** : les liens de retour partent toujours vers
+   `www.xn-facture.com` (`NEXT_PUBLIC_SITE_URL`), donc un bouton sur un
+   déploiement de prévisualisation ramènerait l'utilisateur en production au
+   milieu de son parcours.
+
+⚠️ **PIÈGE D'ORDRE PAYÉ LE 23 sept. 2026 : enregistrer la variable APRÈS avoir
+redéployé ne sert à rien.** Le premier redéploiement a reconstruit avec
+l'ancien environnement ; le code neuf était bien en ligne (prouvé par la sonde
+`?retour=`, et `X-Vercel-Cache: MISS` écartait le cache) mais le bouton restait
+absent. **De l'extérieur, une variable absente et une variable vide sont
+indiscernables** — seule la liste Vercel les distingue. Toujours : enregistrer,
+**puis** redéployer.
 
 Dans Google Cloud, l'URI de redirection autorisée est celle de **Supabase**,
 pas la nôtre : `https://tpzmmgcfpnsysaghdqrx.supabase.co/auth/v1/callback`.
@@ -1352,11 +1387,20 @@ copies auraient divergé sur un texte qui parle d'argent.
   **ménage vérifié : 0 entreprise, 0 compte, 0 orpheline, 1 administrateur
   (le vrai)**.
 
-⚠️ **CE QUI N'A PAS PU ÊTRE ÉPROUVÉ : le parcours qui RÉUSSIT.** Il exige un
-client OAuth Google réel. Ce qui est vérifié, c'est la construction de l'URL
-d'autorisation (observée une fois, `redirect_to` portant `suite` et `retour`),
-et tous les chemins d'échec. L'échange du code est celui qui sert déjà en
-production aux liens de réinitialisation.
+**Vérifié EN PRODUCTION le 23 sept. 2026, après activation (8 contrôles)** :
+bouton présent sur `/connexion` (40 px, les quatre couleurs du G, séparateur) ·
+présent sur `/inscription` avec la formule toujours annoncée · **le clic mène
+réellement à `accounts.google.com`** · **aucun écran de blocage, aucun
+avertissement « application non validée »** · `redirect_to` observé en
+`https://www.xn-facture.com/api/auth/confirmation?suite=/dashboard&retour=/connexion`
+· les sondes `?retour=` et anti-redirection-ouverte répondent juste sur le
+domaine réel.
+
+⚠️ **CE QUI N'A TOUJOURS PAS ÉTÉ ÉPROUVÉ : la connexion menée à son terme.**
+Elle exige de saisir un vrai mot de passe Google, ce qui ne peut pas se faire
+ici. Sont prouvés : l'aller jusqu'à Google, l'URL de retour, et l'absence de
+blocage. Restent à constater par l'utilisateur : le retour sur `/bienvenue`, la
+création de l'entreprise, et le nom repris de Google dans la barre latérale.
 
 ### Mot de passe oublié — `/mot-de-passe-oublie`, `/nouveau-mot-de-passe`
 Trois étapes : demande (adresse email) → lien reçu par email → choix du nouveau mot de passe,
