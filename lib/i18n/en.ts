@@ -196,6 +196,8 @@ export const en: typeof fr = {
     passwordAction: 'Change password',
     passwordSaved: 'Password changed.',
     passwordMismatch: 'The two passwords do not match.',
+    passwordReveal: 'Show password',
+    passwordHide: 'Hide password',
     languageTitle: 'Personal preferences',
     languageHint:
       'These settings only affect you. Your colleagues keep theirs, and your invoices stay in French.',

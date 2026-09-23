@@ -7,6 +7,7 @@ import { Loader2, MailCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import { PasswordInput } from '@/components/ui/password-input';
 import { AuthCard } from '@/components/auth/auth-card';
 import { ChosenPlan } from '@/components/auth/chosen-plan';
 import { GoogleButton } from '@/components/auth/google-button';
@@ -179,9 +180,8 @@ export function SignUpForm({
 
         <Field label="Mot de passe" required hint="8 caractères au minimum.">
           {(props) => (
-            <Input
+            <PasswordInput
               {...props}
-              type="password"
               autoComplete="new-password"
               required
               minLength={8}

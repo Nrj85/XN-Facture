@@ -7,6 +7,7 @@ import { Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import { PasswordInput } from '@/components/ui/password-input';
 import { AuthCard } from '@/components/auth/auth-card';
 import { GoogleButton } from '@/components/auth/google-button';
 import { signIn } from '@/lib/actions/auth';
@@ -107,9 +108,8 @@ export function SignInForm({ googleEnabled = false }: { googleEnabled?: boolean 
         <div className="space-y-1.5">
           <Field label="Mot de passe" required>
             {(props) => (
-              <Input
+              <PasswordInput
                 {...props}
-                type="password"
                 autoComplete="current-password"
                 required
                 value={password}

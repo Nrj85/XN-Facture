@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { KeyRound, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Field } from '@/components/ui/field';
-import { Input } from '@/components/ui/input';
+import { PasswordInput } from '@/components/ui/password-input';
 import { AuthCard } from '@/components/auth/auth-card';
 import { updatePassword } from '@/lib/actions/auth';
 
@@ -104,9 +104,8 @@ export function ResetPasswordForm({ hasSession, email }: { hasSession: boolean; 
 
         <Field label="Nouveau mot de passe" required hint="8 caractères au minimum.">
           {(props) => (
-            <Input
+            <PasswordInput
               {...props}
-              type="password"
               autoComplete="new-password"
               required
               minLength={8}
@@ -123,9 +122,8 @@ export function ResetPasswordForm({ hasSession, email }: { hasSession: boolean; 
           error={mismatch ? 'Les deux saisies diffèrent.' : undefined}
         >
           {(props) => (
-            <Input
+            <PasswordInput
               {...props}
-              type="password"
               autoComplete="new-password"
               required
               invalid={mismatch}

@@ -402,6 +402,54 @@ changement légitime → connexion au nouveau, ancien refusé, **les trois champ
 changement d'adresse → message français expliquant que c'est le serveur, adresse inchangée en
 base.
 
+##### Afficher / masquer le mot de passe — `ui/password-input.tsx` (23 sept. 2026)
+
+Demandé par l'utilisateur : rien ne permettait de relire ce qu'on tapait, et
+changer son mot de passe revenait à saisir **deux fois à l'aveugle** une chaîne
+qu'on ne verrait jamais. Sur téléphone, où la frappe est la moins sûre, c'est
+précisément là que la relecture compte.
+
+⚠️ **UN SEUL composant pour les SEPT champs du projet** — connexion,
+inscription, nouveau mot de passe ×2, carte Sécurité ×3. **Il ne reste plus un
+seul `type="password"` en dur dans le dépôt**, et c'est le contrôle à rejouer
+après tout ajout : `grep -rn 'type="password"' components/ app/` doit ne rien
+rendre.
+
+⚠️ **PIÈGE DU CLAVIER MOBILE, le plus sérieux de ce composant.** Passer le champ
+de `password` à `text` fait perdre les garanties implicites du type : Android et
+iOS appliquent alors **majuscule automatique, correction et suggestions**.
+Quelqu'un qui révèle son mot de passe puis continue de taper obtiendrait un
+« M » là où il a frappé « m », **sans rien voir d'anormal**. D'où
+`autoCapitalize="off"`, `autoCorrect="off"` et `spellCheck={false}` en dur —
+**ne pas les retirer.**
+
+⚠️ **`type="button"` est obligatoire.** Un `<button>` sans type vaut `submit`
+dans un formulaire : cliquer sur l'œil aurait soumis la connexion. Vérifié sur
+les sept champs — le clic ne déclenche aucune soumission.
+
+⚠️ **Le libellé décrit CE QUE LE CLIC VA FAIRE et change avec l'état.** Figé, il
+ferait annoncer « afficher » par un lecteur d'écran sur un mot de passe déjà
+affiché. Il est traduit sur `/parametres` (`passwordReveal` / `passwordHide`) et
+en français en dur sur les écrans d'authentification, qui ne sont pas encore
+traduits.
+
+⚠️ **Chaque champ a SON état, et rien ne se réinitialise tout seul.** Révéler
+« nouveau mot de passe » n'affiche ni l'actuel ni la confirmation — vérifié. Une
+bascule qui se refermerait à la perte du focus ou au vidage du champ
+surprendrait plus qu'elle ne protégerait.
+
+`pr-11` sur le champ : sans ce retrait, la fin d'un long mot de passe passe sous
+le bouton — exactement ce que la bascule est censée éviter. 36 × 36 px, le
+plancher tactile du §6.5, tenu à l'intérieur d'un champ de 40 px.
+
+**Vérifié à l'écran, les sept champs (24 contrôles)** : masqué au chargement
+partout · le clic révèle la saisie réelle · le libellé passe à « Masquer » puis
+revient · **aucune soumission déclenchée** · 36 × 36 partout · `padding-right`
+44 px · majuscules/correction/orthographe coupées · `autoComplete` préservé et
+distinct (`current-password` vs `new-password`) · **le bouton reste DANS le
+champ même dans la colonne étroite de la grille à deux colonnes** · états
+indépendants · sur 500 px : aucun débordement.
+
 ⚠️ **Piège de test :** `/parametres` porte **deux** champs `input[type=email]` — celui des
 coordonnées de l'ENTREPRISE et celui de la carte Sécurité. Un `querySelector('input[type=email]')`
 attrape le premier, laisse le second vide, et le bouton reste désactivé : le test conclut à un
@@ -1818,7 +1866,8 @@ app/
 components/
   admin/       admin-view, export-companies-button (export CSV des entreprises)
   ui/          Primitives : button, icon-button, card, input, field, switch, combobox,
-               date-picker, dialog, popover, action-menu, status-badge, empty-state
+               date-picker, dialog, popover, action-menu, status-badge, empty-state,
+               password-input (bascule afficher/masquer — les 7 champs du projet)
   layout/      app-shell, sidebar, topbar, logo, page-placeholder,
                account-badge (Admin + formule payante)
   marketing/   site-header, site-footer (+ FinalCta), hero, app-preview, reveal,
@@ -2125,6 +2174,7 @@ mouvement décoratif sape la crédibilité.
 | `ui/date-picker.tsx` | Calendrier. **Remplace `<input type="date">` partout** |
 | `ui/dialog.tsx` | `Dialog` et `ConfirmDialog` sur `<dialog>` natif — piège à focus, Échap, inertie gratuits. ⚠️ **Son bouton « Fermer » fait 32 px**, sous le plancher de 36 px du §6.5 — mesuré, non corrigé : il touche toutes les modales |
 | `ui/field.tsx` · `input.tsx` · `switch.tsx` · `empty-state.tsx` | Champs et états |
+| `ui/password-input.tsx` | **Seule** façon d écrire un champ de mot de passe : bascule afficher/masquer, clavier mobile neutralisé. Aucun `type="password"` en dur ailleurs |
 | `layout/logo.tsx` | Marque. **`href` la rend cliquable** ; sans lui elle reste un `<span>` — un logo qui ne mène nulle part ne doit pas se comporter comme un lien. Destination : `/` depuis les écrans d'authentification, `/dashboard` depuis l'application |
 | `layout/app-shell.tsx` · `sidebar` · `topbar` | Coquille et navigation. L'action principale de la barre supérieure **suit la section** (`primaryAction`) |
 | `dashboard/stat-card.tsx` | Carte de statistique (valeur, unité, jauge, aide) |
@@ -2300,6 +2350,14 @@ doivent être identiques dans le formulaire, l'aperçu, le détail et le PDF.
 - **La première invocation d'une Server Action sur un serveur fraîchement démarré compile à
   froid** : un test qui n'attend que 3 s conclut à un bouton mort. Précharger la route, ou
   attendre par condition plutôt que par délai fixe.
+- ⚠️ **`Input.dispatchMouseEvent` PREND DES COORDONNÉES DANS L'ÉCRAN, pas dans le document.**
+  Payé le 23 sept. 2026 sur `/parametres`, qui est une page longue : la carte Sécurité est
+  sous la ligne de flottaison, `getBoundingClientRect().y` valait plus que la hauteur de la
+  fenêtre, et le clic est **tombé dans le vide sans rien signaler**. L'assertion échouait donc
+  sur un composant parfaitement fonctionnel — le même clic passait sur une page courte.
+  **Appeler `scrollIntoView({ block: 'center' })` puis RECALCULER le rectangle**, et vérifier
+  `r.top >= 0 && r.bottom <= window.innerHeight` avant de cliquer. Un clic CDP hors écran
+  n'émet aucune erreur : c'est le silence qui rend ce piège coûteux.
 - Écrire une capture d'écran depuis Bash échoue en « Accès refusé » : passer par PowerShell.
 - En développement, Next compile chaque route au premier accès (~25 s) : `curl -m 90` avant de
   conclure qu'un serveur est en panne.

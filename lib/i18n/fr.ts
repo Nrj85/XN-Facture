@@ -211,6 +211,8 @@ export const fr = {
     passwordAction: 'Changer le mot de passe',
     passwordSaved: 'Mot de passe changé.',
     passwordMismatch: 'Les deux mots de passe ne correspondent pas.',
+    passwordReveal: 'Afficher le mot de passe',
+    passwordHide: 'Masquer le mot de passe',
     languageTitle: 'Préférences personnelles',
     languageHint:
       'Ces réglages ne concernent que vous. Vos collègues gardent les leurs, et vos factures restent en français.',

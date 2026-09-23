@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import { PasswordInput } from '@/components/ui/password-input';
 import { updateEmailAction, updatePasswordAction } from '@/lib/actions/account';
 import { useT } from '@/lib/i18n/context';
 
@@ -163,9 +164,10 @@ export function SecurityForm({ currentEmail }: { currentEmail: string }) {
               className="sm:col-span-2"
             >
               {(props) => (
-                <Input
+                <PasswordInput
                   {...props}
-                  type="password"
+                  revealLabel={t.settings.passwordReveal}
+                  hideLabel={t.settings.passwordHide}
                   autoComplete="current-password"
                   value={actuel}
                   disabled={mdpEnCours}
@@ -180,9 +182,10 @@ export function SecurityForm({ currentEmail }: { currentEmail: string }) {
 
             <Field label={t.settings.newPassword} required hint={t.settings.newPasswordHint}>
               {(props) => (
-                <Input
+                <PasswordInput
                   {...props}
-                  type="password"
+                  revealLabel={t.settings.passwordReveal}
+                  hideLabel={t.settings.passwordHide}
                   autoComplete="new-password"
                   minLength={8}
                   value={nouveau}
@@ -198,9 +201,10 @@ export function SecurityForm({ currentEmail }: { currentEmail: string }) {
 
             <Field label={t.settings.confirmPassword} required>
               {(props) => (
-                <Input
+                <PasswordInput
                   {...props}
-                  type="password"
+                  revealLabel={t.settings.passwordReveal}
+                  hideLabel={t.settings.passwordHide}
                   autoComplete="new-password"
                   value={confirmation}
                   invalid={confirmation.length > 0 && confirmation !== nouveau}
