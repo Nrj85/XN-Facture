@@ -11,6 +11,10 @@ pop 86400 IN CNAME mail.xn-facture.com.
 smtp 86400 IN CNAME mail.xn-facture.com.
 www 3600 IN CNAME 48460a88f6a26d4d.vercel-dns-017.com.
 @ 86400 IN TXT v=spf1 mx:xn-facture.com a:mail.xn-facture.com a:mailphp.lws-hosting.com -all
+; Propriete du domaine pour Google Search Console (23 sept. 2026), prealable a
+; la validation de l'ecran de consentement OAuth. DEUXIEME TXT sur l'apex : il
+; s'AJOUTE au SPF ci-dessus, il ne le remplace pas.
+@ 86400 IN TXT google-site-verification=XrzQwFEJ8mMVsdXtdqeX9QJH1okdoXiorYmy3Z6Vsyg
 dkim._domainkey 3600 IN TXT v=DKIM1; k=rsa; p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQC8C8Xh049AFp+LuKVCUlwahtRFxO85rrJ0dE0idCfNAsI5Nlobf02gik8jesZ04clvZ0lxaM+L8IU50AKVHeFva83Y7LVJdeaXk14fO3gwQ1r/asNhzvg++88bfhSaLKD5M4Eid13mBrpsV3gP/MeGIzsty0AMUUNpDwe0otnv3wIDAQAB
 _dmarc 86400 IN TXT v=DMARC1; p=quarantine;
 resend._domainkey 3600 IN TXT p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDDTRYdb8WyDXfYXfNTt0kVIxt/cnj8LbPAhSQ0ybR/9vUvZlDx6ZBF5GEibR2hmIN6Lvlmk7Koup7VHTPKyWyYZd1NiGp5gswLLepPEB1rslDD8frxjLG3c80ZI8O42hxx2GvWeYoF5ogyqKoRGji/CS4qgvqm+Ee4jUsUbqee3QIDAQAB
