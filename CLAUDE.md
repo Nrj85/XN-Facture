@@ -1396,11 +1396,23 @@ avertissement « application non validée »** · `redirect_to` observé en
 · les sondes `?retour=` et anti-redirection-ouverte répondent juste sur le
 domaine réel.
 
-⚠️ **CE QUI N'A TOUJOURS PAS ÉTÉ ÉPROUVÉ : la connexion menée à son terme.**
-Elle exige de saisir un vrai mot de passe Google, ce qui ne peut pas se faire
-ici. Sont prouvés : l'aller jusqu'à Google, l'URL de retour, et l'absence de
-blocage. Restent à constater par l'utilisateur : le retour sur `/bienvenue`, la
-création de l'entreprise, et le nom repris de Google dans la barre latérale.
+**LE PARCOURS COMPLET EST ÉPROUVÉ — 23 sept. 2026.** Connexion menée à son
+terme par l'utilisateur, puis **constatée en base** :
+
+```
+jrengou.mail.pro@gmail.com   raw_app_meta_data->>'provider' = 'google'
+full_name = « Jacques » (repris de Google, jamais saisi)
+entreprise « Jacques.Pro » créée par /bienvenue · plan = discovery
+```
+
+La chaîne entière tient donc : Google → callback → session → aucune entreprise
+→ `/bienvenue` → `create_company_for_current_user`. **Aucun code spécifique à
+Google n'a été nécessaire après le callback** — c'est exactement le chemin du
+compte confirmé par email, ce qui était le pari de conception.
+
+⚠️ `requested` vaut `null` sur ce compte, et c'est **correct** : le parcours est
+parti de `/connexion`, pas d'un bouton de la grille tarifaire. Ne pas y lire une
+régression du transport de formule, qui est éprouvé à part (voir ci-dessus).
 
 ### Mot de passe oublié — `/mot-de-passe-oublie`, `/nouveau-mot-de-passe`
 Trois étapes : demande (adresse email) → lien reçu par email → choix du nouveau mot de passe,
