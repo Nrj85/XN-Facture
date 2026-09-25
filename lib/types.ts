@@ -48,6 +48,12 @@ export interface Invoice {
   items: InvoiceItem[];
   /** Taux de TVA appliqué à la facture entière, en pourcentage (19.25). */
   vatRate: number;
+  /**
+   * L'émetteur n'était PAS assujetti à la TVA au moment de l'émission.
+   * Gelé sur le document : s'assujettir plus tard ne réécrit pas les pièces
+   * déjà remises aux clients.
+   */
+  vatExempt: boolean;
   /** Adresse de facturation, figée sur la facture au moment de son émission. */
   address: string;
   notes?: string;
@@ -91,6 +97,12 @@ export interface Company {
   currency: Currency;
   /** Taux appliqué aux NOUVELLES factures. Les factures existantes gardent le leur. */
   vatRate: number;
+  /**
+   * L'entreprise collecte-t-elle la TVA ? Faux : les nouveaux documents
+   * partent à 0 % et portent « TVA non applicable ». Les documents déjà émis
+   * ne bougent pas.
+   */
+  vatRegistered: boolean;
   paymentTermsDays: number;
   invoicePrefix: string;
   defaultNotes?: string;
@@ -130,6 +142,8 @@ export interface Quote {
   validUntil: IsoDate;
   items: InvoiceItem[];
   vatRate: number;
+  /** Voir `Invoice.vatExempt` : gelé au moment de l'émission. */
+  vatExempt: boolean;
   address: string;
   notes?: string;
   status: QuoteStatus;

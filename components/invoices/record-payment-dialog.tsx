@@ -8,6 +8,7 @@ import { Dialog } from '@/components/ui/dialog';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { useCompany } from '@/lib/company-context';
+import { totalLabel } from '@/lib/vat';
 import { recordPaymentAction } from '@/lib/actions/invoices';
 import type { InvoiceView } from '@/lib/types';
 
@@ -107,7 +108,7 @@ export function RecordPaymentDialog({
     >
       <dl className="mb-4 space-y-1.5">
         <div className="flex items-baseline justify-between gap-4">
-          <dt className="text-[12.5px] text-ink-2">Total TTC</dt>
+          <dt className="text-[12.5px] text-ink-2">{totalLabel(invoice.vatExempt)}</dt>
           <dd className="tabular text-[13px] font-medium text-ink">{formatMoney(invoice.total)}</dd>
         </div>
         {invoice.amountPaid > 0 && (

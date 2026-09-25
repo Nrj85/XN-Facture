@@ -4,6 +4,7 @@ import type { InvoiceTotals } from '@/lib/invoice-calc';
 import { formatDate } from '@/lib/format';
 import { formatAmount, formatQuantity } from '@/lib/money';
 import { useCompany } from '@/lib/company-context';
+import { totalsBlock } from '@/lib/vat';
 import type { Client } from '@/lib/types';
 
 export interface PreviewLine {
@@ -30,6 +31,7 @@ export function InvoicePreview({
   dueDate,
   lines,
   totals,
+  vatExempt = false,
   notes,
 }: {
   /**
@@ -46,10 +48,13 @@ export function InvoicePreview({
   dueDate: string;
   lines: PreviewLine[];
   totals: InvoiceTotals;
+  /** Hors du champ de la TVA : aucune ligne de taxe, une mention à la place. */
+  vatExempt?: boolean;
   notes?: string;
 }) {
   const { company, formatMoney } = useCompany();
   const isQuote = variant === 'quote';
+  const bloc = totalsBlock(totals, vatExempt);
   return (
     <article className="relative isolate overflow-hidden rounded-[10px] border border-line bg-surface p-5 shadow-card sm:p-6">
       {/* Filigrane — même opacité et même cadrage que le PDF (`invoice-document.tsx`).
@@ -193,26 +198,23 @@ export function InvoicePreview({
 
       <div className="mt-4 flex justify-end">
         <dl className="w-full max-w-[240px] space-y-1.5">
-          <div className="flex items-baseline justify-between gap-4">
-            <dt className="text-[12px] text-ink-2">Sous-total HT</dt>
-            <dd className="tabular text-[12.5px] font-medium text-ink">
-              {formatMoney(totals.subtotal)}
-            </dd>
-          </div>
-          <div className="flex items-baseline justify-between gap-4">
-            <dt className="text-[12px] text-ink-2">
-              TVA {totals.vatRate.toString().replace('.', ',')} %
-            </dt>
-            <dd className="tabular text-[12.5px] font-medium text-ink">
-              {formatMoney(totals.vatAmount)}
-            </dd>
-          </div>
+          {bloc.rows.map((row) => (
+            <div key={row.label} className="flex items-baseline justify-between gap-4">
+              <dt className="text-[12px] text-ink-2">{row.label}</dt>
+              <dd className="tabular text-[12.5px] font-medium text-ink">
+                {formatMoney(row.amount)}
+              </dd>
+            </div>
+          ))}
+
           <div className="flex items-baseline justify-between gap-4 border-t border-line pt-2">
-            <dt className="text-[12.5px] font-semibold text-ink">Total TTC</dt>
+            <dt className="text-[12.5px] font-semibold text-ink">{bloc.totalLabel}</dt>
             <dd className="tabular text-[15px] font-bold tracking-[-0.02em] text-ink">
-              {formatMoney(totals.total)}
+              {formatMoney(bloc.totalAmount)}
             </dd>
           </div>
+
+          {bloc.mention && <p className="pt-0.5 text-[11px] text-ink-3">{bloc.mention}</p>}
         </dl>
       </div>
 

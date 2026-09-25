@@ -15,6 +15,7 @@ import { LineItemsEditor, parseNumber, type DraftItem } from '@/components/invoi
 import { TotalsSummary } from '@/components/invoices/totals-summary';
 import { InvoicePreview } from '@/components/invoices/invoice-preview';
 import { computeTotals } from '@/lib/invoice-calc';
+import { newDocumentVat } from '@/lib/vat';
 import { addDays } from '@/lib/format';
 
 import { useCompany } from '@/lib/company-context';
@@ -123,9 +124,22 @@ export function InvoiceForm({
     [form.items],
   );
 
+  // ⚠️ **Une facture EXISTANTE garde son taux ET son régime**, une nouvelle
+  // prend ceux de l'entreprise. Lire `company.vatRate` seul afficherait
+  // 19,25 % dans l'aperçu d'une entreprise non assujettie, pendant que le
+  // serveur enregistrerait 0 — or l'aperçu prétend montrer le document tel
+  // que le client le recevra.
+  const regime = useMemo(
+    () =>
+      invoice
+        ? { rate: invoice.vatRate, exempt: invoice.vatExempt }
+        : newDocumentVat(company),
+    [invoice, company],
+  );
+
   const totals = useMemo(
-    () => computeTotals(parsedItems, invoice?.vatRate ?? company.vatRate),
-    [parsedItems, invoice?.vatRate, company.vatRate],
+    () => computeTotals(parsedItems, regime.rate),
+    [parsedItems, regime.rate],
   );
 
   // L'aperçu ne montre que les lignes réellement commencées : sur un formulaire
@@ -360,7 +374,7 @@ export function InvoiceForm({
               />
 
               <div className="mt-5 border-t border-line pt-4">
-                <TotalsSummary totals={totals} className="ml-auto max-w-xs" />
+                <TotalsSummary totals={totals} vatExempt={regime.exempt} className="ml-auto max-w-xs" />
               </div>
             </div>
           </Card>
@@ -400,6 +414,7 @@ export function InvoiceForm({
                 dueDate={form.dueDate}
                 lines={previewLines}
                 totals={totals}
+                vatExempt={regime.exempt}
                 notes={form.notes.trim() || undefined}
               />
             </Card>

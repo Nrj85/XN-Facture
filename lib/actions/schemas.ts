@@ -76,6 +76,7 @@ export const companySchema = z.object({
   logoDataUrl: z.string().optional(),
   currency: z.enum(['XAF', 'XOF']),
   vatRate: z.number().min(0, 'Taux attendu entre 0 et 100.').max(100, 'Taux attendu entre 0 et 100.'),
+  vatRegistered: z.boolean(),
   paymentTermsDays: z
     .number()
     .int('Délai attendu en jours entiers.')

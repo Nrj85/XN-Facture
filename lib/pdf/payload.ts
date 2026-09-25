@@ -36,6 +36,12 @@ export interface PdfPayload {
   subtotal: number;
   vatRate: number;
   vatAmount: number;
+  /**
+   * L'émetteur n'était pas assujetti à la TVA : le document ne porte aucune
+   * ligne de taxe, mais une mention. Optionnel pour ne pas invalider une
+   * charge produite avant la migration 0014.
+   */
+  vatExempt?: boolean;
   total: number;
   amountPaid: number;
   balanceDue: number;
@@ -58,6 +64,7 @@ export function isPdfPayload(value: unknown): value is PdfPayload {
 
   if (typeof p.issueDate !== 'string' || typeof p.dueDate !== 'string') return false;
   if (p.docType !== undefined && p.docType !== 'invoice' && p.docType !== 'quote') return false;
+  if (p.vatExempt !== undefined && typeof p.vatExempt !== 'boolean') return false;
   if (typeof p.company !== 'object' || p.company === null) return false;
   if (typeof p.client !== 'object' || p.client === null) return false;
   if (!Array.isArray(p.lines)) return false;

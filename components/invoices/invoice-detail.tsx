@@ -19,6 +19,7 @@ import { invoiceStatusActions } from '@/components/invoices/invoice-status-actio
 import { useCreationNotice } from '@/components/documents/use-creation-notice';
 import { formatDate } from '@/lib/format';
 import { computeTotals } from '@/lib/invoice-calc';
+import { totalsBlock } from '@/lib/vat';
 import { formatQuantity } from '@/lib/money';
 import { useCompany } from '@/lib/company-context';
 import { useT } from '@/lib/i18n/context';
@@ -52,6 +53,7 @@ export function InvoiceDetail({
   const { notice, dismiss } = useCreationNotice(`/factures/${invoice.id}`);
 
   const totals = computeTotals(invoice.items, invoice.vatRate);
+  const bloc = totalsBlock(totals, invoice.vatExempt);
 
   /** Enveloppe commune : toute écriture remonte son refus au même endroit. */
   const run = (action: () => Promise<ActionResult<unknown>>) => {
@@ -209,26 +211,23 @@ export function InvoiceDetail({
 
             <div className="border-t border-line p-5">
               <dl className="ml-auto max-w-xs space-y-2">
-                <div className="flex items-baseline justify-between gap-4">
-                  <dt className="text-[12.5px] text-ink-2">Sous-total HT</dt>
-                  <dd className="tabular text-[13px] font-medium text-ink">
-                    {formatMoney(totals.subtotal)}
-                  </dd>
-                </div>
-                <div className="flex items-baseline justify-between gap-4">
-                  <dt className="text-[12.5px] text-ink-2">
-                    TVA {invoice.vatRate.toString().replace('.', ',')} %
-                  </dt>
-                  <dd className="tabular text-[13px] font-medium text-ink">
-                    {formatMoney(totals.vatAmount)}
-                  </dd>
-                </div>
+                {bloc.rows.map((row) => (
+                  <div key={row.label} className="flex items-baseline justify-between gap-4">
+                    <dt className="text-[12.5px] text-ink-2">{row.label}</dt>
+                    <dd className="tabular text-[13px] font-medium text-ink">
+                      {formatMoney(row.amount)}
+                    </dd>
+                  </div>
+                ))}
                 <div className="flex items-baseline justify-between gap-4 border-t border-line pt-2.5">
-                  <dt className="text-[13px] font-semibold text-ink">Total TTC</dt>
+                  <dt className="text-[13px] font-semibold text-ink">{bloc.totalLabel}</dt>
                   <dd className="tabular text-[17px] font-bold tracking-[-0.02em] text-ink">
-                    {formatMoney(totals.total)}
+                    {formatMoney(bloc.totalAmount)}
                   </dd>
                 </div>
+                {bloc.mention && (
+                  <p className="text-[11.5px] text-ink-3">{bloc.mention}</p>
+                )}
                 {invoice.amountPaid > 0 && (
                   <>
                     <div className="flex items-baseline justify-between gap-4">
@@ -271,6 +270,7 @@ export function InvoiceDetail({
                 total: totals.lineTotals[index] ?? 0,
               }))}
               totals={totals}
+              vatExempt={invoice.vatExempt}
               notes={invoice.notes}
             />
           </Card>
@@ -301,6 +301,7 @@ export function InvoiceDetail({
         number={invoice.number}
         clientName={invoice.clientName}
         total={formatMoney(totals.total)}
+        totalLabel={bloc.totalLabel}
         status={invoice.displayStatus}
         download={<DownloadInvoiceButton invoice={invoice} size="sm" />}
       />

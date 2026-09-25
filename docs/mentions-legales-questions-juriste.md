@@ -191,6 +191,35 @@ en dehors des quatre sous-traitants techniques nommés.
 suffisamment précise pour ne pas nous interdire des usages légitimes (statistiques agrégées et
 anonymes, par exemple, que nous n'exploitons pas aujourd'hui) ?
 
+### 2.9 — La mention des entreprises non assujetties à la TVA
+
+Depuis le 25 septembre 2026, une entreprise peut se déclarer **non assujettie à la TVA** dans
+ses paramètres. Ses factures et devis ne portent alors **aucune ligne de taxe** — ni sous-total
+hors taxes, ni total « toutes taxes comprises » — mais une mention unique sous le total :
+
+> **TVA non applicable**
+
+**Nous n'avons volontairement cité aucun article de loi.** Le produit s'interdit d'inventer une
+mention légale, comme il s'interdit d'inventer un NIU ou un RCCM. L'entreprise qui doit faire
+figurer la référence exacte de son régime dispose du champ « mention par défaut » de ses
+paramètres, imprimé sur chaque document, et l'écran le lui indique.
+
+**Trois questions :**
+
+1. **La formule « TVA non applicable », seule, suffit-elle** sur une facture émise au Cameroun
+   par une entreprise relevant d'un régime non assujetti ? Faut-il y adjoindre une référence
+   réglementaire, et si oui laquelle — la même pour tous les régimes concernés, ou variable ?
+2. **L'absence de ligne de TVA et de mention « TTC » pose-t-elle un problème ?** Notre raisonnement
+   est qu'un total « toutes taxes comprises » sur un document qui n'en porte aucune serait
+   trompeur ; nous affichons donc simplement « Total ».
+3. **Les autres mentions obligatoires changent-elles** pour une entreprise non assujettie —
+   NIU, RCCM, et les autres champs que nous imposons aujourd'hui à tous ?
+
+⚠️ **Précision technique utile à votre appréciation :** le régime est **figé sur chaque
+document au moment de son émission**. Une entreprise qui s'assujettit plus tard ne voit pas ses
+anciennes factures changer d'apparence — les pièces déjà remises aux clients restent
+exactement ce qu'elles étaient.
+
 ---
 
 ## 3. Ce qui reste à compléter de notre côté

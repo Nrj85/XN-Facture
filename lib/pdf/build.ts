@@ -45,6 +45,7 @@ export function buildInvoicePayload(
     subtotal: totals.subtotal,
     vatRate: totals.vatRate,
     vatAmount: totals.vatAmount,
+    vatExempt: invoice.vatExempt,
     total: totals.total,
     amountPaid: invoice.amountPaid,
     balanceDue: invoice.balanceDue,
@@ -78,6 +79,7 @@ export function buildQuotePayload(
     subtotal: totals.subtotal,
     vatRate: totals.vatRate,
     vatAmount: totals.vatAmount,
+    vatExempt: quote.vatExempt,
     total: totals.total,
     // Un devis n'encaisse rien : ces deux valeurs restent neutres et le bloc
     // « déjà encaissé » du document ne s'affiche pas.

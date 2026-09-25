@@ -10,6 +10,7 @@ import type { QuoteWithItemsRow } from '@/lib/db/types';
 import { QUOTE_PREFIX } from '@/lib/quotes';
 import { addDays } from '@/lib/format';
 import { currentYear, today } from '@/lib/today';
+import { newDocumentVat } from '@/lib/vat';
 import type { Quote, QuoteStatus } from '@/lib/types';
 
 /**
@@ -74,11 +75,19 @@ export async function createQuoteAction(
   if (!context.ok) return context;
 
   const supabase = createClient();
+  // Taux ET régime figés sur le devis, comme sur la facture : un devis
+  // accepté engage sur un total, il ne doit pas changer de nature si
+  // l'entreprise change de régime entre l'offre et la commande.
   const { data: company } = await supabase
     .from('companies')
-    .select('vat_rate')
+    .select('vat_rate, vat_registered')
     .eq('id', context.companyId)
     .single();
+
+  const { rate: vatRate, exempt: vatExempt } = newDocumentVat({
+    vatRate: Number(company?.vat_rate ?? 19.25),
+    vatRegistered: company?.vat_registered ?? true,
+  });
 
   let number: string | null = null;
   if (options.send) {
@@ -95,7 +104,8 @@ export async function createQuoteAction(
       client_id: parsed.data.clientId,
       issue_date: parsed.data.issueDate,
       valid_until: parsed.data.validUntil,
-      vat_rate: Number(company?.vat_rate ?? 19.25),
+      vat_rate: vatRate,
+      vat_exempt: vatExempt,
       address: parsed.data.address,
       notes: parsed.data.notes ?? null,
       status: options.send ? 'sent' : 'draft',
@@ -283,7 +293,13 @@ export async function convertQuoteToInvoiceAction(
       client_id: quote.clientId,
       issue_date: issueDate,
       due_date: addDays(issueDate, terms),
+      // ⚠️ **Le régime suit le taux, sans quoi la facture ne dirait pas la même
+      // chose que le devis qu'elle concrétise.** Recopier `vat_rate` seul
+      // donnerait un document à 0 % NON exempté : il afficherait « TVA 0 % »
+      // là où le devis portait « TVA non applicable ». Le client aurait sous
+      // les yeux deux pièces qui se contredisent sur la nature de la taxe.
       vat_rate: quote.vatRate,
+      vat_exempt: quote.vatExempt,
       address: quote.address,
       notes: (company?.default_notes as string | null) ?? null,
       amount_paid: 0,

@@ -14,6 +14,7 @@ import { LineItemsEditor, parseNumber, type DraftItem } from '@/components/invoi
 import { TotalsSummary } from '@/components/invoices/totals-summary';
 import { InvoicePreview } from '@/components/invoices/invoice-preview';
 import { computeTotals } from '@/lib/invoice-calc';
+import { newDocumentVat } from '@/lib/vat';
 import { addDays } from '@/lib/format';
 
 import { QUOTE_NOTES, QUOTE_VALIDITY_DAYS } from '@/lib/quotes';
@@ -94,7 +95,11 @@ export function QuoteForm({
 
   // Le taux de TVA du devis en cours de modification prime sur celui de
   // l'entreprise : réviser un devis ne doit pas en changer le montant proposé.
-  const vatRate = quote?.vatRate ?? company.vatRate;
+  // Le RÉGIME suit la même règle — voir `newDocumentVat`.
+  const regime = quote
+    ? { rate: quote.vatRate, exempt: quote.vatExempt }
+    : newDocumentVat(company);
+  const vatRate = regime.rate;
 
   const selectedClient = clients.find((client) => client.id === form.clientId);
 
@@ -339,7 +344,7 @@ export function QuoteForm({
               />
 
               <div className="mt-5 border-t border-line pt-4">
-                <TotalsSummary totals={totals} className="ml-auto max-w-xs" />
+                <TotalsSummary totals={totals} vatExempt={regime.exempt} className="ml-auto max-w-xs" />
               </div>
             </div>
           </Card>
@@ -377,6 +382,7 @@ export function QuoteForm({
                 dueDate={form.validUntil}
                 lines={previewLines}
                 totals={totals}
+                vatExempt={regime.exempt}
                 notes={form.notes.trim() || undefined}
               />
             </Card>

@@ -499,6 +499,86 @@ Ces quatre sections décrivent l'ENTREPRISE et sont partagées par l'équipe. La
 « Préférences personnelles » qui les suit n'appartient qu'à la personne au clavier — voir
 plus haut.
 
+#### Facturer SANS TVA — migration 0014 (25 sept. 2026)
+
+Toutes les entreprises de la zone ne collectent pas la TVA : en dessous des seuils, un
+entrepreneur relève d'un régime qui ne l'y assujettit pas. Il facture pourtant. Demande de
+l'utilisateur : *« prévois la TVA pour les entreprises qui y sont assujetties, mais que les
+autres puissent faire des factures »*. Un interrupteur **« Mon entreprise est assujettie à la
+TVA »** dans la section Facturation, **coché par défaut** — toute entreprise existante reste
+exactement dans l'état où elle était.
+
+⚠️ **UN BOOLÉEN, PAS SIMPLEMENT UN TAUX À ZÉRO.** Ce sont deux situations juridiquement
+distinctes : « non assujetti » est hors du champ de la taxe et la facture porte une mention
+sans aucune ligne de TVA ; « assujetti à 0 % » est dans le champ, taxé à taux nul
+(exportation, produit exonéré), et la ligne « TVA 0 % » a un sens. Un seul taux ne peut pas
+dire les deux — et imprimer « TVA non applicable » sur le document de quelqu'un qui a
+simplement saisi 0 lui ferait déclarer une chose fausse.
+
+⚠️ **LE DRAPEAU EST COPIÉ SUR LE DOCUMENT (`invoices.vat_exempt`, `quotes.vat_exempt`), pas
+seulement sur l'entreprise.** Même règle que `vat_rate` : une entreprise qui s'assujettit plus
+tard ne doit pas voir ses anciennes factures se couvrir rétroactivement d'une ligne de taxe.
+Ce sont des pièces déjà remises à des clients.
+
+⚠️ **LA BASE GARANTIT LA COHÉRENCE** — `check (not vat_exempt or vat_rate = 0)` sur les deux
+tables. Un document exempté à 19,25 % n'afficherait aucune TVA tout en en ayant calculé une :
+le total imprimé et le total stocké divergeraient. **Vérifié : un `update` qui tente la
+contradiction est refusé en `23514`.** La contrainte est à **sens unique** — « assujetti +
+taux 0 » reste permis.
+
+⚠️ **LE TAUX DE L'ENTREPRISE N'EST PAS EFFACÉ quand elle se déclare non assujettie.** Il dort.
+Quelqu'un qui décoche par erreur, ou qui s'assujettit plus tard, retrouve son 19,25 % sans le
+retaper. **Conséquence directe : on ne lit JAMAIS `company.vatRate` seul** — `newDocumentVat()`
+(`lib/vat.ts`) est le seul endroit qui tranche, et il sert **des deux côtés** : les formulaires
+pour l'aperçu, les Server Actions pour l'écriture. Les lire séparément afficherait 19,25 % dans
+l'aperçu pendant que le serveur enregistrerait 0.
+
+⚠️ **`lib/vat.ts` décide du CONTENU du bloc de totaux, pas de son apparence.** Ce bloc est
+peint à **cinq endroits** — récapitulatif de saisie, aperçu, détail facture, détail devis,
+PDF — avec deux technologies différentes (DOM et `@react-pdf`). Écrire cinq fois la même
+condition, c'est garantir qu'elles divergeront au premier ajustement de texte. `totalsBlock()`
+rend les lignes, le libellé du total et la mention ; chaque rendu ne fait que les peindre.
+`totalLabel()` est extrait à part pour les deux écrans qui n'affichent QUE le total
+(confirmation de création, dialogue d'encaissement).
+
+⚠️ **« TTC » DISPARAÎT AUSSI, et le sous-total avec.** Sans taxe, « sous-total HT » et
+« total TTC » portent le même montant : les afficher tous deux ferait lire deux fois la même
+somme sous deux noms qui suggèrent une différence. Une seule ligne, « Total ».
+
+⚠️ **LA CONVERSION DEVIS → FACTURE recopie le drapeau, pas seulement le taux.** Sans cela une
+facture issue d'un devis sans TVA serait à 0 % **non exemptée** : elle afficherait « TVA 0 % »
+là où le devis portait « TVA non applicable », et le client aurait sous les yeux deux pièces
+qui se contredisent. Défaut attrapé à la relecture, avant tout essai.
+
+⚠️ **LA MENTION EST « TVA non applicable », SANS RÉFÉRENCE À UN ARTICLE DE LOI.** Le projet
+n'invente pas de mention légale — même discipline que pour le NIU et le RCCM. L'entreprise qui
+doit citer son régime précis dispose du champ « mention par défaut », imprimé sur chaque
+document ; l'écran de réglage le lui dit. **Question portée au juriste**, section 2.9 de
+`docs/mentions-legales-questions-juriste.md`.
+
+⚠️ **Aucune politique RLS n'est ajoutée.** `invoices_insert` laisse déjà un membre écrire ses
+propres factures : rien n'empêche un `PATCH` REST posant `vat_exempt = true`. **Ce n'est pas
+une élévation de privilège** — il ne touche que SES documents, et savoir s'il avait le droit de
+ne pas collecter la taxe se règle avec l'administration fiscale, pas avec nous. Le produit
+enregistre ce que l'entreprise déclare ; la contrainte garantit seulement que la déclaration
+reste cohérente avec ce qui est imprimé. Par le chemin applicatif, le drapeau vient du
+**serveur** : le client ne l'envoie jamais.
+
+**Vérifié de bout en bout, contre la base réelle et sur le PDF (24 contrôles)** :
+
+```
+par défaut          interrupteur coché, champ de taux visible — rien ne change
+décoché             le champ de taux DISPARAÎT (pas de contrôle mort, §6.1)
+                    l'écran annonce la mention et dit que l'existant ne bouge pas
+base                vat_registered = false · le taux 19,25 DORT, il n'est pas effacé
+facture émise       vat_rate = 0,00 · vat_exempt = true · FAC-2026-0001
+écran de détail     mention affichée, aucun taux, pas de « TTC », pas de sous-total
+PDF RÉELLEMENT LU   « Total 1 000 000 FCFA » puis « TVA non applicable »
+non-régression      assujettie : « Sous-total HT 1 000 000 » · « TVA 19,25 % 192 500 »
+                    · « Total TTC 1 192 500 » — arithmétique recalculée à la main
+contrainte          exempté + 19,25 % refusé par la base (23514)
+```
+
 ### Abonnements — `/abonnement` (9 sept. 2026, PARTIEL)
 
 Monétisation de XN-Facture **par XN-Facture**, à ne pas confondre avec l'encaissement des
@@ -1874,6 +1954,8 @@ supabase/
                                 marketing_recipients — jeton d'URL, page publique
   migrations/0013_resiliation.sql   renewal_declined + set_renewal_intent ; REMPLACE
                                 send_expiry_reminders (repartir de CE fichier)
+  migrations/0014_tva_non_assujetti.sql vat_registered + vat_exempt ; contrainte
+                                « exempté ⇒ taux nul », à SENS UNIQUE
 
 docs/
   mentions-legales-questions-juriste.md  Note de relecture juridique (à emporter chez
@@ -1946,6 +2028,8 @@ lib/
                     · email-preferences (désabonnement, SANS session)
                     · locale · result, schemas, context
   admin/company-export.ts  Lignes et CSV de l export des entreprises (anti-injection)
+  vat.ts            Régime de TVA — contenu du bloc de totaux (5 rendus) et régime
+                    d'un nouveau document. Le taux de l'entreprise ne se lit JAMAIS seul
   plans.ts          Les trois formules et leurs prix — SOURCE UNIQUE du montant
   billing-config.ts Coordonnées d'encaissement et secret du webhook (ENVIRONNEMENT)
   site-origin.ts    Origine publique du site — source UNIQUE (emails, retours, webhook)
@@ -2005,6 +2089,10 @@ Prioritaires sur toute considération visuelle.
   base, avec dérive garantie entre deux passages.
 - Un **encaissement borné au total** : un montant supérieur donnerait un solde négatif, que ni
   les statistiques ni les tranches d'ancienneté ne savent représenter.
+- **Une entreprise peut ne pas être assujettie à la TVA.** Le document porte alors la mention
+  « TVA non applicable » et **aucune ligne de taxe** — ni sous-total, ni « TTC ». Le régime est
+  **gelé sur le document** (`vat_exempt`) comme le taux, et la base refuse un exempté à taux
+  non nul. Une seule fonction décide du contenu du bloc de totaux : `lib/vat.ts`.
 - Un devis converti garde le **taux de TVA du devis**, pas celui de l'entreprise : le total
   facturé doit rester celui que le client a accepté. Il ne se convertit **qu'une fois** —
   `invoiceId` verrouille la seconde tentative.
@@ -2394,6 +2482,18 @@ doivent être identiques dans le formulaire, l'aperçu, le détail et le PDF.
   **Appeler `scrollIntoView({ block: 'center' })` puis RECALCULER le rectangle**, et vérifier
   `r.top >= 0 && r.bottom <= window.innerHeight` avant de cliquer. Un clic CDP hors écran
   n'émet aucune erreur : c'est le silence qui rend ce piège coûteux.
+- ⚠️ **`pdftotext` EST DISPONIBLE sur cette machine** (`/mingw64/bin/pdftotext`, fourni avec
+  Git Bash). C'est la façon de **lire réellement** un PDF produit par l'application, au lieu de
+  supposer son contenu : `pdftotext -layout fichier.pdf -`. Découvert le 25 sept. 2026, après
+  avoir perdu du temps à décompresser les flux à la main — le seul flux qui s'inflate est la
+  police embarquée, pas le contenu. Les accents ressortent mal dans la sortie de `pdftotext`,
+  c'est un défaut de SON encodage, pas du PDF : comparer sur des sous-chaînes sans accent.
+- ⚠️ **Un `node -e` dans un `bash -c` en GUILLEMETS DOUBLES exécute les backticks.** Payé le
+  25 sept. 2026 : les `` `vat_exempt` `` d'un texte à insérer dans CLAUDE.md sont partis en
+  substitution de commande, et le document s'est retrouvé avec des parenthèses vides. Le script
+  annonçait pourtant « 3 emplacements sur 3 ». **Pour tout texte contenant des backticks,
+  passer par l'outil d'écriture ou d'édition** — c'est le même piège que les antislashs, sous
+  un autre caractère.
 - Écrire une capture d'écran depuis Bash échoue en « Accès refusé » : passer par PowerShell.
 - En développement, Next compile chaque route au premier accès (~25 s) : `curl -m 90` avant de
   conclure qu'un serveur est en panne.

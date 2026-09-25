@@ -57,6 +57,7 @@ export function DocumentCreatedDialog({
   number,
   clientName,
   total,
+  totalLabel = 'Total TTC',
   status,
   statusLabel,
   download,
@@ -69,6 +70,12 @@ export function DocumentCreatedDialog({
   clientName: string;
   /** Total déjà formaté par le `formatMoney` du store. */
   total: string;
+  /**
+   * « Total TTC », ou « Total » pour un émetteur non assujetti — « toutes
+   * taxes comprises » sur un document sans taxe est une contradiction que le
+   * client lira.
+   */
+  totalLabel?: string;
   status: BadgeStatus;
   statusLabel?: string;
   /** Bouton de téléchargement, fourni par l'appelant qui sait bâtir la charge PDF. */
@@ -118,7 +125,7 @@ export function DocumentCreatedDialog({
             </dd>
           </div>
           <div className="flex items-baseline justify-between gap-4 border-t border-line pt-2">
-            <dt className="text-[13px] font-semibold text-ink">Total TTC</dt>
+            <dt className="text-[13px] font-semibold text-ink">{totalLabel}</dt>
             <dd className="tabular text-[17px] font-bold tracking-[-0.02em] text-ink">{total}</dd>
           </div>
         </dl>

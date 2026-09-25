@@ -8,6 +8,7 @@ import { describeDbError, fail, failFromDb, ok, type ActionResult } from '@/lib/
 import { toInvoice, toItemRows } from '@/lib/db/mappers';
 import type { InvoiceWithItemsRow } from '@/lib/db/types';
 import { computeTotals } from '@/lib/invoice-calc';
+import { newDocumentVat } from '@/lib/vat';
 import { currentYear } from '@/lib/today';
 import type { Invoice, StoredStatus } from '@/lib/types';
 
@@ -101,13 +102,25 @@ export async function createInvoiceAction(
 
   // Le taux de TVA est FIGÉ sur la facture à sa création : modifier le taux
   // dans les paramètres ne doit pas réécrire un document déjà établi.
+  //
+  // ⚠️ **Le régime de TVA est figé de la même façon, et pour la même raison.**
+  // Une entreprise qui s'assujettit plus tard ne doit pas voir ses anciennes
+  // factures se couvrir rétroactivement d'une ligne de taxe — ce sont des
+  // pièces déjà remises à des clients.
   const { data: company } = await supabase
     .from('companies')
-    .select('vat_rate, invoice_prefix')
+    .select('vat_rate, vat_registered, invoice_prefix')
     .eq('id', context.companyId)
     .single();
 
-  const vatRate = Number(company?.vat_rate ?? 19.25);
+  // ⚠️ **Le taux et le drapeau viennent du SERVEUR, jamais de la charge.** Le
+  // client n'envoie ni l'un ni l'autre : il ne pourrait pas s'exonérer en
+  // forgeant une requête. La contrainte `invoices_vat_exempt_rate` (0014)
+  // refuserait de toute façon un exempté à taux non nul.
+  const { rate: vatRate, exempt: vatExempt } = newDocumentVat({
+    vatRate: Number(company?.vat_rate ?? 19.25),
+    vatRegistered: company?.vat_registered ?? true,
+  });
 
   let number: string | null = null;
   if (options.send) {
@@ -128,6 +141,7 @@ export async function createInvoiceAction(
       issue_date: parsed.data.issueDate,
       due_date: parsed.data.dueDate,
       vat_rate: vatRate,
+      vat_exempt: vatExempt,
       address: parsed.data.address,
       notes: parsed.data.notes ?? null,
       amount_paid: 0,

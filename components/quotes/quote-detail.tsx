@@ -27,6 +27,7 @@ import { StatusMenu, type StatusAction } from '@/components/documents/status-men
 import { useCreationNotice } from '@/components/documents/use-creation-notice';
 import { formatDate } from '@/lib/format';
 import { computeTotals } from '@/lib/invoice-calc';
+import { totalsBlock } from '@/lib/vat';
 import { formatQuantity } from '@/lib/money';
 import { pdfFileName } from '@/lib/pdf/payload';
 import { formatValidityLabel, QUOTE_STATUS_LABELS } from '@/lib/quotes';
@@ -61,6 +62,7 @@ export function QuoteDetail({
   const { notice, dismiss } = useCreationNotice(`/devis/${quote.id}`);
 
   const totals = computeTotals(quote.items, quote.vatRate);
+  const bloc = totalsBlock(totals, quote.vatExempt);
   const pdfUrl = `/api/devis/${quote.id}/pdf`;
   const pdfName = pdfFileName({
     number: quote.number,
@@ -289,26 +291,23 @@ export function QuoteDetail({
 
             <div className="border-t border-line p-5">
               <dl className="ml-auto max-w-xs space-y-2">
-                <div className="flex items-baseline justify-between gap-4">
-                  <dt className="text-[12.5px] text-ink-2">Sous-total HT</dt>
-                  <dd className="tabular text-[13px] font-medium text-ink">
-                    {formatMoney(totals.subtotal)}
-                  </dd>
-                </div>
-                <div className="flex items-baseline justify-between gap-4">
-                  <dt className="text-[12.5px] text-ink-2">
-                    TVA {quote.vatRate.toString().replace('.', ',')} %
-                  </dt>
-                  <dd className="tabular text-[13px] font-medium text-ink">
-                    {formatMoney(totals.vatAmount)}
-                  </dd>
-                </div>
+                {bloc.rows.map((row) => (
+                  <div key={row.label} className="flex items-baseline justify-between gap-4">
+                    <dt className="text-[12.5px] text-ink-2">{row.label}</dt>
+                    <dd className="tabular text-[13px] font-medium text-ink">
+                      {formatMoney(row.amount)}
+                    </dd>
+                  </div>
+                ))}
                 <div className="flex items-baseline justify-between gap-4 border-t border-line pt-2.5">
-                  <dt className="text-[13px] font-semibold text-ink">Total TTC</dt>
+                  <dt className="text-[13px] font-semibold text-ink">{bloc.totalLabel}</dt>
                   <dd className="tabular text-[17px] font-bold tracking-[-0.02em] text-ink">
-                    {formatMoney(totals.total)}
+                    {formatMoney(bloc.totalAmount)}
                   </dd>
                 </div>
+                {bloc.mention && (
+                  <p className="text-[11.5px] text-ink-3">{bloc.mention}</p>
+                )}
               </dl>
             </div>
           </Card>
@@ -334,6 +333,7 @@ export function QuoteDetail({
                 total: totals.lineTotals[index] ?? 0,
               }))}
               totals={totals}
+              vatExempt={quote.vatExempt}
               notes={quote.notes}
             />
           </Card>
@@ -362,6 +362,7 @@ export function QuoteDetail({
         number={quote.number}
         clientName={quote.clientName}
         total={formatMoney(totals.total)}
+        totalLabel={bloc.totalLabel}
         status={quote.displayStatus}
         statusLabel={QUOTE_STATUS_LABELS[quote.displayStatus]}
         download={<DownloadPdfButton url={pdfUrl} filename={pdfName} size="sm" />}

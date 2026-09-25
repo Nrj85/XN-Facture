@@ -1,6 +1,7 @@
 import { Document, Image, Page, StyleSheet, Text, View } from '@react-pdf/renderer';
 import { formatDate } from '@/lib/format';
 import { formatAmount, formatMoney, formatQuantity } from '@/lib/money';
+import { totalsBlock } from '@/lib/vat';
 import type { PdfPayload } from '@/lib/pdf/payload';
 
 /**
@@ -176,6 +177,20 @@ export function InvoiceDocument({ payload }: { payload: PdfPayload }) {
   const { company, client } = payload;
   const isQuote = payload.docType === 'quote';
   const money = (amount: number) => pdfText(formatMoney(amount, company.currency));
+
+  // Le bloc de totaux est décidé par `lib/vat.ts`, une seule fois pour les
+  // cinq rendus du projet. `payload` porte déjà les montants calculés : on ne
+  // recalcule rien ici, on met en forme.
+  const bloc = totalsBlock(
+    {
+      lineTotals: [],
+      subtotal: payload.subtotal,
+      vatRate: payload.vatRate,
+      vatAmount: payload.vatAmount,
+      total: payload.total,
+    },
+    payload.vatExempt === true,
+  );
   // Les coordonnées de règlement n'ont pas leur place sur un devis : elles
   // inviteraient à payer une somme qui n'est pas encore due.
   const hasPayment =
@@ -281,20 +296,25 @@ export function InvoiceDocument({ payload }: { payload: PdfPayload }) {
 
         <View style={styles.totals}>
           <View style={styles.totalsBox}>
-            <View style={styles.totalsRow}>
-              <Text style={{ color: INK_2 }}>Sous-total HT</Text>
-              <Text>{money(payload.subtotal)}</Text>
-            </View>
-            <View style={styles.totalsRow}>
-              <Text style={{ color: INK_2 }}>
-                TVA {payload.vatRate.toString().replace('.', ',')} %
-              </Text>
-              <Text>{money(payload.vatAmount)}</Text>
-            </View>
+            {/* ⚠️ **Le contenu vient de `totalsBlock`, comme les quatre rendus
+                à l'écran.** Le PDF est la pièce que le client garde : s'il
+                annonçait autre chose que l'aperçu, c'est lui qui ferait foi
+                et l'aperçu qui aurait menti. */}
+            {bloc.rows.map((row) => (
+              <View key={row.label} style={styles.totalsRow}>
+                <Text style={{ color: INK_2 }}>{row.label}</Text>
+                <Text>{money(row.amount)}</Text>
+              </View>
+            ))}
             <View style={styles.totalsRowStrong}>
-              <Text style={{ fontFamily: 'Helvetica-Bold' }}>Total TTC</Text>
-              <Text style={styles.grand}>{money(payload.total)}</Text>
+              <Text style={{ fontFamily: 'Helvetica-Bold' }}>{bloc.totalLabel}</Text>
+              <Text style={styles.grand}>{money(bloc.totalAmount)}</Text>
             </View>
+            {bloc.mention !== null && (
+              <View style={styles.totalsRow}>
+                <Text style={{ color: INK_2 }}>{bloc.mention}</Text>
+              </View>
+            )}
 
             {payload.amountPaid > 0 && (
               <>

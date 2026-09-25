@@ -25,6 +25,39 @@ export type Database = {
   }
   public: {
     Tables: {
+      activity_log: {
+        Row: {
+          action: string
+          actor_id: string | null
+          company_id: string | null
+          details: Json | null
+          entity: string
+          entity_id: string | null
+          id: number
+          occurred_at: string
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          company_id?: string | null
+          details?: Json | null
+          entity: string
+          entity_id?: string | null
+          id?: never
+          occurred_at?: string
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          company_id?: string | null
+          details?: Json | null
+          entity?: string
+          entity_id?: string | null
+          id?: never
+          occurred_at?: string
+        }
+        Relationships: []
+      }
       clients: {
         Row: {
           address: string | null
@@ -93,6 +126,7 @@ export type Database = {
           rccm: string
           updated_at: string
           vat_rate: number
+          vat_registered: boolean
         }
         Insert: {
           address?: string
@@ -117,6 +151,7 @@ export type Database = {
           rccm?: string
           updated_at?: string
           vat_rate?: number
+          vat_registered?: boolean
         }
         Update: {
           address?: string
@@ -141,6 +176,7 @@ export type Database = {
           rccm?: string
           updated_at?: string
           vat_rate?: number
+          vat_registered?: boolean
         }
         Relationships: []
       }
@@ -171,6 +207,13 @@ export type Database = {
             referencedRelation: "companies"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "company_members_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "admin_actors"
+            referencedColumns: ["id"]
+          },
         ]
       }
       document_counters: {
@@ -198,6 +241,35 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      email_preferences: {
+        Row: {
+          marketing: boolean
+          token: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          marketing?: boolean
+          token?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          marketing?: boolean
+          token?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_preferences_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "admin_actors"
             referencedColumns: ["id"]
           },
         ]
@@ -251,6 +323,7 @@ export type Database = {
           number: string | null
           status: Database["public"]["Enums"]["invoice_status"]
           updated_at: string
+          vat_exempt: boolean
           vat_rate: number
         }
         Insert: {
@@ -266,6 +339,7 @@ export type Database = {
           number?: string | null
           status?: Database["public"]["Enums"]["invoice_status"]
           updated_at?: string
+          vat_exempt?: boolean
           vat_rate: number
         }
         Update: {
@@ -281,6 +355,7 @@ export type Database = {
           number?: string | null
           status?: Database["public"]["Enums"]["invoice_status"]
           updated_at?: string
+          vat_exempt?: boolean
           vat_rate?: number
         }
         Relationships: [
@@ -296,6 +371,32 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      platform_admins: {
+        Row: {
+          created_at: string
+          note: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          note?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          note?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "platform_admins_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "admin_actors"
             referencedColumns: ["id"]
           },
         ]
@@ -349,6 +450,7 @@ export type Database = {
           status: Database["public"]["Enums"]["quote_status"]
           updated_at: string
           valid_until: string
+          vat_exempt: boolean
           vat_rate: number
         }
         Insert: {
@@ -364,6 +466,7 @@ export type Database = {
           status?: Database["public"]["Enums"]["quote_status"]
           updated_at?: string
           valid_until: string
+          vat_exempt?: boolean
           vat_rate: number
         }
         Update: {
@@ -379,6 +482,7 @@ export type Database = {
           status?: Database["public"]["Enums"]["quote_status"]
           updated_at?: string
           valid_until?: string
+          vat_exempt?: boolean
           vat_rate?: number
         }
         Relationships: [
@@ -405,17 +509,251 @@ export type Database = {
           },
         ]
       }
+      subscription_orders: {
+        Row: {
+          company_id: string
+          created_at: string
+          id: string
+          payment_links: Json | null
+          period: Database["public"]["Enums"]["billing_period"]
+          plan: Database["public"]["Enums"]["plan_code"]
+          provider: string | null
+          reference: string
+          status: Database["public"]["Enums"]["order_status"]
+          updated_at: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          id?: string
+          payment_links?: Json | null
+          period: Database["public"]["Enums"]["billing_period"]
+          plan: Database["public"]["Enums"]["plan_code"]
+          provider?: string | null
+          reference: string
+          status?: Database["public"]["Enums"]["order_status"]
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          id?: string
+          payment_links?: Json | null
+          period?: Database["public"]["Enums"]["billing_period"]
+          plan?: Database["public"]["Enums"]["plan_code"]
+          provider?: string | null
+          reference?: string
+          status?: Database["public"]["Enums"]["order_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscription_orders_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      subscription_payments: {
+        Row: {
+          amount: number
+          channel: string
+          company_id: string
+          created_at: string
+          currency: Database["public"]["Enums"]["currency_code"]
+          id: string
+          period_end: string | null
+          period_start: string | null
+          plan: Database["public"]["Enums"]["plan_code"]
+          provider: string
+          provider_reference: string
+          status: string
+        }
+        Insert: {
+          amount: number
+          channel: string
+          company_id: string
+          created_at?: string
+          currency?: Database["public"]["Enums"]["currency_code"]
+          id?: string
+          period_end?: string | null
+          period_start?: string | null
+          plan: Database["public"]["Enums"]["plan_code"]
+          provider: string
+          provider_reference: string
+          status: string
+        }
+        Update: {
+          amount?: number
+          channel?: string
+          company_id?: string
+          created_at?: string
+          currency?: Database["public"]["Enums"]["currency_code"]
+          id?: string
+          period_end?: string | null
+          period_start?: string | null
+          plan?: Database["public"]["Enums"]["plan_code"]
+          provider?: string
+          provider_reference?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscription_payments_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      subscription_reminders: {
+        Row: {
+          company_id: string
+          expires_at: string
+          id: string
+          kind: string
+          recipient: string
+          request_id: number | null
+          sent_at: string
+        }
+        Insert: {
+          company_id: string
+          expires_at: string
+          id?: string
+          kind: string
+          recipient: string
+          request_id?: number | null
+          sent_at?: string
+        }
+        Update: {
+          company_id?: string
+          expires_at?: string
+          id?: string
+          kind?: string
+          recipient?: string
+          request_id?: number | null
+          sent_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscription_reminders_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      subscriptions: {
+        Row: {
+          company_id: string
+          created_at: string
+          expires_at: string | null
+          plan: Database["public"]["Enums"]["plan_code"]
+          renewal_declined: boolean
+          requested: Database["public"]["Enums"]["plan_code"] | null
+          updated_at: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          expires_at?: string | null
+          plan?: Database["public"]["Enums"]["plan_code"]
+          renewal_declined?: boolean
+          requested?: Database["public"]["Enums"]["plan_code"] | null
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          expires_at?: string | null
+          plan?: Database["public"]["Enums"]["plan_code"]
+          renewal_declined?: boolean
+          requested?: Database["public"]["Enums"]["plan_code"] | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscriptions_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: true
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
-      [_ in never]: never
+      admin_actors: {
+        Row: {
+          created_at: string | null
+          email: string | null
+          email_confirme: boolean | null
+          id: string | null
+          last_sign_in_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          email?: string | null
+          email_confirme?: never
+          id?: string | null
+          last_sign_in_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          email?: string | null
+          email_confirme?: never
+          id?: string | null
+          last_sign_in_at?: string | null
+        }
+        Relationships: []
+      }
+      subscription_reminders_status: {
+        Row: {
+          company_id: string | null
+          error_msg: string | null
+          expires_at: string | null
+          id: string | null
+          kind: string | null
+          recipient: string | null
+          sent_at: string | null
+          status_code: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscription_reminders_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
+      attach_payment_links: {
+        Args: { p_links: Json; p_provider: string; p_reference: string }
+        Returns: undefined
+      }
+      cancel_subscription_order: { Args: never; Returns: undefined }
       create_company_for_current_user: {
         Args: { p_legal_name?: string; p_name: string }
         Returns: string
       }
       current_company_id: { Args: never; Returns: string }
       is_company_member: { Args: { p_company: string }; Returns: boolean }
+      is_platform_admin: { Args: never; Returns: boolean }
+      marketing_recipients: {
+        Args: never
+        Returns: {
+          marketing: boolean
+          token: string
+          user_id: string
+        }[]
+      }
       next_document_number: {
         Args: {
           p_company: string
@@ -425,12 +763,30 @@ export type Database = {
         }
         Returns: string
       }
+      plan_label: {
+        Args: { p: Database["public"]["Enums"]["plan_code"] }
+        Returns: string
+      }
+      request_plan: { Args: { p_plan: string }; Returns: undefined }
+      send_expiry_reminders: { Args: never; Returns: number }
+      set_marketing_preference: {
+        Args: { p_accept: boolean; p_token: string }
+        Returns: string
+      }
+      set_renewal_intent: { Args: { p_renew: boolean }; Returns: undefined }
+      start_subscription_order: {
+        Args: { p_period: string; p_plan: string }
+        Returns: string
+      }
     }
     Enums: {
+      billing_period: "monthly" | "yearly"
       currency_code: "XAF" | "XOF"
       document_kind: "invoice" | "quote"
       invoice_status: "draft" | "sent" | "partially_paid" | "paid" | "cancelled"
       member_role: "owner" | "admin" | "member"
+      order_status: "pending" | "paid" | "cancelled"
+      plan_code: "discovery" | "pro" | "business"
       quote_status: "draft" | "sent" | "accepted" | "refused"
     }
     CompositeTypes: {
@@ -559,10 +915,13 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      billing_period: ["monthly", "yearly"],
       currency_code: ["XAF", "XOF"],
       document_kind: ["invoice", "quote"],
       invoice_status: ["draft", "sent", "partially_paid", "paid", "cancelled"],
       member_role: ["owner", "admin", "member"],
+      order_status: ["pending", "paid", "cancelled"],
+      plan_code: ["discovery", "pro", "business"],
       quote_status: ["draft", "sent", "accepted", "refused"],
     },
   },

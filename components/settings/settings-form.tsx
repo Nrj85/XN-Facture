@@ -7,6 +7,7 @@ import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { Combobox } from '@/components/ui/combobox';
 import { Field } from '@/components/ui/field';
 import { Input, Textarea } from '@/components/ui/input';
+import { Switch } from '@/components/ui/switch';
 import { LogoUploader } from '@/components/settings/logo-uploader';
 import { useCompany } from '@/lib/company-context';
 import { updateCompanyAction } from '@/lib/actions/company';
@@ -69,9 +70,14 @@ export function SettingsForm({ issuedCount }: { issuedCount: number }) {
       next.email = 'Format d’email invalide.';
     }
 
-    const vat = parseRate(vatText);
-    if (!Number.isFinite(vat) || vat < 0 || vat > 100) {
-      next.vatRate = 'Taux attendu entre 0 et 100.';
+    // ⚠️ Le champ est masqué quand l'entreprise n'est pas assujettie : le
+    // valider quand même bloquerait l'enregistrement sur une valeur que
+    // personne ne peut plus corriger à l'écran.
+    if (form.vatRegistered) {
+      const vat = parseRate(vatText);
+      if (!Number.isFinite(vat) || vat < 0 || vat > 100) {
+        next.vatRate = 'Taux attendu entre 0 et 100.';
+      }
     }
 
     const terms = Number(termsText);
@@ -100,7 +106,13 @@ export function SettingsForm({ issuedCount }: { issuedCount: number }) {
         legalName: form.legalName.trim(),
         email: form.email.trim(),
         invoicePrefix: form.invoicePrefix.trim().toUpperCase(),
-        vatRate: parseRate(vatText),
+        // ⚠️ **Non assujettie : on renvoie le dernier taux VALIDE, pas la
+        // saisie.** Le champ étant masqué, une saisie restée invalide
+        // (« 19,,25 ») partirait en `NaN`, zod refuserait, et le message
+        // désignerait un champ que plus personne ne voit à l'écran — un
+        // cul-de-sac. Le taux dort de toute façon : `newDocumentVat` ne le lit
+        // pas tant que la case est décochée.
+        vatRate: form.vatRegistered ? parseRate(vatText) : company.vatRate,
         paymentTermsDays: Number(termsText),
       });
 
@@ -320,25 +332,63 @@ export function SettingsForm({ issuedCount }: { issuedCount: number }) {
                 />
               )}
             </Field>
-            <Field
-              label="Taux de TVA (%)"
-              error={errors.vatRate}
-              hint="19,25 % au Cameroun : 17,5 % de TVA plus 10 % de centimes additionnels communaux."
-            >
-              {(props) => (
-                <Input
-                  {...props}
-                  numeric
-                  inputMode="decimal"
-                  value={vatText}
-                  invalid={Boolean(errors.vatRate)}
-                  onChange={(event) => {
-                    setVatText(event.target.value);
-                    setSaved(false);
-                  }}
-                />
+            {/* ⚠️ **Le champ DISPARAÎT quand l'entreprise n'est pas
+                assujettie**, il n'est pas seulement grisé. Un taux affiché sur
+                un document qui n'en portera aucun est un contrôle mort
+                (§6.1) : il laisse croire qu'il sert encore à quelque chose. */}
+            {form.vatRegistered && (
+              <Field
+                label="Taux de TVA (%)"
+                error={errors.vatRate}
+                hint="19,25 % au Cameroun : 17,5 % de TVA plus 10 % de centimes additionnels communaux."
+              >
+                {(props) => (
+                  <Input
+                    {...props}
+                    numeric
+                    inputMode="decimal"
+                    value={vatText}
+                    invalid={Boolean(errors.vatRate)}
+                    onChange={(event) => {
+                      setVatText(event.target.value);
+                      setSaved(false);
+                    }}
+                  />
+                )}
+              </Field>
+            )}
+          </div>
+
+          {/* Le régime de TVA de l'entreprise. Toutes ne collectent pas la
+              taxe : en dessous des seuils, un entrepreneur facture sans elle. */}
+          <div className="rounded-[10px] border border-line bg-paper p-4">
+            <Switch
+              checked={form.vatRegistered}
+              onCheckedChange={(vatRegistered) => patch({ vatRegistered })}
+              label="Mon entreprise est assujettie à la TVA"
+            />
+            <p className="mt-2 text-[12.5px] leading-relaxed text-ink-2">
+              {form.vatRegistered ? (
+                <>
+                  Vos nouveaux documents porteront une ligne de TVA au taux ci-dessus.{' '}
+                  <strong className="font-semibold text-ink">
+                    Les documents déjà émis gardent le leur
+                  </strong>{' '}
+                  et ne changeront pas.
+                </>
+              ) : (
+                <>
+                  Vos nouveaux documents ne porteront{' '}
+                  <strong className="font-semibold text-ink">aucune ligne de TVA</strong>, mais la
+                  mention « TVA non applicable ». Si votre régime exige une formulation précise,
+                  ajoutez-la dans « Mention par défaut » ci-dessous : elle s’imprime sur chaque
+                  document.{' '}
+                  <strong className="font-semibold text-ink">
+                    Les documents déjà émis ne changent pas.
+                  </strong>
+                </>
               )}
-            </Field>
+            </p>
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
