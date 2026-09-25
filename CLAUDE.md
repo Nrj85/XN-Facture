@@ -1002,6 +1002,42 @@ client, une facture et trois lignes ; il ne voit pas la liste des administrateur
 écritures croisées touchent zéro ligne ; l'écriture dans le journal et l'auto-promotion sont
 refusées en 403.
 
+#### L'aller-retour entre l'espace admin et son entreprise (25 sept. 2026)
+
+⚠️ **LE RETOUR N'EXISTAIT PAS SUR TÉLÉPHONE.** Le lien « Mon entreprise » de l'en-tête
+d'administration portait `hidden … sm:inline-flex` : **invisible sous 640 px**. Remonté par
+l'utilisateur, capture à l'appui : « je n'ai pas le moyen de revenir à mon compte entreprise,
+je peux juste me déconnecter ». C'est exactement ce que l'écran offrait — la déconnexion était
+la seule sortie.
+
+**Le sens inverse fonctionnait déjà** : `ADMIN_NAV` est rendu par `sidebar.tsx`, donc présent
+dans le tiroir mobile. Seul le retour manquait, et c'est pourquoi le défaut a survécu à
+l'écran de développement : sur grand écran, les deux sens existent.
+
+⚠️ **Le badge « PLATEFORME » de l'en-tête s'efface sous `sm` pour faire la place.** Il ne
+manque à personne : le titre de la page, deux lignes plus bas, annonce déjà
+« PLATEFORME / ESPACE ADMINISTRATEUR ». Sur téléphone il ne faisait que répéter l'information
+en occupant les ~110 px dont le retour avait besoin.
+
+⚠️ **Le lien mesurait 32 px de haut, sous le plancher de 36 px du §6.5.** Le défaut passait
+inaperçu tant qu'il n'existait qu'à la souris ; devenu le contrôle principal du téléphone, il
+a reçu `min-h-9`. **Mesuré, pas supposé** — et c'est le genre d'écart que seul un
+`getBoundingClientRect` révèle.
+
+⚠️ **Sans entreprise, le lien mène à `/bienvenue`, et c'est la bonne réponse.** Un
+administrateur de plateforme n'en a pas forcément ; `requireSession()` l'y envoie, où il peut
+en créer une. **Vérifié : le clic donne bien `/bienvenue`**, pas une page d'erreur.
+
+**Vérifié à l'écran, avec un administrateur jetable (26 contrôles)** : lien présent et dans
+l'écran à **360, 390, 500 et 1440 px**, aucun débordement · 36 px de haut partout · badge
+absent sous 640 px, présent au-dessus · déconnexion toujours là · **sans entreprise →
+`/bienvenue`** · **avec entreprise → `/dashboard`**, par un vrai clic · le tiroir mobile porte
+bien le lien vers `/admin`, donc l'aller-retour est complet.
+
+⚠️ **Le compte de test était PROMU administrateur** : révocation et suppression dans un
+`finally`, puis relecture de `platform_admins` — **vérifié, il ne reste que l'adresse réelle**.
+C'est la discipline exigée plus haut dans cette section.
+
 #### Export CSV des entreprises (17 sept. 2026)
 
 Bouton « Exporter tout (CSV) » dans l'en-tête de la carte Entreprises, pour les campagnes de
