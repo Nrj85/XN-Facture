@@ -2280,6 +2280,46 @@ mouvement décoratif sape la crédibilité.
 - **Corriger l'ARIA, ne pas le faire taire.** Deux erreurs passées : `aria-invalid` sur un
   bouton (ignoré) et un `role="grid"` qui mentait sur la structure. Remplacés, pas masqués.
 
+⚠️ **LE SEUIL DES ÉLÉMENTS D'INTERFACE EST 3:1, PAS 4,5:1** — et il avait été oublié.
+Le 4,5:1 du tableau ci-dessus vise le **texte** ; les contours, les pistes d'interrupteur, les
+bordures de champ relèvent de la règle 1.4.11, à **3:1 contre ce qui les entoure**. Un
+composant peut donc être parfaitement conforme sur son libellé et illisible sur son état.
+
+**Cas payé le 25 sept. 2026 — l'interrupteur.** Remonté par l'utilisateur, capture à l'appui :
+« on ne voit pas bien quand c'est sélectionné ou désélectionné ». La piste éteinte était en
+`line-strong` (#D8CFBD) sur `paper` (#FBF8F3), **moins de 1,5:1**, avec un curseur blanc posé
+dessus — donc invisible lui aussi. Allumé et éteint se ressemblaient.
+
+⚠️ **La correction ne s'est PAS contentée de foncer la couleur.** §6.7 interdit de faire
+reposer une information sur la couleur seule, or un interrupteur n'a que deux états à
+distinguer. Trois indices les portent désormais :
+
+1. **plein contre creux** — allumé, la piste est remplie ; éteint, elle est claire avec un
+   contour franc. **C'est le seul indice qui survit au noir et blanc et au daltonisme** ;
+2. **la position du curseur** ;
+3. la couleur, en dernier renfort.
+
+⚠️ **Le curseur change de couleur avec l'état.** Blanc sur `brand` : 4,55:1. Blanc sur une
+piste claire : rien du tout. Éteint, il passe en `ink-3`.
+
+**Contrastes MESURÉS dans le navigateur** (et non déduits du tableau des jetons) :
+
+```
+allumé   contour brand-hover / fond paper     5,63:1
+         curseur blanc / piste brand          4,55:1
+éteint   curseur ink-3 / piste sand-deep      3,91:1
+         contour au survol ink-2 / paper      7,02:1
+```
+
+⚠️ **Le 7,02:1 est le contour AU SURVOL**, pas au repos : le pointeur reste sur le contrôle
+après le clic qui bascule l'état, et la mesure attrape donc `ink-2`. Au repos le contour vaut
+`ink-3`, soit **4,58:1 sur `paper`** d'après le tableau des jetons — au-dessus du seuil, mais
+ce n'est pas une mesure fraîche. **Un test qui bascule par un clic mesure toujours l'état
+survolé** : déplacer le pointeur avant de lire, ou le savoir.
+
+L'ancien interrupteur faisait 36 × 20 px dans un bouton haut de 20 px, sous le plancher
+tactile de 36 px du §6.5. Il fait désormais 44 × 24 dans un bouton de 36.
+
 ---
 
 ## 7. Composants et motifs
@@ -2297,7 +2337,8 @@ mouvement décoratif sape la crédibilité.
 | `ui/combobox.tsx` | Sélecteur déroulant, `searchable`, `disabled`. **Remplace `<select>` partout** |
 | `ui/date-picker.tsx` | Calendrier. **Remplace `<input type="date">` partout** |
 | `ui/dialog.tsx` | `Dialog` et `ConfirmDialog` sur `<dialog>` natif — piège à focus, Échap, inertie gratuits. ⚠️ **Son bouton « Fermer » fait 32 px**, sous le plancher de 36 px du §6.5 — mesuré, non corrigé : il touche toutes les modales |
-| `ui/field.tsx` · `input.tsx` · `switch.tsx` · `empty-state.tsx` | Champs et états |
+| `ui/field.tsx` · `input.tsx` · `empty-state.tsx` | Champs et états |
+| `ui/switch.tsx` | Interrupteur 44 × 24 dans un bouton de 36 px. **L'état tient sur TROIS indices** : plein/creux, position du curseur, couleur. Refait le 25 sept. 2026 — voir §6.7 |
 | `ui/password-input.tsx` | **Seule** façon d écrire un champ de mot de passe : bascule afficher/masquer, clavier mobile neutralisé. Aucun `type="password"` en dur ailleurs |
 | `layout/logo.tsx` | Marque. **`href` la rend cliquable** ; sans lui elle reste un `<span>` — un logo qui ne mène nulle part ne doit pas se comporter comme un lien. Destination : `/` depuis les écrans d'authentification, `/dashboard` depuis l'application |
 | `layout/app-shell.tsx` · `sidebar` · `topbar` | Coquille et navigation. L'action principale de la barre supérieure **suit la section** (`primaryAction`) |
