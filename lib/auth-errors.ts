@@ -38,6 +38,33 @@ export function translateAuthError(message: string): string {
   ) {
     return 'Ce lien a expiré ou a déjà servi. Demandez-en un nouveau.';
   }
+  // ⚠️ **AVANT le fourre-tout `password` ci-dessous, et c'est la raison d'être
+  // de ce cas.** Depuis le 26 sept. 2026, `password_hibp_enabled` est actif :
+  // Supabase compare le mot de passe choisi à la base de HaveIBeenPwned et
+  // refuse ceux qui figurent dans une fuite connue, avec
+  //
+  //     weak_password  « Password is known to be weak and easy to guess,
+  //                      please choose a different one. »
+  //
+  // Ce message contient le mot « password ». Sans ce cas placé au-dessus, le
+  // fourre-tout l'attrapait et affichait **« Mot de passe trop court :
+  // 8 caractères au minimum »** — sur un mot de passe pouvant faire trente
+  // caractères. La personne le rallongeait, se faisait refuser à nouveau, et
+  // rien à l'écran ne lui disait pourquoi.
+  //
+  // Le texte explique la vraie raison et **ne reproche rien** : figurer dans une
+  // fuite n'est pas une faute de l'utilisateur, c'est un site tiers qui s'est
+  // fait voler ses données.
+  if (
+    normalized.includes('weak_password') ||
+    (normalized.includes('password') &&
+      (normalized.includes('easy to guess') ||
+        normalized.includes('known to be weak') ||
+        normalized.includes('compromised') ||
+        normalized.includes('data breach')))
+  ) {
+    return 'Ce mot de passe figure dans une fuite de données connue : il est déjà dans les listes qu’utilisent les attaquants. Ce n’est pas votre faute, mais il ne protège plus rien. Choisissez-en un autre, propre à XN-Facture.';
+  }
   if (normalized.includes('password')) {
     return 'Mot de passe trop court : 8 caractères au minimum.';
   }
