@@ -2048,6 +2048,138 @@ cherchait `/TVA[ ]+[0-9]/`. Quand le suffixe commençait par un chiffre, elle ma
 de l'entreprise**. Échec intermittent, page parfaitement correcte — confirmé en capture.
 **Ne jamais mettre dans une donnée de test un mot que les assertions recherchent.**
 
+### Avis de sécurité Supabase — 26 sept. 2026, migration 0015
+
+⚠️ **`npm audit` NE VOIT QUE LES PAQUETS. Il rendait `found 0 vulnerabilities` pendant que
+Supabase signalait 36 avis, dont 2 en ERROR.** Ce sont deux inventaires disjoints, et l'un ne
+renseigne en rien sur l'autre. **Les deux se relèvent :**
+
+```bash
+npm audit                                                   # les paquets npm
+GET https://api.supabase.com/v1/projects/<ref>/advisors/security      # la base
+```
+
+**Résultat : 36 avis → 19.** Et le point le plus important de cette section :
+
+⚠️ **AUCUNE FAILLE N'ÉTAIT EXPLOITABLE, et le dire honnêtement compte plus que le chiffre.**
+Les 30 avis « fonction `security definer` exécutable » ont tous été **essayés depuis
+l'extérieur avec la clé `anon`** avant d'écrire une ligne de correctif. Chaque fonction porte sa
+garde interne, et chacune a refusé :
+
+```
+rpc create_company_for_current_user   401  « Authentification requise. »
+rpc next_document_number              401  « Accès refusé à cette entreprise. »
+rpc attach_payment_links              401  « Aucune entreprise pour ce compte. »
+rpc start_subscription_order          401  « Aucune entreprise pour ce compte. »
+GET admin_actors                      401  permission denied for view
+```
+
+Sans session, `auth.uid()` est nul : `current_company_id()` rend `null`, `is_company_member()`
+rend `false`. La migration 0015 retire une **surface**, elle ne referme pas une porte.
+
+#### Le défaut réel : `revoke all from public` ne suffit pas sur Supabase
+
+⚠️ **Les migrations 0002, 0006, 0009 et 0010 portent un commentaire FAUX** : « Par défaut,
+PostgreSQL accorde l'exécution à `public`, ce qui inclut le rôle anonyme. On restreint aux
+comptes authentifiés. » Supabase pose un `alter default privileges … grant execute on functions
+to anon, authenticated, service_role` : chaque fonction reçoit donc un droit **nominatif** pour
+`anon`, en plus du droit implicite de `public`. Révoquer `public` retire le second et laisse le
+premier. **Mesuré avant correctif : `anon` avait `EXECUTE` sur 14 fonctions `security definer`**,
+dont toutes celles que ces commentaires déclaraient réservées. 0005 et 0012 s'en sortaient parce
+qu'elles nomment `anon` explicitement.
+
+⚠️ **ET LA RÉCIPROQUE EST VRAIE AUSSI — payé dans la même heure.** Un premier jet de 0015 ne
+révoquait que `anon, authenticated` : `log_activity` s'est fermée, les trois autres fonctions de
+déclencheur **non**, parce que leurs migrations n'avaient jamais révoqué `public` et que `anon`
+en est membre. **Les deux formes sont nécessaires, aucune ne remplace l'autre.** Le seul contrôle
+qui tranche est l'ACL brute, où une entrée sans rôle à gauche désigne PUBLIC :
+
+```sql
+select proacl from pg_proc where proname = '…';
+--  =X/postgres            ⇒ PUBLIC a EXECUTE          (encore ouvert)
+--  postgres=X/postgres    ⇒ nominatif seulement       (fermé)
+```
+
+⚠️ **`has_function_privilege('anon', …)` est le bon juge, PAS la lecture du fichier de
+migration.** Le fichier disait vrai sur son intention et faux sur son effet pendant des semaines.
+
+#### Ce qui reste signalé, et pourquoi on n'y touche pas
+
+| Avis restant | Pourquoi il reste |
+|---|---|
+| `auth_users_exposed` + `security_definer_view` (les 2 ERROR) | La vue `admin_actors` porte sa garde dans sa clause `where` (`is_platform_admin()`), et `anon` en est révoqué. **Mesuré : `permission denied for view`.** Le lint ne sait pas lire une clause `where` — faux positifs |
+| `set_marketing_preference` ouverte à `anon` | **Voulu, et à ne pas « corriger ».** Le désabonnement se clique depuis une boîte mail, sans session ; son autorisation vient du jeton d'URL (0012). La fermer supprimerait la page pour tout le monde |
+| `rls_auto_enable` ouverte à `anon` | Fonction de Supabase, pas la nôtre. Elle rend `event_trigger` : PostgREST ne l'expose pas |
+| 13 fonctions ouvertes à `authenticated` | C'est le produit. Un membre connecté DOIT pouvoir créer son entreprise, numéroter ses factures, commander une formule. Chacune porte sa garde interne |
+| `extension_in_public` (`pg_net`) | Géré par Supabase |
+| `auth_leaked_password_protection` | **Bloqué : `PATCH /config/auth` répond `402 Payment Required`** — réglage réservé à un plan Supabase payant. Décision de l'utilisateur, non prise |
+
+#### `pg_net` — SSRF latent, pas atteignable
+
+`net.http_post`, `http_get`, `http_delete` et `http_collect_response` étaient exécutables par
+`anon`. Une base qui émet des requêtes HTTP arbitraires est un SSRF **si on peut l'atteindre** :
+
+```
+POST /rest/v1/rpc/http_post                          404  PGRST202
+POST /rest/v1/rpc/http_post  (Content-Profile: net)
+  406  « Only the following schemas are exposed: public, graphql_public »
+```
+
+Le schéma `net` n'est pas exposé — **c'est là qu'est la vraie protection.** Les droits
+nominatifs d'`anon` ont été retirés, mais **le droit de PUBLIC subsiste** : ces fonctions
+appartiennent à `supabase_admin`, et `postgres` ne peut pas révoquer ce qu'il n'a pas accordé.
+
+⚠️ **Supabase porte un déclencheur d'événement `issue_pg_net_access` → `grant_pg_net_access`,
+qui réaccorde ces droits à chaque DDL sur l'extension.** Une mise à jour de `pg_net` peut donc
+annuler ce durcissement en silence. Ne pas y lire une intervention manuelle.
+
+#### Mot de passe compromis — le code est prêt, le réglage non
+
+⚠️ **ACTIVER `password_hibp_enabled` SANS TOUCHER À `translateAuthError` AFFICHERAIT UN MESSAGE
+FAUX.** Supabase refuse alors avec `weak_password` / « Password is known to be weak and easy to
+guess » — un message qui contient le mot `password`, donc attrapé par le fourre-tout de
+`lib/auth-errors.ts`, qui répondait **« Mot de passe trop court : 8 caractères au minimum »** sur
+un mot de passe de trente caractères. La personne le rallonge, se fait refuser encore, et rien
+ne le lui explique. Le cas dédié est **écrit, déployé et placé AVANT le fourre-tout** ; il
+n'attend que le réglage, et ne nuit pas en attendant.
+
+⚠️ **`password_min_length` vaut 6 côté Supabase, alors que l'application exige 8** —
+`lib/actions/auth.ts:158` et `:310`, `lib/actions/account.ts:62`. Tous les formulaires passent
+donc par 8 ; le 6 n'est le plancher que pour un appel direct à `/auth/v1/signup` avec la clé
+`anon`. L'aligner sur 8 était dans le même `PATCH` que HIBP, donc refusé avec lui (`402`) : à
+reprendre **séparément**, celui-là n'a aucune raison d'être payant.
+
+#### Vérifié après migration, et non supposé
+
+```
+anon, 8 sondes REST     permission denied for function / for view — le refus vient
+                        désormais de la couche de DROITS, avant le corps de la fonction
+désabonnement anon      toujours 200 — la page publique n'est pas cassée
+déclencheurs            log_activity écrit · create_default_subscription crée la formule
+                        discovery · touch_updated_at ÉCRASE une date de 2020 imposée à la
+                        main (5 déclencheurs branchés) · enforce_invoice_quota refuse hors
+                        déclencheur (« trigger functions can only be called as trigger »)
+parcours complet        rejoué EN PRODUCTION : compte → entreprise → TVA décochée → client
+                        → facture émise → base → détail → PDF 200, 4 338 octets
+relances                postgres garde EXECUTE sur net.http_post · tâche active à 0 7 * * *
+                        · dernier passage « succeeded » le 26/09/2026 07:00
+base                    6 entreprises, 6 comptes, 0 orpheline, 0 journal orphelin,
+                        un seul administrateur — le vrai
+```
+
+⚠️ **PIÈGE DE TEST PAYÉ ICI — `now()` NE BOUGE PAS DANS UNE TRANSACTION.** Mon contrôle de
+`touch_updated_at` comparait `updated_at` avant et après une mise à jour, avec un `pg_sleep`
+entre les deux : il rendait `false` sur un déclencheur parfaitement fonctionnel, `now()` étant
+l'heure de **début de transaction**. Le contrôle qui tranche est de **tenter d'imposer une date
+ancienne** et de vérifier que le déclencheur l'écrase.
+
+⚠️ **PIÈGE DE TEST — `raise notice` NE REMONTE PAS par `POST /database/query`.** Un premier
+script rendait ses constats en `notice` : la réponse était `[]`, et j'ai cru à un échec des
+déclencheurs. Écrire les constats dans une **table temporaire** et finir par un `select`.
+Corollaire payé dans le même script : un `exception when others then null` autour d'une erreur
+de typage a **annulé silencieusement** l'insertion d'essai, et le bloc suivant travaillait sur
+une entreprise inexistante — trois contrôles annonçaient un défaut là où la base avait raison.
+
 ---
 
 ## 4. Structure des fichiers
@@ -2075,6 +2207,9 @@ supabase/
                                 send_expiry_reminders (repartir de CE fichier)
   migrations/0014_tva_non_assujetti.sql vat_registered + vat_exempt ; contrainte
                                 « exempté ⇒ taux nul », à SENS UNIQUE
+  migrations/0015_durcissement_droits.sql Droits d'exécution retirés à `anon` ;
+                                `search_path` figé. AUCUNE faille n'était
+                                exploitable — voir « Avis de sécurité » § 2
 
 docs/
   mentions-legales-questions-juriste.md  Note de relecture juridique (à emporter chez

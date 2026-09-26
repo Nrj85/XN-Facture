@@ -146,6 +146,18 @@ $fn$;
 -- --- Droits d'exécution ------------------------------------------------------
 -- Par défaut, PostgreSQL accorde l'exécution à `public`, ce qui inclut le rôle
 -- anonyme. On restreint aux comptes authentifiés.
+--
+-- ⚠️ **CE QUI PRÉCÈDE EST FAUX SUR UN PROJET SUPABASE, et l'est resté du
+-- 2 sept. au 26 sept. 2026.** Supabase pose un `alter default privileges …
+-- grant execute on functions to anon, authenticated, service_role` : chaque
+-- fonction reçoit donc un droit **nominatif** pour `anon`, que le `revoke …
+-- from public` ci-dessous ne retire pas. Mesuré : `anon` conservait `EXECUTE`
+-- sur les quatre fonctions de ce fichier. Aucune n'était exploitable — chacune
+-- porte sa garde interne, et les essais menés avec la clé `anon` ont tous été
+-- refusés — mais la restriction annoncée ici n'existait pas.
+-- **Corrigé par 0015**, qui nomme `anon` explicitement. Ne pas ajouter de
+-- fonction ici sans la révoquer là-bas. Le seul contrôle qui tranche :
+--     select has_function_privilege('anon', '…', 'EXECUTE');
 
 revoke all on function public.is_company_member(uuid) from public;
 revoke all on function public.current_company_id() from public;
