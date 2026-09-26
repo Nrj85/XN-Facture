@@ -11,7 +11,12 @@ import { toClient } from '@/lib/db/mappers';
 export const runtime = 'nodejs';
 
 /** PDF d'un devis. Même gabarit que la facture, à trois libellés près. */
-export async function GET(_request: Request, { params }: { params: { id: string } }) {
+export async function GET(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  // ⚠️ Next 15 : `params` et `searchParams` sont des PROMESSES.
+  const { id } = await params;
   // Pas `requireSession` : une redirection 307 vers une page HTML serait suivie
   // par `fetch`, et le client croirait tenir un PDF. Ici on refuse en JSON.
   const auth = await getSession();
@@ -20,7 +25,7 @@ export async function GET(_request: Request, { params }: { params: { id: string 
   }
   const session = auth.session;
 
-  const quote = await getQuoteView(session.companyId, params.id);
+  const quote = await getQuoteView(session.companyId, id);
   if (!quote) {
     return NextResponse.json({ error: 'Devis introuvable.' }, { status: 404 });
   }

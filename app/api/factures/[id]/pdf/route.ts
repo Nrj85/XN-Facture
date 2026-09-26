@@ -20,7 +20,12 @@ export const runtime = 'nodejs';
  * ne peut donc plus être fabriqué pour une facture qui ne vous appartient pas
  * — `getInvoiceView` ne rendra rien pour une autre entreprise.
  */
-export async function GET(_request: Request, { params }: { params: { id: string } }) {
+export async function GET(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  // ⚠️ Next 15 : `params` et `searchParams` sont des PROMESSES.
+  const { id } = await params;
   // Pas `requireSession` : une redirection 307 vers une page HTML serait suivie
   // par `fetch`, et le client croirait tenir un PDF. Ici on refuse en JSON.
   const auth = await getSession();
@@ -29,7 +34,7 @@ export async function GET(_request: Request, { params }: { params: { id: string 
   }
   const session = auth.session;
 
-  const invoice = await getInvoiceView(session.companyId, params.id);
+  const invoice = await getInvoiceView(session.companyId, id);
   if (!invoice) {
     return NextResponse.json({ error: 'Facture introuvable.' }, { status: 404 });
   }

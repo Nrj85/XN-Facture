@@ -6,11 +6,17 @@ import { today } from '@/lib/today';
 
 export const metadata: Metadata = { title: 'Modifier la facture' };
 
-export default async function ModifierFacturePage({ params }: { params: { id: string } }) {
+export default async function ModifierFacturePage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  // ⚠️ Next 15 : `params` et `searchParams` sont des PROMESSES.
+  const { id } = await params;
   const session = await requireSession();
 
   const [invoice, clients] = await Promise.all([
-    getInvoiceView(session.companyId, params.id),
+    getInvoiceView(session.companyId, id),
     getClients(session.companyId),
   ]);
 

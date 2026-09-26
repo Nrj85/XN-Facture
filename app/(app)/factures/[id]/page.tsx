@@ -6,9 +6,15 @@ import { getClients, getInvoiceView, requireSession } from '@/lib/db/queries';
 
 export const metadata: Metadata = { title: 'Détail de la facture' };
 
-export default async function FactureDetailPage({ params }: { params: { id: string } }) {
+export default async function FactureDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  // ⚠️ Next 15 : `params` et `searchParams` sont des PROMESSES.
+  const { id } = await params;
   const session = await requireSession();
-  const invoice = await getInvoiceView(session.companyId, params.id);
+  const invoice = await getInvoiceView(session.companyId, id);
 
   if (!invoice) {
     return (

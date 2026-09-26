@@ -77,7 +77,7 @@ async function attacherLienDePaiement(
   const montant = priceFor(formule, period);
   if (montant === null) return;
 
-  const origin = siteOrigin();
+  const origin = await siteOrigin();
   const webhook = webhookUrl(origin);
   // Pas de secret de notification posé : on ne donne aucune adresse de rappel
   // plutôt qu'une adresse ouverte à tous. `webHookUrl` est obligatoire côté

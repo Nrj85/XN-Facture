@@ -6,9 +6,15 @@ import { getClients, getQuoteView, requireSession } from '@/lib/db/queries';
 
 export const metadata: Metadata = { title: 'Détail du devis' };
 
-export default async function DevisDetailPage({ params }: { params: { id: string } }) {
+export default async function DevisDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  // ⚠️ Next 15 : `params` et `searchParams` sont des PROMESSES.
+  const { id } = await params;
   const session = await requireSession();
-  const quote = await getQuoteView(session.companyId, params.id);
+  const quote = await getQuoteView(session.companyId, id);
 
   if (!quote) {
     return (

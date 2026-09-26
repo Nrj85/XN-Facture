@@ -6,11 +6,17 @@ import { today } from '@/lib/today';
 
 export const metadata: Metadata = { title: 'Modifier le devis' };
 
-export default async function ModifierDevisPage({ params }: { params: { id: string } }) {
+export default async function ModifierDevisPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  // ⚠️ Next 15 : `params` et `searchParams` sont des PROMESSES.
+  const { id } = await params;
   const session = await requireSession();
 
   const [quote, clients] = await Promise.all([
-    getQuoteView(session.companyId, params.id),
+    getQuoteView(session.companyId, id),
     getClients(session.companyId),
   ]);
 

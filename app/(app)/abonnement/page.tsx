@@ -30,7 +30,7 @@ export const metadata: Metadata = { title: 'Abonnement' };
 export default async function AbonnementPage({
   searchParams,
 }: {
-  searchParams: { commande?: string | string[] };
+  searchParams: Promise<{ commande?: string | string[] }>;
 }) {
   const session = await requireSession();
 
@@ -38,9 +38,9 @@ export default async function AbonnementPage({
   // rien : revenir sur cette page ne prouve pas que le règlement a abouti, et
   // annoncer un succès non constaté serait un mensonge que la formule
   // toujours fermée démentirait aussitôt.
-  const retourBrut = Array.isArray(searchParams.commande)
-    ? searchParams.commande[0]
-    : searchParams.commande;
+  // ⚠️ Next 15 : `searchParams` est une PROMESSE.
+  const { commande: commandeBrute } = await searchParams;
+  const retourBrut = Array.isArray(commandeBrute) ? commandeBrute[0] : commandeBrute;
   const [abonnement, paiements, commande] = await Promise.all([
     getSubscription(session.companyId),
     getSubscriptionPayments(session.companyId),

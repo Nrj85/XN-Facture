@@ -116,7 +116,7 @@ export async function signInWithGoogle(
     );
   }
 
-  const retour = new URL('/api/auth/confirmation', siteOrigin());
+  const retour = new URL('/api/auth/confirmation', await siteOrigin());
   retour.searchParams.set('suite', cheminInterne(suite) ?? '/dashboard');
   // Sans ce paramètre, un échec renverrait vers « mot de passe oublié » — la
   // destination par défaut du callback, absurde pour quelqu'un qui n'a jamais
@@ -284,7 +284,7 @@ export async function requestPasswordReset(email: string): Promise<ActionResult<
   const supabase = createClient();
 
   const { error } = await supabase.auth.resetPasswordForEmail(trimmed, {
-    redirectTo: `${siteOrigin()}/api/auth/confirmation?suite=%2Fnouveau-mot-de-passe`,
+    redirectTo: `${await siteOrigin()}/api/auth/confirmation?suite=%2Fnouveau-mot-de-passe`,
   });
 
   if (error) {
