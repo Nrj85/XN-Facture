@@ -2015,6 +2015,33 @@ admin ↔ entreprise à 360/390/500/1440 px · sondes du callback, **redirection
 refusée** · en-têtes de sécurité présents · redirection de `xn-facture.vercel.app` en 307 ·
 base revenue à 6 entreprises, 6 comptes, 0 orpheline.
 
+⚠️ **LE CONTRÔLE DÉCISIF EST EN PRODUCTION, PAS EN LOCAL — 26 sept. 2026.** La panne des PDF
+décrite ci-dessus était un défaut de **bundling** : elle se manifestait au serveur de
+production local et **pas du tout** en développement. Un build vert et un `npm run start` qui
+répond ne prouvent donc rien sur Vercel, où la trace de fichiers et l'externalisation des
+paquets sont rejouées autrement.
+
+**Le parcours complet a donc été rejoué contre `https://www.xn-facture.com`**, après
+déploiement : compte jetable créé par le vrai formulaire → entreprise → TVA décochée dans les
+paramètres → client inséré → facture émise par le formulaire → relue en base
+(`vat_exempt = true`, `vat_rate = 0.00`, `FAC-2026-0001`) → écran de détail (mention affichée,
+aucune ligne de taux, pas de « TTC », pas de sous-total) → **route PDF appelée avec le cookie
+de session : 200, 4 341 octets, `application/pdf`** → document **réellement lu** par
+`pdftotext` :
+
+```
+Total              1 000 000 FCFA
+TVA non applicable
+```
+
+Ménage vérifié après coup : **6 entreprises, 6 comptes, 0 orpheline, 0 ligne de journal
+orpheline, un seul administrateur — le vrai.**
+
+⚠️ **Le script de parcours prend son adresse de l'environnement** (`SITE`, défaut
+`http://localhost:3000`) : c'est ce qui permet de le pointer sur la production sans le
+modifier. **À rejouer ainsi après toute montée de version de Next ou de React**, et pas
+seulement en local.
+
 ⚠️ **PIÈGE DE TEST — mon propre jeu d'essai a fait échouer une assertion.** L'entreprise
 jetable s'appelait « Essai TVA `<suffixe aléatoire>` », et l'assertion « aucune ligne de taux »
 cherchait `/TVA[ ]+[0-9]/`. Quand le suffixe commençait par un chiffre, elle matchait **le nom
