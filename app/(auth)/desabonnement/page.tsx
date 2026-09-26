@@ -29,12 +29,14 @@ export const metadata: Metadata = {
  * passerelles antispam visitent les liens des messages, et un désabonnement à
  * l'ouverture retirerait des gens qui n'ont jamais cliqué.
  */
-export default function DesabonnementPage({
+export default async function DesabonnementPage({
   searchParams,
 }: {
-  searchParams: { jeton?: string | string[] };
+  searchParams: Promise<{ jeton?: string | string[] }>;
 }) {
-  const brut = Array.isArray(searchParams.jeton) ? searchParams.jeton[0] : searchParams.jeton;
+  // ⚠️ Next 15 : `searchParams` est une PROMESSE.
+  const { jeton: jetonBrut } = await searchParams;
+  const brut = Array.isArray(jetonBrut) ? jetonBrut[0] : jetonBrut;
   const jeton = (brut ?? '').trim();
 
   if (!jeton) {

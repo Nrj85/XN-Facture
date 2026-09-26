@@ -103,7 +103,7 @@ export async function getCompanyExport(): Promise<CompanyExport> {
     ]),
   );
 
-  const origine = siteOrigin();
+  const origine = await siteOrigin();
 
   const [companies, members, actors, subscriptions, clients, invoices, quotes] = await Promise.all([
     supabase

@@ -10,7 +10,7 @@ export const metadata: Metadata = { title: 'Votre entreprise' };
 export default async function BienvenuePage({
   searchParams,
 }: {
-  searchParams: { plan?: string | string[] };
+  searchParams: Promise<{ plan?: string | string[] }>;
 }) {
   const user = await currentUser();
   if (!user) redirect('/connexion');
@@ -49,7 +49,9 @@ export default async function BienvenuePage({
    * le monde démarre en Découverte.
    */
   const metadata = user.user_metadata as { requested_plan?: string } | null;
-  const brut = Array.isArray(searchParams.plan) ? searchParams.plan[0] : searchParams.plan;
+  // ⚠️ Next 15 : `searchParams` est une PROMESSE.
+  const { plan: planBrut } = await searchParams;
+  const brut = Array.isArray(planBrut) ? planBrut[0] : planBrut;
   const plan = parsePlan(brut) ?? parsePlan(metadata?.requested_plan);
 
   return <CreateCompanyForm isAdmin={admin} plan={plan} />;

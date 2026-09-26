@@ -1,3 +1,6 @@
+import { dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 /** @type {import('next').NextConfig} */
 const securityHeaders = [
   { key: 'X-Content-Type-Options', value: 'nosniff' },
@@ -9,38 +12,87 @@ const securityHeaders = [
 const nextConfig = {
   reactStrictMode: true,
 
-  experimental: {
-    /**
-     * **Sans ceci, les PDF échouent en production et nulle part ailleurs.**
-     *
-     * Erreur exacte, relevée sur la fonction déployée :
-     *
-     *     Cannot find module
-     *     '/var/task/node_modules/pdfkit/js/standard-fonts/Helvetica.cjs'
-     *
-     * `pdfkit` charge les polices de base par un **sous-chemin d'import de
-     * paquet** — `require('#standard-fonts/Helvetica')`, résolu à l'exécution
-     * via le champ `imports` de son `package.json`. L'analyse statique de Next
-     * ne peut pas suivre cette indirection : les 29 fichiers du dossier étaient
-     * absents de la trace, donc du bundle déployé.
-     *
-     * En local rien ne paraissait, puisque `node_modules` est présent en
-     * entier : symptôme exact, 200 en développement et 500 sur Vercel, sur la
-     * même facture et le même code.
-     *
-     * `js/data/**` est inclus par surcroît : ce dossier porte le profil couleur
-     * et les métriques `.afm`, lus eux aussi par des chemins calculés.
-     */
-    outputFileTracingIncludes: {
-      '/api/factures/[id]/pdf': [
-        './node_modules/pdfkit/js/standard-fonts/**',
-        './node_modules/pdfkit/js/data/**',
-      ],
-      '/api/devis/[id]/pdf': [
-        './node_modules/pdfkit/js/standard-fonts/**',
-        './node_modules/pdfkit/js/data/**',
-      ],
-    },
+  /**
+   * Racine de la trace de fichiers, **figée** sur le dossier du projet.
+   *
+   * ⚠️ **Next 15 la DEVINE en remontant les dossiers à la recherche d'un
+   * fichier de verrouillage**, et prévient quand il en trouve plusieurs :
+   *
+   *     Warning: Next.js inferred your workspace root, but it may not be correct.
+   *
+   * Constaté le 25 sept. 2026 : un `package-lock.json` traînait dans le dossier
+   * personnel de l'utilisateur, hors du projet. La trace est restée juste cette
+   * fois — 30 polices, vérifié — mais elle reposait sur une supposition.
+   *
+   * Or `outputFileTracingIncludes` ci-dessous résout ses chemins **à partir de
+   * cette racine** : une racine mal devinée ferait manquer les polices de
+   * pdfkit, et les PDF retomberaient en 500 sur Vercel sans que rien ne le
+   * signale au build. On ne laisse pas une supposition décider de cela.
+   */
+  outputFileTracingRoot: dirname(fileURLToPath(import.meta.url)),
+
+  /**
+   * ⚠️ **SANS CECI, LES DEUX ROUTES PDF RÉPONDENT 500 SOUS NEXT 15.**
+   *
+   * Erreur exacte, relevée sur le serveur de production local :
+   *
+   *     Minified React error #31 — object with keys
+   *     {$$typeof, type, key, ref, props}
+   *
+   * C'est-à-dire : « un objet n'est pas un enfant React valide », alors que
+   * l'objet EST un élément React. Le `$$typeof` ne correspondait pas, parce
+   * que deux React différents étaient en jeu — non pas deux installations
+   * (`npm ls react` n'en montre qu'une, dédupliquée) mais **deux variantes du
+   * même paquet** : le bundler de Next 15 résout `react` et
+   * `react/jsx-runtime` vers leur build `react-server` à l'intérieur d'un
+   * gestionnaire de route, et `@react-pdf/renderer` n'attend pas celui-là.
+   *
+   * Le déclarer externe le sort du bundle : il est chargé par la résolution
+   * Node ordinaire, avec le React que le reste du paquet utilise.
+   *
+   * ⚠️ **Le build RÉUSSISSAIT** — c'est une panne d'exécution, invisible à la
+   * compilation. Le contrôle qui la révèle est un appel réel à
+   * `/api/factures/<id>/pdf`, à rejouer après toute montée de version de Next.
+   */
+  serverExternalPackages: ['@react-pdf/renderer'],
+
+  /**
+   * **Sans ceci, les PDF échouent en production et nulle part ailleurs.**
+   *
+   * Erreur exacte, relevée sur la fonction déployée :
+   *
+   *     Cannot find module
+   *     '/var/task/node_modules/pdfkit/js/standard-fonts/Helvetica.cjs'
+   *
+   * `pdfkit` charge les polices de base par un **sous-chemin d'import de
+   * paquet** — `require('#standard-fonts/Helvetica')`, résolu à l'exécution
+   * via le champ `imports` de son `package.json`. L'analyse statique de Next
+   * ne peut pas suivre cette indirection : les 29 fichiers du dossier étaient
+   * absents de la trace, donc du bundle déployé.
+   *
+   * En local rien ne paraissait, puisque `node_modules` est présent en
+   * entier : symptôme exact, 200 en développement et 500 sur Vercel, sur la
+   * même facture et le même code.
+   *
+   * `js/data/**` est inclus par surcroît : ce dossier porte le profil couleur
+   * et les métriques `.afm`, lus eux aussi par des chemins calculés.
+   *
+   * ⚠️ **CE RÉGLAGE A QUITTÉ `experimental` À LA MONTÉE EN NEXT 15.** Laissé
+   * sous `experimental`, il aurait été **ignoré en silence** : le build aurait
+   * réussi, et les PDF seraient retombés en 500 sur Vercel — exactement la
+   * panne d'origine, sans le moindre avertissement pour la relier à la montée
+   * de version. **Contrôle après tout changement de version de Next :** la
+   * trace doit compter 30 fichiers, voir la commande en section 2 de CLAUDE.md.
+   */
+  outputFileTracingIncludes: {
+    '/api/factures/[id]/pdf': [
+      './node_modules/pdfkit/js/standard-fonts/**',
+      './node_modules/pdfkit/js/data/**',
+    ],
+    '/api/devis/[id]/pdf': [
+      './node_modules/pdfkit/js/standard-fonts/**',
+      './node_modules/pdfkit/js/data/**',
+    ],
   },
 
   async headers() {

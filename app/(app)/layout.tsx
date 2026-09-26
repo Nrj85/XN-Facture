@@ -24,7 +24,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const session = await requireSession();
   // La langue est résolue ICI, une seule fois, comme l'entreprise. Chaque
   // composant client la reprend par contexte plutôt que de relire le cookie.
-  const locale = getLocale();
+  const locale = await getLocale();
   // Résolu par la BASE, pas déduit du profil : `is_platform_admin()` interroge
   // la table qui fait autorité, et c'est la même fonction qui garde les
   // politiques RLS. Un seul verdict, pour l'affichage comme pour les données.

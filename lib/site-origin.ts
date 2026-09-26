@@ -13,11 +13,17 @@ import { headers } from 'next/headers';
  * exemplaires de cette logique auraient fini par diverger, et c'est exactement
  * le genre de divergence qui ne se voit qu'en production.
  */
-export function siteOrigin(): string {
+/**
+ * ⚠️ **Devenue asynchrone à la montée en Next 15**, où `headers()` l'est. Ses
+ * quatre appelants étaient déjà des fonctions `async` : l'ajout d'un `await`
+ * n'a rien coûté. On ne pouvait pas l'éviter comme pour `createClient()`, qui
+ * a pu garder sa signature en poussant le `await` dans son adaptateur.
+ */
+export async function siteOrigin(): Promise<string> {
   const configured = process.env.NEXT_PUBLIC_SITE_URL?.trim();
   if (configured) return configured.replace(/\/+$/, '');
 
-  const store = headers();
+  const store = await headers();
   const origin = store.get('origin');
   if (origin) return origin;
 

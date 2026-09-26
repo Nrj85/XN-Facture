@@ -16,11 +16,13 @@ export const metadata: Metadata = { title: 'Créer un compte' };
  * `parsePlan` valide contre la liste des codes connus : `?plan=` vient du
  * visiteur, donc il vaut n'importe quoi jusqu'à preuve du contraire.
  */
-export default function InscriptionPage({
+export default async function InscriptionPage({
   searchParams,
 }: {
-  searchParams: { plan?: string | string[] };
+  searchParams: Promise<{ plan?: string | string[] }>;
 }) {
-  const brut = Array.isArray(searchParams.plan) ? searchParams.plan[0] : searchParams.plan;
+  // ⚠️ Next 15 : `searchParams` est une PROMESSE.
+  const { plan: planBrut } = await searchParams;
+  const brut = Array.isArray(planBrut) ? planBrut[0] : planBrut;
   return <SignUpForm plan={parsePlan(brut)} googleEnabled={googleSignInEnabled()} />;
 }

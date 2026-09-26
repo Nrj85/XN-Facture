@@ -22,7 +22,8 @@ export async function setLocaleAction(locale: string): Promise<ActionResult<unde
     return fail('Langue inconnue.');
   }
 
-  cookies().set(LOCALE_COOKIE, locale, {
+  // Next 15 :  est asynchrone.
+  (await cookies()).set(LOCALE_COOKIE, locale, {
     maxAge: LOCALE_MAX_AGE,
     path: '/',
     sameSite: 'lax',

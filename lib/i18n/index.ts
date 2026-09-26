@@ -13,12 +13,13 @@ import { LOCALE_COOKIE, parseLocale, type Locale } from './locale';
  * l'application, qui l'était déjà (elle lit une session) — et c'est justement
  * pourquoi la landing publique n'y touche pas et reste statique.
  */
-export function getLocale(): Locale {
-  return parseLocale(cookies().get(LOCALE_COOKIE)?.value);
+export async function getLocale(): Promise<Locale> {
+  // Next 15 :  est asynchrone.
+  return parseLocale((await cookies()).get(LOCALE_COOKIE)?.value);
 }
 
-export function getDictionary(): Dictionary {
-  return dictionary(getLocale());
+export async function getDictionary(): Promise<Dictionary> {
+  return dictionary(await getLocale());
 }
 
 export { dictionary } from './dictionaries';

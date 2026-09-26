@@ -136,7 +136,7 @@ puis `startsWith(path + '/')` — soit `'//'`, qui ne correspond à aucun chemin
 `/dashboard`, `/factures`, `/devis`, `/clients`, `/parametres`, `/paiements` redirigent
 toujours vers `/connexion?suite=`.
 
-**La page est STATIQUE**, **1,83 ko de JS** — seuls l'en-tête et le retour en haut sont des
+**La page est STATIQUE**, **1,81 ko de JS** — seuls l'en-tête et le retour en haut sont des
 composants clients. C'est délibéré : la première page que voit un prospect sur un réseau lent
 ne doit rien attendre.
 
@@ -1915,7 +1915,8 @@ une session purgée, sinon le middleware renvoie `/connexion` vers `/dashboard`.
 
 | Brique | Choix | Pourquoi |
 |---|---|---|
-| Framework | **Next.js 14.2**, App Router | Route groups, Server Components, route handlers |
+| Framework | **Next.js 15.5**, App Router | Route groups, Server Components, route handlers. **Monté depuis 14.2 le 26 sept. 2026 — voir « Audit des paquets » ci-dessous** |
+| Bibliothèque UI | **React 19.3** | Montée en même temps que Next, et **par nécessité** : Next 15 embarque son propre React 19 |
 | Langage | **TypeScript 5.5** strict + `noUncheckedIndexedAccess` | Un index non vérifié est une source d'erreur silencieuse sur des montants |
 | Styles | **Tailwind CSS 3.4**, jetons dans `tailwind.config.ts` | Aucune valeur en dur dans un composant |
 | Icônes | **lucide-react** | Attention : certains glyphes portent un `$` — proscrit dans un produit FCFA |
@@ -1928,6 +1929,97 @@ une session purgée, sinon le middleware renvoie `/connexion` vers `/dashboard`.
 
 Aucune bibliothèque de formulaires : l'état des formulaires reste contrôlé à la main. `zod`
 ne sert qu'à la **frontière serveur**, pas à la saisie.
+
+### Audit des paquets — 26 sept. 2026
+
+`npm audit` rendait **5 vulnérabilités, dont 1 critique**, toutes imputables à `next@14.2.35`.
+
+⚠️ **14.2.35 EST LA DERNIÈRE 14.2.x PUBLIÉE.** La branche 14 ne reçoit plus de correctifs :
+les avis portent des plages du type `>=13.0.0 <15.5.21`, c'est-à-dire « corrigé en 15.5.21 ».
+Rester en 14 n'était pas un choix conservateur, c'était un choix de ne plus être corrigé.
+
+**Résultat après montée : `found 0 vulnerabilities`.**
+
+⚠️ **Toutes les failles ne s'appliquaient pas ici, et le dire honnêtement compte** : le projet
+n'utilise **ni `next/image` ni `next/script`**, ce qui écartait les avis Image Optimizer (dont
+une RCE) et `beforeInteractive` ; pas d'i18n Pages Router ; pas de serveur personnalisé. La RCE
+« serveurs hébergés sous Windows » ne visait pas Vercel — mais visait bien **le serveur de
+développement de cette machine**. Restaient applicables : empoisonnement de cache du
+middleware, déni de service sur les Server Actions, confusion de cache des corps de réponse,
+divulgation des points d'entrée des Server Functions.
+
+#### Les quatre pièges de la montée — tous payés
+
+⚠️ **1. `outputFileTracingIncludes` A QUITTÉ `experimental` EN NEXT 15.** Laissé dedans, il
+serait **ignoré en silence** : build vert, et les PDF retombent en 500 sur Vercel — la panne du
+5 sept. à l'identique, sans rien pour la relier à la montée de version.
+
+⚠️ **2. `cookies()`, `headers()`, `params`, `searchParams` sont devenus ASYNCHRONES.**
+`createClient()` est appelée **63 fois** : la rendre asynchrone aurait voulu dire 63 `await` à
+ne pas oublier, sur une application qui a des utilisateurs. `@supabase/ssr` accepte un
+adaptateur de cookies asynchrone (`GetAllCookies = () => Promise<…> | …`) : **le `await` vit
+donc dans l'adaptateur, et aucun appelant n'a changé.** `siteOrigin()` n'a pas eu cette chance
+— elle est devenue `async`, ses quatre appelants l'étaient déjà.
+
+⚠️ **3. LES DEUX ROUTES PDF RÉPONDAIENT 500, ET LE BUILD RÉUSSISSAIT.** Erreur exacte, non
+minifiée :
+
+```
+Minified React error #31 — object with keys {$$typeof, type, key, props, _owner, _store}
+```
+
+« Un objet n'est pas un enfant React valide », alors que l'objet **est** un élément React. La
+cause, prouvée et non supposée :
+
+```
+next/dist/compiled/react   Symbol.for('react.transitional.element')   → React 19
+react du projet            Symbol.for('react.element')                → React 18
+```
+
+**Next 15 embarque son propre React 19.** Notre JSX, compilé dans la route contre ce React-là,
+produisait des éléments que `@react-pdf/renderer` — tournant sur le React 18 du projet — ne
+reconnaissait pas. D'où la montée en **React 19, qui n'est pas cosmétique mais nécessaire.**
+`serverExternalPackages: ['@react-pdf/renderer']` a été ajouté au passage et conservé : il
+garantit que le paquet est chargé par la résolution Node ordinaire, donc avec un seul React.
+
+⚠️ **4. Next 15 DEVINE la racine du projet** en remontant les dossiers à la recherche d'un
+fichier de verrouillage, et en avertit quand il en trouve plusieurs. Un `package-lock.json`
+traînait dans le dossier personnel de l'utilisateur. La trace est restée juste, mais elle
+reposait sur une supposition — or c'est elle qui décide si les polices de pdfkit sont
+embarquées. `outputFileTracingRoot` est désormais **figé** sur le dossier du projet.
+
+#### Le `postcss` imbriqué dans Next
+
+Next épingle `postcss@8.4.31`, vulnérable, et `npm audit` ne proposait que `next@16`. Un
+`overrides: { "postcss": "$postcss" }` aligne les **huit** exemplaires sur la dépendance
+directe (8.5.28). ⚠️ **npm refuse un override qui contredit la dépendance directe**
+(`EOVERRIDE`) : il a fallu relever `devDependencies.postcss` d'abord, puis pointer l'override
+dessus par `$postcss`.
+
+⚠️ **Vérifié que l'override ne change RIEN au rendu** : les quatre fichiers CSS produits sont
+**identiques à l'octet près**, mêmes longueurs et mêmes empreintes SHA-256 avant et après.
+Échanger une faille contre une régression de style aurait été un mauvais marché.
+
+#### Ce que la montée a coûté, mesuré
+
+⚠️ **Le JS partagé passe de 87,3 ko à 103 ko.** La landing elle-même descend à 1,81 ko, mais
+son *first load* monte de ~96 ko à 108 ko. Sur l'audience de ce produit — téléphone, réseau
+lent — **c'est un vrai coût, pas un détail**, et il vient de React 19 et du runtime de Next 15.
+Il n'était pas évitable en restant corrigé.
+
+**Vérifié sur le build final, et non supposé** : `tsc`, `lint`, `build` · **trace pdfkit à 30
+fichiers sur les deux routes** · parcours complet compte → entreprise → paramètres → client →
+facture émise par le formulaire → base → écran de détail → **PDF réellement lu** · bascule
+afficher/masquer sur les 7 champs · contrastes de l'interrupteur · aller-retour
+admin ↔ entreprise à 360/390/500/1440 px · sondes du callback, **redirection ouverte toujours
+refusée** · en-têtes de sécurité présents · redirection de `xn-facture.vercel.app` en 307 ·
+base revenue à 6 entreprises, 6 comptes, 0 orpheline.
+
+⚠️ **PIÈGE DE TEST — mon propre jeu d'essai a fait échouer une assertion.** L'entreprise
+jetable s'appelait « Essai TVA `<suffixe aléatoire>` », et l'assertion « aucune ligne de taux »
+cherchait `/TVA[ ]+[0-9]/`. Quand le suffixe commençait par un chiffre, elle matchait **le nom
+de l'entreprise**. Échec intermittent, page parfaitement correcte — confirmé en capture.
+**Ne jamais mettre dans une donnée de test un mot que les assertions recherchent.**
 
 ---
 

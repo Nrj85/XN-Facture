@@ -10,7 +10,7 @@ export const metadata: Metadata = { title: 'Paramètres' };
 
 export default async function ParametresPage() {
   const session = await requireSession();
-  const locale = getLocale();
+  const locale = await getLocale();
 
   const supabase = createClient();
   const { count } = await supabase

@@ -11,16 +11,28 @@ import { publicConfig } from '@/lib/supabase/config';
  * que de passer inaperçue.
  */
 export function createClient() {
-  const cookieStore = cookies();
   const { url, anonKey } = publicConfig();
 
   return createServerClient(url, anonKey, {
     cookies: {
-      getAll() {
-        return cookieStore.getAll();
+      // ⚠️ **L'ADAPTATEUR EST ASYNCHRONE, ET `createClient` RESTE SYNCHRONE.**
+      // Next 15 a rendu `cookies()` asynchrone. Le réflexe serait de mettre un
+      // `await` ici et de rendre `createClient` asynchrone à son tour — mais
+      // elle est appelée **63 fois** dans le projet, et il aurait fallu ajouter
+      // un `await` à chacune. Soixante-trois occasions d'en oublier une sur une
+      // application qui a des utilisateurs réels.
+      //
+      // `@supabase/ssr` accepte que `getAll` et `setAll` rendent une promesse
+      // (`GetAllCookies = () => Promise<…> | …`) : le `await` vit donc ICI, en
+      // deux endroits, et aucun appelant ne change. C'est aussi la bonne
+      // migration et non un report — rien ne s'appuie sur l'accès synchrone
+      // déprécié que Next 15 tolère encore et que Next 16 retirera.
+      async getAll() {
+        return (await cookies()).getAll();
       },
-      setAll(cookiesToSet) {
+      async setAll(cookiesToSet) {
         try {
+          const cookieStore = await cookies();
           for (const { name, value, options } of cookiesToSet) {
             cookieStore.set(name, value, options);
           }
