@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { MfaForm } from '@/components/settings/mfa-form';
 import { PersonalForm } from '@/components/settings/personal-form';
 import { SecurityForm } from '@/components/settings/security-form';
 import { SettingsForm } from '@/components/settings/settings-form';
@@ -13,6 +14,16 @@ export default async function ParametresPage() {
   const locale = await getLocale();
 
   const supabase = createClient();
+
+  /*
+    État réel du second facteur, relu sur le compte à chaque affichage.
+    ⚠️ **Il ne doit PAS venir d'un état local du composant** : après un échec
+    silencieux, la carte aurait affiché « activée » sur un compte sans
+    protection — exactement la fausse assurance que cette fonction doit éviter.
+  */
+  const { data: auth } = await supabase.auth.getUser();
+  const mfaActive = (auth.user?.factors ?? []).some((f) => f.status === 'verified');
+
   const { count } = await supabase
     .from('invoices')
     .select('id', { count: 'exact', head: true })
@@ -34,6 +45,12 @@ export default async function ParametresPage() {
         mot de passe à côté d'un sélecteur de langue.
       */}
       <SecurityForm currentEmail={session.email} />
+      {/*
+        La double authentification vient EN DERNIER : les cartes précédentes
+        remplacent un identifiant, celle-ci en ajoute un. C'est aussi la seule
+        dont l'effet se voit à la prochaine connexion et non tout de suite.
+      */}
+      <MfaForm active={mfaActive} />
     </div>
   );
 }

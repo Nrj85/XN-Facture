@@ -47,6 +47,46 @@ export function createClient() {
 }
 
 /**
+ * Client **isolé** : il ne lit ni n'écrit aucun cookie.
+ *
+ * Sert à vérifier un mot de passe sans toucher à la session en cours.
+ *
+ * ⚠️ **SANS LUI, VÉRIFIER LE MOT DE PASSE ACTUEL DÉCONNECTE À MOITIÉ.**
+ * `updatePasswordAction` contrôle l'ancien mot de passe en tentant une
+ * connexion — seule méthode possible, Supabase ne stockant qu'une empreinte.
+ * Mais une connexion **réussie** émet une session neuve et l'écrit dans les
+ * cookies, remplaçant celle de l'utilisateur.
+ *
+ * C'était sans conséquence visible jusqu'à la double authentification : une
+ * session issue de `signInWithPassword` est au niveau **`aal1`**, même pour
+ * quelqu'un qui a un facteur vérifié. La garde de `getSession()` l'aurait donc
+ * renvoyé sur l'écran de code **juste après un changement de mot de passe
+ * réussi** — il aurait conclu à un échec, ou à un compte cassé.
+ *
+ * Avec cet adaptateur muet, la vérification est un aller-retour sans trace :
+ * le jeton émis n'est jamais écrit, et la session de la personne reste celle
+ * qu'elle avait, à son niveau d'assurance.
+ *
+ * `persistSession: false` en renfort, pour que rien ne soit conservé en
+ * mémoire du client non plus.
+ */
+export function createIsolatedClient() {
+  const { url, anonKey } = publicConfig();
+
+  return createServerClient(url, anonKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+    cookies: {
+      getAll() {
+        return [];
+      },
+      setAll() {
+        /* Volontairement muet : c'est la raison d'être de ce client. */
+      },
+    },
+  });
+}
+
+/**
  * Utilisateur authentifié, ou `null`.
  *
  * On passe par `getUser()` et jamais par `getSession()` : `getSession` lit le

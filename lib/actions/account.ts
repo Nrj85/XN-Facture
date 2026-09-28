@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { createClient } from '@/lib/supabase/server';
+import { createClient, createIsolatedClient } from '@/lib/supabase/server';
 import { fail, ok, type ActionResult } from '@/lib/actions/result';
 import { translateAuthError } from '@/lib/auth-errors';
 
@@ -72,8 +72,14 @@ export async function updatePasswordAction(
   const email = auth.user?.email;
   if (!email) return fail('Session expirée. Reconnectez-vous.');
 
-  // Un échec ici ne touche pas la session en cours : on reste connecté.
-  const { error: verification } = await supabase.auth.signInWithPassword({
+  // ⚠️ **CLIENT ISOLÉ, ET C'EST INDISPENSABLE.** Un échec ne touchait déjà pas
+  // la session ; un SUCCÈS, lui, en émettait une neuve et l'écrivait dans les
+  // cookies. Cette session-là est au niveau `aal1`, même pour quelqu'un qui a
+  // un facteur de double authentification vérifié : la garde de `getSession()`
+  // l'aurait renvoyé sur l'écran de code juste après un changement réussi.
+  // `createIsolatedClient()` ne lit ni n'écrit aucun cookie — la vérification
+  // ne laisse aucune trace, et la session de la personne reste intacte.
+  const { error: verification } = await createIsolatedClient().auth.signInWithPassword({
     email,
     password: currentPassword,
   });

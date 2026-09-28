@@ -55,7 +55,7 @@ export interface Session {
  */
 export type SessionResult =
   | { ok: true; session: Session }
-  | { ok: false; raison: 'anonyme' | 'sans-entreprise' };
+  | { ok: false; raison: 'anonyme' | 'sans-entreprise' | 'mfa-requise' };
 
 /**
  * Session courante, sans redirection.
@@ -70,6 +70,34 @@ export async function getSession(): Promise<SessionResult> {
 
   const { data: auth, error: authError } = await supabase.auth.getUser();
   if (authError || !auth.user) return { ok: false, raison: 'anonyme' };
+
+  // ⚠️ **LA DOUBLE AUTHENTIFICATION S'APPLIQUE ICI, ET NULLE PART AILLEURS.**
+  // Supabase émet une session `aal1` après le seul mot de passe, **même pour un
+  // compte qui a un facteur vérifié** : il n'interdit rien de lui-même. Sans ce
+  // contrôle, quelqu'un activerait la fonction, lirait « activée » à l'écran, et
+  // son mot de passe continuerait d'ouvrir seul son compte — une fausse
+  // assurance, pire que l'absence de la fonction.
+  //
+  // **Ce point est choisi parce qu'il est le seul par lequel tout passe** : les
+  // pages via `requireSession()`, et les routes d'API — PDF de facture, PDF de
+  // devis, export CSV des entreprises — qui appellent `getSession()` en direct.
+  // Le poser dans le middleware aurait laissé les routes d'API dehors, `api/`
+  // étant hors du `matcher` ; le poser dans la coquille applicative aurait
+  // laissé dehors `/admin`, qui a son propre groupe.
+  //
+  // ⚠️ **Aucun appel réseau supplémentaire.** `user.factors` arrive avec le
+  // `getUser()` ci-dessus, et le niveau d'assurance se lit dans le jeton déjà
+  // en main. On ne paie donc rien sur les comptes sans facteur, qui sont le cas
+  // général : la condition sort à la première ligne.
+  const facteurVerifie = (auth.user.factors ?? []).some((f) => f.status === 'verified');
+  if (facteurVerifie) {
+    const { data: niveau } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+    // `nextLevel` vaut `aal2` dès qu'un facteur est vérifié ; `currentLevel`
+    // reste `aal1` jusqu'à ce qu'un code soit validé DANS cette session.
+    if (niveau && niveau.currentLevel === 'aal1' && niveau.nextLevel === 'aal2') {
+      return { ok: false, raison: 'mfa-requise' };
+    }
+  }
 
   const { data: member } = await supabase
     .from('company_members')
@@ -104,10 +132,17 @@ export async function getSession(): Promise<SessionResult> {
   };
 }
 
-/** Contexte exigé par toute page applicative. Redirige plutôt que d'échouer. */
+/**
+ * Contexte exigé par toute page applicative. Redirige plutôt que d'échouer.
+ *
+ * ⚠️ **`/verification` NE DOIT JAMAIS APPELER CETTE FONCTION.** Cette page est
+ * précisément celle où l'on arrive en `aal1` : `requireSession()` y renverrait
+ * vers elle-même, en boucle. Elle fait son propre contrôle, plus léger.
+ */
 export async function requireSession(): Promise<Session> {
   const result = await getSession();
   if (result.ok) return result.session;
+  if (result.raison === 'mfa-requise') redirect('/verification');
   redirect(result.raison === 'anonyme' ? '/connexion' : '/bienvenue');
 }
 

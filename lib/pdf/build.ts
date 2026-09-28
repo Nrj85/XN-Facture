@@ -12,6 +12,33 @@ import type { Client, Company, InvoiceView, QuoteView } from '@/lib/types';
  * menu d'actions rapides de la liste ou de la fenêtre de confirmation.
  */
 
+/**
+ * Logo de l'émetteur, réduit à ce qui est sûr d'imprimer.
+ *
+ * ⚠️ **SECOND FILET CONTRE LE SSRF DU 26 sept. 2026, et il a sa raison
+ * d'être.** Le premier est `logoDataUrlSchema` (`lib/actions/schemas.ts`), qui
+ * empêche d'ÉCRIRE autre chose qu'une image en ligne. Celui-ci empêche
+ * d'IMPRIMER autre chose, et c'est différent : `companies.logo_data_url` est une
+ * colonne que `companies_update` laisse un membre modifier, et rien ne garantit
+ * qu'une ligne déjà en base, ou écrite un jour par un autre chemin — un `PATCH`
+ * REST direct, un script de reprise, une restauration — soit passée par le
+ * schéma.
+ *
+ * `@react-pdf` va chercher une URL distante depuis le serveur. C'est ici, au
+ * seul endroit qui compose une charge PDF, que l'on refuse de lui en donner une.
+ *
+ * Un logo écarté ne fait pas échouer le document : il disparaît, et l'en-tête
+ * retombe sur les deux initiales déjà prévues. Refuser la facture entière
+ * priverait quelqu'un de sa pièce comptable pour un ornement.
+ */
+const LOGO_ACCEPTE = /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/;
+
+function withSafeLogo(company: Company): Company {
+  if (!company.logoDataUrl) return company;
+  if (LOGO_ACCEPTE.test(company.logoDataUrl)) return company;
+  return { ...company, logoDataUrl: undefined };
+}
+
 function clientBlock(client: Client | undefined, fallbackName: string, address: string) {
   return {
     name: client?.name ?? fallbackName,
@@ -35,7 +62,7 @@ export function buildInvoicePayload(
     issueDate: invoice.issueDate,
     dueDate: invoice.dueDate,
     client: clientBlock(client, invoice.clientName, invoice.address),
-    company,
+    company: withSafeLogo(company),
     lines: invoice.items.map((item, index) => ({
       description: item.description,
       quantity: item.quantity,
@@ -69,7 +96,7 @@ export function buildQuotePayload(
     // Pour un devis, la seconde date est la fin de validité de l'offre.
     dueDate: quote.validUntil,
     client: clientBlock(client, quote.clientName, quote.address),
-    company,
+    company: withSafeLogo(company),
     lines: quote.items.map((item, index) => ({
       description: item.description,
       quantity: item.quantity,
