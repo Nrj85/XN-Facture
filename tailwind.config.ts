@@ -27,11 +27,22 @@ const config: Config = {
           2: '#5C544A', // secondaire — 7,0:1 sur paper
           3: '#7A7064', // atténué — 4.5:1 sur paper, reste conforme AA
         },
+        // Rampe alignée sur le LOGO le 28 sept. 2026 — teinte 11°, relevée au
+        // pixel sur `app/icon.png` (#F23005 y occupe 80,6 % de l'image).
+        //
+        // ⚠️ **L'ORANGE DU LOGO NE PEUT PAS ÊTRE `brand`.** Mesuré : du blanc
+        // dessus ne donne que **4,04:1**, sous le plancher de 4,5:1 du §6.7 —
+        // et `brand` est le fond des boutons primaires, tous porteurs de texte
+        // blanc. Le poser là aurait rendu non conforme chaque bouton du
+        // produit. Il vit donc dans `bright`, qui ne passe jamais sous du texte.
+        //
+        // `DEFAULT` et `hover` sont la MÊME teinte assombrie jusqu'à franchir
+        // leur seuil — la famille reste celle du logo, la lisibilité aussi.
         brand: {
-          DEFAULT: '#CE4A14', // fond de bouton : 4.55:1 avec du texte blanc
-          hover: '#B03D0F', // survol, et couleur de texte obligatoire sur brand-soft
-          bright: '#E2571F', // accents et repères, jamais sous du texte blanc
-          soft: '#FDF1EA',
+          DEFAULT: '#E32D05', // fond de bouton : 4.52:1 avec du texte blanc
+          hover: '#C12604', // survol (5.92:1), et texte obligatoire sur brand-soft (5.24:1)
+          bright: '#F23005', // LA couleur du logo. Accents, anneau de focus (3.81:1 sur paper)
+          soft: '#FDEEEA', // voile de survol
         },
         // Statuts — toujours accompagnés d'un point et d'un libellé, jamais la
         // couleur seule.

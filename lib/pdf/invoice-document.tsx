@@ -17,7 +17,14 @@ const INK_2 = '#5C544A';
 const INK_3 = '#7A7064';
 const LINE = '#E8E1D4';
 const PAPER = '#FBF8F3';
-const BRAND = '#CE4A14';
+// Aligné sur le logo le 28 sept. 2026, comme le jeton `brand` de
+// `tailwind.config.ts` — ces valeurs sont recopiées ici parce que
+// `@react-pdf` ne lit pas le thème Tailwind. Même contrainte que
+// `marketing.css` : les trois fichiers doivent bouger ensemble.
+// Ne sert qu'à la tuile de repli (initiales) quand l'entreprise n'a pas de
+// logo : du blanc dessus, donc la valeur doit rester au-dessus de 4,5:1 —
+// 4,52:1 ici, mesuré.
+const BRAND = '#E32D05';
 
 /**
  * `Intl` sépare les milliers par une espace fine insécable (U+202F), absente du

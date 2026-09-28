@@ -30,11 +30,14 @@
   --ink-2: #5c544a;
   --ink-3: #7a7064;
 
-  /* Marque */
-  --brand: #ce4a14;
-  --brand-hover: #b03d0f;
-  --brand-bright: #e2571f;
-  --brand-soft: #fdf1ea;
+  /* Marque — RECOPIÉE de tailwind.config.ts, alignée sur le logo le
+     28 sept. 2026. Un module CSS ne peut pas lire le thème Tailwind : toute
+     modification d'une couleur doit passer par LES DEUX fichiers, sinon la
+     landing et l'application affichent deux oranges différents. */
+  --brand: #e32d05;
+  --brand-hover: #c12604;
+  --brand-bright: #f23005; /* la couleur exacte du logo */
+  --brand-soft: #fdeeea;
 
   /* Statuts, pour la maquette de facture */
   --status-sent: #92400e;

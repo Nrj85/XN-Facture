@@ -28,7 +28,10 @@ export function Logo({
     <>
       <span
         className={cn(
-          'grid h-8 w-8 shrink-0 place-items-center rounded-[9px] bg-brand text-[13px] font-extrabold tracking-tight text-white',
+          'grid h-8 w-8 shrink-0 place-items-center rounded-[9px] bg-brand-bright',
+          // `type-display` (Archivo) et non la police de texte : c'est la
+          // graisse du logo, et la seule des deux qui lui ressemble.
+          'type-display text-[13px] font-extrabold leading-none tracking-tight',
           // Le carré pivote légèrement au survol : c'est l'indice qui dit que
           // le logo est cliquable, sans ajouter ni soulignement ni bouton.
           href &&
@@ -36,7 +39,24 @@ export function Logo({
         )}
         aria-hidden
       >
-        XN
+        {/*
+          ⚠️ **DEUX LETTRES, DEUX COULEURS — c'est le logo, pas une décoration.**
+          La tuile portait « XN » en blanc sur `brand`. Le logo réel oppose un X
+          sombre à un N clair sur l'orange vif : c'est ce contraste interne qui
+          le rend reconnaissable à 32 px, et le reproduire tient en deux `span`.
+
+          ⚠️ **Le fond est `brand-bright`, la couleur EXACTE du logo (#F23005),
+          et non `brand`.** Le §6.2 interdit `brand-bright` sous du texte blanc
+          parce qu'il échoue au seuil de 4,5:1 — mais **WCAG 1.4.3 exempte
+          explicitement les logotypes** de ce seuil. La règle vaut pour du texte
+          qui doit être lu ; ici l'ensemble est `aria-hidden`, le nom accessible
+          vient de l'`aria-label` du lien, et la fidélité de la marque prime.
+          **Ne pas généraliser : c'est l'exception du logo, pas une levée de la
+          règle.**
+        */}
+        <span className="text-ink">
+          X<span className="text-surface">N</span>
+        </span>
       </span>
       <span
         className={cn(

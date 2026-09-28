@@ -2428,10 +2428,23 @@ d'image. C'est déjà l'outil du projet, le rééchantillonnage est correct
 (`imageSmoothingQuality = 'high'`), et cela évite d'ajouter une dépendance pour trois fichiers
 produits une fois. Script : `scratchpad/icones.mjs`.
 
-⚠️ **`components/layout/logo.tsx` N'A PAS CHANGÉ, délibérément.** Sa tuile « XN » est du **texte**
-sur `bg-brand` : la remplacer par l'image ajouterait une requête réseau à chaque page de
-l'application et perdrait en netteté à 32 px, là où du texte reste parfait. L'image sert là où
-seul un fichier est possible — l'onglet, l'écran d'accueil, et l'écran de consentement Google.
+⚠️ **`components/layout/logo.tsx` reste du TEXTE, pas l'image** — mais il a été **refait à
+l'identique du logo** le 28 sept. 2026, à la demande de l'utilisateur. Poser le PNG dans la
+tuile ajouterait une requête réseau à chaque page de l'application et perdrait en netteté à
+32 px, là où du texte reste parfait. L'image sert là où seul un fichier est possible : l'onglet,
+l'écran d'accueil, l'écran de consentement Google.
+
+**Ce qui a changé dans la tuile** : elle portait « XN » en **blanc sur `brand`**. Le logo réel
+oppose un **X sombre à un N clair sur l'orange vif** — c'est ce contraste interne qui le rend
+reconnaissable à 32 px, et le reproduire tient en deux `span` imbriqués. La police passe à
+`type-display` (Archivo), la seule des deux qui ait la graisse du logo.
+
+⚠️ **Le fond de la tuile est `brand-bright` (#F23005, la couleur EXACTE), et non `brand`.**
+Le §6.2 interdit `brand-bright` sous du texte blanc parce qu'il échoue au seuil de 4,5:1 —
+mais **WCAG 1.4.3 exempte explicitement les logotypes** de ce seuil. La règle vise le texte qui
+doit être lu ; ici l'ensemble est `aria-hidden`, le nom accessible vient de l'`aria-label` du
+lien, et la fidélité de la marque prime. **Ne pas généraliser : c'est l'exception du logo, pas
+une levée de la règle.**
 
 **Vérifié** : `tsc`, `lint`, `build` · **la landing reste à 1,81 ko** · les trois fichiers
 servis en **200** avec le bon type · les trois balises émises avec les bonnes tailles ·
@@ -2700,10 +2713,55 @@ ne jamais utiliser `gray-*`, `slate-*`, `zinc-*` de Tailwind.
 | `ink` | `#1B1815` | Texte principal |
 | `ink-2` | `#5C544A` | Texte secondaire — 7,0:1 sur `paper` |
 | `ink-3` | `#7A7064` | Texte atténué — 4,58:1, **plancher AA, ne pas éclaircir** |
-| `brand` | `#CE4A14` | Fond de bouton primaire — 4,55:1 avec du blanc |
-| `brand-hover` | `#B03D0F` | Survol du bouton primaire, **et couleur de texte obligatoire dès que le fond est `brand-soft`** |
-| `brand-bright` | `#E2571F` | Repères graphiques, icône de nav active, anneau de focus. **Jamais sous du texte blanc** (échoue AA) |
-| `brand-soft` | `#FDF1EA` | Fond de survol des liens de marque, avatar. Piège : `brand` posé dessus ne donne que **4,11:1** — le texte doit passer en `brand-hover` (5,38:1) |
+| `brand` | `#E32D05` | Fond de bouton primaire — 4,52:1 avec du blanc |
+| `brand-hover` | `#C12604` | Survol du bouton primaire (5,92:1), **et couleur de texte obligatoire dès que le fond est `brand-soft`** (5,24:1) |
+| `brand-bright` | `#F23005` | **LA couleur du logo.** Repères graphiques, icône de nav active, anneau de focus (3,81:1 sur `paper`), tuile du logo. **Jamais sous du texte blanc** — 4,04:1, échoue AA |
+| `brand-soft` | `#FDEEEA` | Fond de survol des liens de marque, avatar. Piège : `brand` posé dessus reste sous le seuil — le texte doit passer en `brand-hover` |
+
+#### La rampe de marque vient du LOGO — 28 sept. 2026
+
+Demande de l'utilisateur : *« récupère le code couleur du logo et applique-le au site pour avoir
+une cohérence graphique »*. Les quatre jetons ci-dessus ont donc changé, et **ils sont tous sur
+la teinte du logo, 11°** (ils étaient à 17–22°).
+
+**Couleurs relevées AU PIXEL sur `app/icon.png`**, et non estimées à l'œil :
+
+```
+#F23005   80,63 % de l'image   le fond orange
+#F2F1F0    8,50 %              le « N »
+#0D0D0D    5,58 %              le « X »
+```
+
+⚠️ **L'ORANGE DU LOGO NE PEUT PAS ÊTRE `brand`, et c'est le piège central de ce
+changement.** Mesuré : **du blanc sur `#F23005` ne donne que 4,04:1**, sous le plancher de
+4,5:1. Or `brand` est le fond de **tous** les boutons primaires, qui portent du texte blanc :
+l'y poser aurait rendu non conforme chaque bouton du produit, d'un seul coup, pour une raison
+invisible à la relecture du code. Il vit donc dans **`brand-bright`**, dont le §6.2 dit déjà
+qu'il ne passe jamais sous du texte blanc — et où il fait **mieux** que le jeton qu'il remplace
+(4,04 contre 3,74).
+
+`brand` et `brand-hover` sont la **même teinte assombrie** jusqu'à franchir leur seuil : la
+famille reste celle du logo, la lisibilité aussi. Dérivation et contrôles :
+`scratchpad/rampe.mjs`.
+
+⚠️ **LES COULEURS SONT ÉCRITES À TROIS ENDROITS, et les trois doivent bouger ensemble** — deux
+de plus que ce que la section « landing » annonçait :
+
+| Fichier | Pourquoi une copie |
+|---|---|
+| `tailwind.config.ts` | La source |
+| `app/(marketing)/marketing.css` | Un module CSS ne peut pas lire le thème Tailwind |
+| `lib/pdf/invoice-document.tsx` | `@react-pdf` non plus. `BRAND` y peint la tuile de repli (initiales) quand l'entreprise n'a pas de logo — du blanc dessus, donc le seuil de 4,5:1 s'y applique aussi |
+
+⚠️ **LA RAMPE `aging-*` N'A PAS SUIVI, délibérément.** Elle est à 25–30°, la marque descend à
+11° : la tirer vers le rouge la rapprocherait de `status-overdue` (`#D93A2B`), et son travail
+est précisément de rester distinguable du rouge « en retard » dans le panneau d'ancienneté.
+Une cohérence de marque payée par une confusion de statut serait un mauvais échange.
+
+⚠️ **`themeColor` reste `#FBF8F3`** (`app/layout.tsx`), la couleur du papier et non celle de la
+marque. Elle teinte la barre du navigateur sur Android : à l'orange, elle formerait un bandeau
+vif au-dessus d'une page crème. La faire disparaître dans la page est plus cohérent que de la
+faire ressortir.
 
 **Statuts (`status-*`)** — trio `texte` / `-bg` / `-dot`, tous entre 6:1 et 7:1, rendus
 exclusivement par `status-badge.tsx` :
