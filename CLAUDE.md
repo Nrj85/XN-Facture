@@ -1459,8 +1459,12 @@ DMARC relus intacts** sur le serveur faisant autorité.
 
 ⚠️ **Le logo est rendu dans un carré d'environ 36 px.** Le logo horizontal
 (tuile + mot « FACTURE ») y est **illisible** — constaté en capture, pas
-supposé. Une version carrée, la tuile « XN » seule, y serait nette. Simple
-remplacement d'image dans *Branding*, non fait.
+supposé. Une version carrée, la tuile « XN » seule, y serait nette.
+
+**Le fichier existe désormais dans le dépôt** — `app/icon.png` (192 × 192),
+depuis le 28 sept. 2026 : c'est exactement l'image carrée qu'il faut.
+**Reste à la téléverser dans *Branding*, ce que seul le titulaire du compte
+Google Cloud peut faire.**
 
 **Alternative écartée, pour mémoire :** le domaine d'authentification propre de
 Supabase (option payante) aurait fait afficher `auth.xn-facture.com`. Plus
@@ -2380,11 +2384,59 @@ le même code échoue au deuxième usage et accuse la garde. Attendre une fenêt
 | **CAPTCHA** (`security_captcha_enabled`) | Exige un compte hCaptcha ou Turnstile et ses clés : **impossible sans l'utilisateur** |
 | **`PUT /auth/v1/user` change le mot de passe sans l'ancien** | `security_update_password_require_reauthentication` et `..._require_current_password` valent `false`. Notre Server Action exige l'ancien, **mais l'appel direct à l'API le contourne**. Basculer le réglage sans adapter le code **casserait les changements de mot de passe pour tout le monde** : c'est un changement en deux temps (code, puis réglage), à faire avec une vérification dédiée |
 | **Signature du webhook Tara** | Impossible sans la spécification de Tara, toujours manquante |
-| **`/favicon.ico` répond 404** | Constaté en production, **préexistant** — cosmétique, aucun rapport avec la sécurité |
+| ~~**`/favicon.ico` répond 404**~~ | **RÉGLÉ le 28 sept. 2026** — le projet n'avait **aucune** icône. Voir ci-dessous |
 
 ⚠️ **Le 404 du favicon a fait échouer mon contrôle de CSP à tort.** Le test comptait toute
 erreur réseau comme une violation. Il existait déjà sur la production **avant** la CSP :
 comparer avec l'état déployé avant d'accuser sa propre modification.
+
+#### Icônes du site — 28 sept. 2026
+
+Le projet n'avait **aucune icône** : ni `app/icon.*`, ni `favicon.ico`, ni dossier `public/`.
+L'onglet affichait le globe par défaut, et `/favicon.ico` répondait 404. La tuile « XN » carrée
+fournie par l'utilisateur (PNG 512 × 512) comble les deux.
+
+⚠️ **TROIS FICHIERS, PAS UN SEUL COPIÉ TROIS FOIS.** Servir le 512 partout aurait coûté ~51 ko
+d'icônes sur un produit qui pèse sa landing à l'octet près. Rééchantillonné :
+
+| Fichier | Taille | Poids | Rôle |
+|---|---|---|---|
+| `app/icon.png` | 192 × 192 | 8,3 ko | Onglet, favori, écran d'accueil Android |
+| `app/apple-icon.png` | 180 × 180 | 7,5 ko | Écran d'accueil iOS |
+| `app/favicon.ico` | 64 × 64 | 1,9 ko | La requête directe `/favicon.ico` |
+
+**17,6 ko au total**, contre 51. Aucun n'est sur le chemin critique du rendu, et tous sont
+mis en cache après la première visite.
+
+⚠️ **`app/icon.png` NE SERT PAS `/favicon.ico`.** Next émet bien la balise `<link rel="icon">`
+vers `/icon.png?<empreinte>`, mais un client qui demande `/favicon.ico` **en dur** — certains
+agrégateurs, lecteurs de flux, aperçus de lien, vieux navigateurs — continue de recevoir un
+404. Seul `app/favicon.ico` occupe ce chemin. Les deux sont donc nécessaires, et ce n'est pas
+un doublon.
+
+⚠️ **UN `.ico` N'OBLIGE PAS À ENCODER DU BMP.** Depuis Windows Vista, le format accepte une
+image **PNG telle quelle** : 6 octets d'en-tête, 16 octets de description, puis le PNG. C'est
+ce qui permet de fabriquer le fichier sans encodeur BMP ni dépendance d'image.
+**Preuve que l'en-tête écrit à la main est valide : Next y a lu `sizes="64x64"` tout seul** et
+l'a reporté dans la balise.
+
+⚠️ **Piège du format, non rencontré ici mais à connaître : une dimension de 256 ou plus
+s'écrit `0`** dans la description — le champ ne fait qu'un octet.
+
+⚠️ **Le redimensionnement passe par le canvas de Chrome en CDP**, pas par une bibliothèque
+d'image. C'est déjà l'outil du projet, le rééchantillonnage est correct
+(`imageSmoothingQuality = 'high'`), et cela évite d'ajouter une dépendance pour trois fichiers
+produits une fois. Script : `scratchpad/icones.mjs`.
+
+⚠️ **`components/layout/logo.tsx` N'A PAS CHANGÉ, délibérément.** Sa tuile « XN » est du **texte**
+sur `bg-brand` : la remplacer par l'image ajouterait une requête réseau à chaque page de
+l'application et perdrait en netteté à 32 px, là où du texte reste parfait. L'image sert là où
+seul un fichier est possible — l'onglet, l'écran d'accueil, et l'écran de consentement Google.
+
+**Vérifié** : `tsc`, `lint`, `build` · **la landing reste à 1,81 ko** · les trois fichiers
+servis en **200** avec le bon type · les trois balises émises avec les bonnes tailles ·
+structure de l'ICO relue octet par octet (type 1, une image, 64 × 64, 32 bpp, charge PNG
+cohérente) · icône affichée et **regardée**, pas supposée.
 
 **Vérifié EN PRODUCTION après déploiement** : CSP servie, `unsafe-eval` absent · **8 pages, 0
 violation**, JS actif (12/12 éléments révélés, bascule du mot de passe fonctionnelle) ·
@@ -2453,6 +2505,9 @@ app/
   api/auth/confirmation         GET, jeton d'email → session (hors middleware)
   api/factures/[id]/pdf         GET, lit la base (runtime Node)
   api/devis/[id]/pdf            GET, idem
+  icon.png                      192×192 — icône du site, balise émise par Next
+  apple-icon.png                180×180 — écran d'accueil iOS
+  favicon.ico                   64×64 — sert /favicon.ico, demandé en direct
   fonts/                        archivo-latin.woff2, inter-latin.woff2
   globals.css                   Classes .type-display .label-caps .tabular, reduced-motion
 
@@ -2820,7 +2875,7 @@ tactile de 36 px du §6.5. Il fait désormais 44 × 24 dans un bouton de 36.
 | `ui/field.tsx` · `input.tsx` · `empty-state.tsx` | Champs et états |
 | `ui/switch.tsx` | Interrupteur 44 × 24 dans un bouton de 36 px. **L'état tient sur TROIS indices** : plein/creux, position du curseur, couleur. Refait le 25 sept. 2026 — voir §6.7 |
 | `ui/password-input.tsx` | **Seule** façon d écrire un champ de mot de passe : bascule afficher/masquer, clavier mobile neutralisé. Aucun `type="password"` en dur ailleurs |
-| `layout/logo.tsx` | Marque. **`href` la rend cliquable** ; sans lui elle reste un `<span>` — un logo qui ne mène nulle part ne doit pas se comporter comme un lien. Destination : `/` depuis les écrans d'authentification, `/dashboard` depuis l'application |
+| `layout/logo.tsx` | Marque. **`href` la rend cliquable** ; sans lui elle reste un `<span>` — un logo qui ne mène nulle part ne doit pas se comporter comme un lien. Destination : `/` depuis les écrans d'authentification, `/dashboard` depuis l'application. ⚠️ **La tuile « XN » y est du TEXTE sur `bg-brand`, et le reste** : la remplacer par `app/icon.png` ajouterait une requête réseau à chaque page et perdrait en netteté à 32 px, là où le texte reste parfait |
 | `layout/app-shell.tsx` · `sidebar` · `topbar` | Coquille et navigation. L'action principale de la barre supérieure **suit la section** (`primaryAction`) |
 | `dashboard/stat-card.tsx` | Carte de statistique (valeur, unité, jauge, aide) |
 | `dashboard/recent-invoices.tsx` | Motif de référence **tableau + bascule liste mobile** |
