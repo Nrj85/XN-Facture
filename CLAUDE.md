@@ -450,6 +450,17 @@ distinct (`current-password` vs `new-password`) · **le bouton reste DANS le
 champ même dans la colonne étroite de la grille à deux colonnes** · états
 indépendants · sur 500 px : aucun débordement.
 
+##### Double authentification — troisième carte de l'écran (28 sept. 2026)
+
+`settings/mfa-form.tsx`, un code TOTP à six chiffres en plus du mot de passe. **La garde qui
+l'applique vit dans `getSession()`**, pas dans cette carte : sans elle, Supabase laisserait le
+mot de passe seul ouvrir le compte malgré le facteur activé. Conception, pièges et les
+19 contrôles : **section 3, « Revue de sécurité applicative »**.
+
+⚠️ **Carte à part, et non fondue dans « Sécurité et connexion ».** Les deux cartes précédentes
+**remplacent** un identifiant ; celle-ci en **ajoute** un. Réunies, elles auraient formé un
+formulaire à cinq champs où l'on ne distingue plus les deux gestes.
+
 ⚠️ **Piège de test :** `/parametres` porte **deux** champs `input[type=email]` — celui des
 coordonnées de l'ENTREPRISE et celui de la carte Sécurité. Un `querySelector('input[type=email]')`
 attrape le premier, laisse le second vide, et le bouton reste désactivé : le test conclut à un
@@ -2180,6 +2191,214 @@ Corollaire payé dans le même script : un `exception when others then null` aut
 de typage a **annulé silencieusement** l'insertion d'essai, et le bloc suivant travaillait sur
 une entreprise inexistante — trois contrôles annonçaient un défaut là où la base avait raison.
 
+### Revue de sécurité applicative — 26–28 sept. 2026
+
+Demandée par l'utilisateur après l'audit des paquets et les avis Supabase, **qui n'avaient rien
+trouvé d'exploitable**. Celle-ci, menée en relisant le code plutôt qu'en interrogeant un outil,
+a trouvé **une vraie faille**. C'est la leçon à retenir : `npm audit` voit les paquets, les avis
+Supabase voient la base, et **aucun des deux ne lit le code de l'application**.
+
+#### 1. SSRF par le champ du logo — la seule faille exploitable trouvée
+
+⚠️ **`logoDataUrl` ÉTAIT UN `z.string()` NU**, et sa valeur part telle quelle dans
+`<Image src={company.logoDataUrl} />` (`lib/pdf/invoice-document.tsx`). **`@react-pdf` accepte
+une URL distante et va la chercher depuis le serveur.**
+
+Le chemin tenait en quatre gestes, ouverts à n'importe qui puisque l'inscription est publique :
+créer un compte → créer son entreprise → envoyer `logoDataUrl = 'http://169.254.169.254/…'`
+**directement à la Server Action** (le redimensionnement du navigateur rasterise tout en PNG,
+mais rien n'obligeait à passer par lui) → télécharger sa propre facture.
+
+**PROUVÉ, et non déduit** : un écouteur HTTP local a reçu la requête sortante, agent `node`, et
+**le PDF a été produit quand même** — 1 174 octets, aucune erreur visible. Un SSRF aveugle et
+**silencieux**, donc invisible dans les journaux applicatifs.
+
+⚠️ **Le premier jet du contrôle a planté en prouvant le point.** L'écouteur servait un PNG 1×1
+dont le base64 était malformé : `png-js` a levé `Z_DATA_ERROR` **dans un rappel zlib**, une
+exception asynchrone qu'aucun `try/catch` ne rattrape, et le script est mort. Or pour échouer à
+décoder l'image, il fallait l'avoir **téléchargée**. Répondre `404` en texte évite le décodeur
+et laisse le compteur de l'écouteur trancher.
+
+**DEUX filtres, et les deux sont nécessaires** — même forme, deux rôles distincts :
+
+| Où | Rôle |
+|---|---|
+| `logoDataUrlSchema` (`lib/actions/schemas.ts`) | Empêche d'**écrire** autre chose qu'une image en ligne |
+| `withSafeLogo()` (`lib/pdf/build.ts`) | Empêche d'**imprimer** autre chose |
+
+Le second n'est pas redondant : `companies_update` laisse un membre modifier n'importe quelle
+colonne, donc une ligne peut arriver en base par un `PATCH` REST, un script de reprise ou une
+restauration, **sans passer par le schéma**. Un logo écarté ne fait pas échouer le document —
+il disparaît, et l'en-tête retombe sur les deux initiales déjà prévues.
+
+⚠️ **LISTE BLANCHE, PAS LISTE NOIRE.** Seul `data:image/(png|jpeg|webp);base64,…` passe. Pas de
+`http:`, pas de `https:`, pas de `file:`. **`image/svg+xml` est exclu délibérément** : un SVG est
+un document, il porte du script, et il finit dans un `<img>` de l'aperçu comme dans le PDF.
+
+⚠️ **Contrôle mené AVANT de poser le filtre : le seul logo en base est un
+`data:image/png;base64,` de 3 758 caractères, il passe.** Sans ce contrôle, un logo légitime
+refusé aurait bloqué l'enregistrement des paramètres de cette entreprise, sans rapport apparent
+avec le logo.
+
+**11 cas essayés, sur les expressions extraites des fichiers réels** (et non recopiées dans le
+test) : les 2 légitimes acceptés · adresse locale, métadonnées d'instance `169.254.169.254`,
+domaine tiers, `file://`, SVG, HTML déguisé en `data:`, `javascript:`, espaces en tête, retour à
+la ligne injecté — **tous refusés aux deux étages, 0 requête sortante.**
+
+#### 2. Politique de sécurité du contenu — elle manquait
+
+Cinq en-têtes étaient servis, la CSP non. Voir `next.config.mjs`, qui porte le raisonnement
+complet. L'essentiel :
+
+⚠️ **`'unsafe-inline'` SUR `script-src` EST UN COMPROMIS ASSUMÉ : la politique NE BLOQUE PAS un
+script injecté en ligne.** Next insère la charge RSC dans des `<script>` en ligne variables ;
+les autoriser demande un `nonce` ou `'unsafe-inline'`. Le `nonce` est lu par Next dans l'en-tête
+de la **requête**, ce qui **rend la page dynamique** — or `/` et les trois pages légales sont
+STATIQUES par décision documentée, et une page prérendue ne peut pas porter un `nonce` engendré
+à la requête : ses scripts seraient bloqués et la page cesserait de fonctionner.
+
+**Ce qui est bloqué malgré tout** : script d'un domaine tiers, `<object>`/`<embed>`, affichage
+en iframe, réécriture des URL par un `<base>`, et **envoi d'un formulaire vers un autre
+domaine** — l'exfiltration, c'est-à-dire l'étape qui transforme une injection en vol.
+
+⚠️ **CE QUI PROTÈGE RÉELLEMENT DE L'INJECTION EN LIGNE RESTE LE CODE**, et cela repose sur
+trois faits vérifiés : React échappe tout ce qu'il affiche · **le dépôt ne contient aucun
+`dangerouslySetInnerHTML` ni aucun `innerHTML`** · les deux sorties où une chaîne d'utilisateur
+devient une URL sont filtrées à part (liens de paiement par schéma, logo par format).
+**Si l'un de ces trois faits cesse d'être vrai, la CSP ne rattrapera pas la faute** — c'est le
+moment de passer au `nonce` et d'accepter la landing dynamique.
+
+⚠️ **`'unsafe-eval'` est ajouté EN DÉVELOPPEMENT SEULEMENT** : le rechargement à chaud de Next
+évalue par `eval`, et sans cette exception `npm run dev` s'arrête sur un écran blanc. **Vérifié
+sur l'en-tête réellement servi en production : l'exception est absente.**
+
+⚠️ **`Strict-Transport-Security` n'est PAS posé ici**, délibérément. Vercel le sert déjà. Y
+ajouter `includeSubDomains` forcerait HTTPS sur **tous** les sous-domaines, dont `mail.` et
+`webmail.` restés chez LWS : la messagerie deviendrait inaccessible, et le symptôme
+n'apparaîtrait pas sur le site.
+
+⚠️ **`connect-src` admet `https://*.supabase.co`** bien qu'aucun trafic navigateur → Supabase
+n'existe aujourd'hui (`lib/supabase/client.ts` n'est importé nulle part). C'est une précaution :
+le jour où il en existerait, l'absence de cette ligne se manifesterait par une panne
+silencieuse chez l'utilisateur.
+
+#### 3. Double authentification (TOTP) — `lib/actions/mfa.ts`
+
+⚠️ **AUCUNE INTERFACE N'EXISTAIT, alors que `mfa_totp_enroll_enabled` valait `true` chez
+Supabase.** La capacité était là, inatteignable. Pour un outil qui porte la comptabilité de
+quelqu'un, sur un téléphone souvent partagé, le mot de passe était le seul mur.
+
+⚠️ **LE FACTEUR EST INUTILE SANS LA GARDE, et ce serait PIRE QUE RIEN.** Supabase émet une
+session **`aal1`** après le seul mot de passe, **même pour un compte qui a un facteur vérifié** :
+il n'interdit rien de lui-même. Sans contrôle de notre côté, l'utilisateur activerait la
+fonction, lirait « activée » à l'écran, et son mot de passe continuerait d'ouvrir seul son
+compte — une fausse assurance, la version la plus nuisible du contrôle mort du §6.1.
+
+⚠️ **LA GARDE VIT DANS `getSession()`, ET NULLE PART AILLEURS** (`lib/db/queries.ts`), parce
+que c'est le **seul** point par lequel tout passe : les pages via `requireSession()`, et les
+routes d'API — PDF facture, PDF devis, export CSV — qui l'appellent en direct. Le middleware
+aurait laissé les routes d'API dehors (`api/` est hors du `matcher`) ; la coquille applicative
+aurait laissé dehors `/admin`, qui a son propre groupe. Les routes d'API répondent **401 JSON
+sans modification**, leur `if (!auth.ok)` couvrant le nouveau motif.
+
+⚠️ **Aucun appel réseau supplémentaire** : `user.factors` arrive avec le `getUser()` déjà fait,
+et la condition sort à la première ligne pour les comptes sans facteur — le cas général.
+
+⚠️ **`/verification` NE DOIT JAMAIS APPELER `requireSession()`.** C'est la page où l'on arrive
+en `aal1`, et `requireSession()` y redirige : l'appeler produirait une boucle, donc
+`ERR_TOO_MANY_REDIRECTS` et **aucun moyen d'entrer dans son compte**. Elle fait son contrôle à
+la main, et renvoie au tableau de bord si la session est déjà `aal2` ou s'il n'y a aucun
+facteur — cas réel quand on revient sur l'adresse par l'historique.
+
+⚠️ **UN CODE VALIDE EST EXIGÉ POUR DÉSACTIVER, PAS LE MOT DE PASSE.** Désactiver est
+précisément ce que ferait quelqu'un ayant trouvé un navigateur déverrouillé. Un code prouve la
+**possession de l'appareil**, qui est ce que la fonction protège, et il ne touche pas à la
+session. Quelqu'un qui perd son téléphone ne peut plus désactiver seul — compromis assumé, la
+sortie passe par la console SQL :
+`delete from auth.mfa_factors where user_id = '<uuid>';`
+
+⚠️ **VÉRIFIER LE MOT DE PASSE ACTUEL REMPLAÇAIT LA SESSION — défaut préexistant révélé par la
+double authentification.** `updatePasswordAction` contrôle l'ancien mot de passe en tentant une
+connexion ; une connexion **réussie** émet une session neuve et l'écrit dans les cookies. Cette
+session est en `aal1` : la garde aurait renvoyé l'utilisateur sur l'écran de code **juste après
+un changement de mot de passe réussi**, qu'il aurait pris pour un échec. D'où
+`createIsolatedClient()` (`lib/supabase/server.ts`), qui ne lit ni n'écrit aucun cookie.
+
+⚠️ **TOTP SEULEMENT, pas de SMS** — détournement de carte SIM, interception, et un coût par
+message. TOTP fonctionne hors ligne, ce qui compte sur un réseau intermittent.
+**Un seul facteur par compte**, là où Supabase en accepte dix : plusieurs demanderaient une
+liste, des noms, un choix à la connexion.
+
+⚠️ **LE QR CODE EST UNE `<img src="data:image/svg+xml,…">`, PAS UN SVG INJECTÉ.** Un
+`dangerouslySetInnerHTML` aurait été le réflexe, mais **le raisonnement de la CSP ci-dessus
+s'appuie sur le fait que le dépôt n'en contient aucun** : en introduire un affaiblirait la
+sécurité de tout le projet pour économiser un `encodeURIComponent`.
+
+⚠️ **LA CLÉ EN CLAIR EST AFFICHÉE À CÔTÉ DU QR, et c'est nécessaire.** Sur téléphone, l'écran
+qui montre le QR est souvent celui-là même qui porte l'application d'authentification : on ne
+peut pas se scanner soi-même. Sans la clé, la fonction serait inutilisable pour qui n'a qu'un
+appareil — c'est-à-dire l'essentiel de nos utilisateurs.
+
+⚠️ **Le refus d'un code dit AUSSI de regarder l'horloge du téléphone.** Un code TOTP se calcule
+sur le temps : quelques minutes de dérive et tous les codes sont refusés indéfiniment, sans que
+rien ne l'explique. Ce n'est pas la cause la plus intuitive, c'est la plus fréquente.
+
+**Vérifié de bout en bout, 19 contrôles, avec un compte jetable** :
+
+```
+activation        carte présente, état « non activée » lu depuis le serveur
+                  QR affiché 168 px · clé de 32 caractères
+                  base : UN facteur totp « verified » · écran : « activée »
+LA GARDE          après le mot de passe seul → /verification
+                  /dashboard en direct     → /verification
+                  /parametres en direct    → /verification
+                  route PDF en aal1        → 401 JSON, sans redirection (et NON 404)
+le code ouvre     mauvais code → refusé, message FRANÇAIS, champ vidé, on reste
+                  bon code     → /dashboard · route PDF → 404 (la garde est franchie)
+désactivation     mauvais code → la protection RESTE en place
+                  bon code     → facteur retiré
+retour normal     sans facteur, le mot de passe suffit de nouveau
+```
+
+⚠️ **Le contraste « 401 en aal1 / 404 en aal2 » sur un identifiant inexistant est LE contrôle
+qui tranche** pour une route d'API : un 404 prouverait que la garde a été franchie, un 401
+qu'elle a mordu. Sans identifiant volontairement inexistant, les deux cas sont indistinguables.
+
+⚠️ **Un générateur TOTP est indispensable pour éprouver tout cela**, et il doit être validé
+avant usage : `scratchpad/totp.mjs` (HMAC-SHA1, base32, aucune dépendance) est vérifié contre
+**les six vecteurs de la RFC 6238**, dont `T=20000000000` qui exige un compteur sur 64 bits. Un
+générateur faux ferait conclure à un défaut de l'application.
+
+⚠️ **Supabase refuse un code DÉJÀ présenté dans la même fenêtre de 30 s.** Un test qui réutilise
+le même code échoue au deuxième usage et accuse la garde. Attendre une fenêtre neuve.
+
+#### Ce qui reste ouvert, et pourquoi
+
+| Point | État |
+|---|---|
+| **Mots de passe compromis** (`password_hibp_enabled`) | **Bloqué : `402 Payment Required`** — plan Supabase payant. Le message français est écrit, déployé et placé AVANT le fourre-tout de `translateAuthError` ; il n'attend que le réglage |
+| **CAPTCHA** (`security_captcha_enabled`) | Exige un compte hCaptcha ou Turnstile et ses clés : **impossible sans l'utilisateur** |
+| **`PUT /auth/v1/user` change le mot de passe sans l'ancien** | `security_update_password_require_reauthentication` et `..._require_current_password` valent `false`. Notre Server Action exige l'ancien, **mais l'appel direct à l'API le contourne**. Basculer le réglage sans adapter le code **casserait les changements de mot de passe pour tout le monde** : c'est un changement en deux temps (code, puis réglage), à faire avec une vérification dédiée |
+| **Signature du webhook Tara** | Impossible sans la spécification de Tara, toujours manquante |
+| **`/favicon.ico` répond 404** | Constaté en production, **préexistant** — cosmétique, aucun rapport avec la sécurité |
+
+⚠️ **Le 404 du favicon a fait échouer mon contrôle de CSP à tort.** Le test comptait toute
+erreur réseau comme une violation. Il existait déjà sur la production **avant** la CSP :
+comparer avec l'état déployé avant d'accuser sa propre modification.
+
+**Vérifié EN PRODUCTION après déploiement** : CSP servie, `unsafe-eval` absent · **8 pages, 0
+violation**, JS actif (12/12 éléments révélés, bascule du mot de passe fonctionnelle) ·
+**6 en-têtes de sécurité** (5 avant) · parcours complet jusqu'au **PDF de 4 342 octets** ·
+`/verification` sans session → 307 vers `/connexion` (aucune boucle) · route PDF → **401 JSON** ·
+`retour=//evil.example.com` → repli, **aucune redirection ouverte** · base à 7 entreprises,
+7 comptes, 0 orpheline, 0 journal orphelin.
+
+⚠️ **La base est passée de 6 à 7 comptes, et ce n'est PAS un résidu de test.**
+`mgabrielmarcel@gmail.com` (« Mboko ») s'est inscrit le 26 sept. 2026 à 14:20 : un vrai client.
+J'ai d'abord annoncé un résidu — c'était faux. **Lire la liste des comptes avant de conclure
+qu'un décompte inattendu est un déchet de test** : le supprimer aurait détruit les données d'un
+utilisateur réel.
+
 ---
 
 ## 4. Structure des fichiers
@@ -2224,6 +2443,8 @@ app/
   (auth)/mot-de-passe-oublie/   Demande du lien de réinitialisation
   (auth)/nouveau-mot-de-passe/  Choix du nouveau mot de passe (session déjà ouverte)
   (auth)/desabonnement/         PUBLIQUE — refus des emails de prospection, par jeton
+  (auth)/verification/          Second facteur (TOTP). N'appelle PAS requireSession :
+                                c'est la page où l'on arrive en aal1 → boucle
   (admin)/admin/                Espace administrateur — coquille propre, sans entreprise
   (app)/abonnement/             Formule de l'entreprise (lecture seule, sans caisse)
   (app)/layout.tsx              requireSession + CompanyProvider + AppShell
@@ -2249,7 +2470,8 @@ components/
   auth/        auth-card (enveloppe commune), sign-in-form, sign-up-form,
                create-company-form, forgot-password-form, reset-password-form,
                google-button (connexion Google — masqué sans XN_AUTH_GOOGLE),
-               chosen-plan (rappel de la formule — inscription ET /bienvenue)
+               chosen-plan (rappel de la formule — inscription ET /bienvenue),
+               mfa-challenge-form (code à six chiffres, après le mot de passe)
   dashboard/   dashboard-view, dashboard-filters, stat-card, recent-invoices,
                invoice-row-actions, receivables-panel
   invoices/    invoice-form, invoice-list, invoice-detail, invoice-editor, invoice-preview,
@@ -2259,7 +2481,8 @@ components/
   quotes/      quote-form, quote-list, quote-detail, quote-editor, quote-quick-actions
   clients/     client-list
   settings/    settings-form, logo-uploader, personal-form (nom + langue),
-               security-form (adresse email + mot de passe)
+               security-form (adresse email + mot de passe),
+               mfa-form (double authentification — QR, clé, activation, retrait)
   subscription/ plan-limit (fenêtre de plafond), plan-chooser (choix + commande),
                 order-summary (référence et instructions de règlement),
                 renewal-intent (ne pas renouveler / revenir dessus)
@@ -2275,10 +2498,13 @@ lib/
   invoices.ts       deriveStatus, toView, computeStats, computeAging
   quotes.ts         deriveQuoteStatus, toQuoteView, computeQuoteStats, QUOTE_NOTES
   company-context.tsx  CompanyProvider — LECTURE SEULE (company, formatMoney, user)
-  supabase/         config (env typé), client (navigateur), server (RSC/actions), middleware
+  supabase/         config (env typé), client (navigateur), middleware,
+                    server (RSC/actions + createIsolatedClient : vérifie un mot de
+                    passe SANS toucher à la session — sinon elle retombe en aal1)
   db/               database.types (GÉNÉRÉ), types (alias de lignes), mappers (ligne ↔ domaine),
                     queries (lectures serveur, `getSession` et `requireSession`)
   actions/          auth, account (nom affiché), company, clients, invoices, quotes
+                    · mfa (TOTP : enrôlement, défi, retrait — la GARDE est dans getSession)
                     · email-preferences (désabonnement, SANS session)
                     · locale · result, schemas, context
   admin/company-export.ts  Lignes et CSV de l export des entreprises (anti-injection)
@@ -2605,7 +2831,8 @@ tactile de 36 px du §6.5. Il fait désormais 44 × 24 dans un bouton de 36.
 | `documents/status-menu.tsx` | **Seule** façon de changer un statut depuis une page de détail |
 | `documents/document-created-dialog.tsx` · `use-creation-notice.ts` | Confirmation après enregistrement |
 | `pdf/download-pdf-button.tsx` | Téléchargement PDF, en bouton plein ou en icône |
-| `lib/pdf/build.ts` | `buildInvoicePayload` / `buildQuotePayload` — **seule** façon de composer une charge PDF |
+| `lib/pdf/build.ts` | `buildInvoicePayload` / `buildQuotePayload` — **seule** façon de composer une charge PDF. `withSafeLogo()` y écarte tout logo qui n'est pas une image en ligne : second filet contre le SSRF |
+| `settings/mfa-form.tsx` | Double authentification. QR en `<img src="data:…">` — **jamais** un SVG injecté : le raisonnement de la CSP repose sur l'absence de `dangerouslySetInnerHTML` dans tout le dépôt |
 
 ### 7.2 Squelette de page
 
