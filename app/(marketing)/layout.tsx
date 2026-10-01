@@ -1,6 +1,7 @@
 import { SiteHeader } from '@/components/marketing/site-header';
 import { SiteFooter } from '@/components/marketing/site-footer';
 import { BackToTop } from '@/components/marketing/back-to-top';
+import { getPublishedTestimonials } from '@/lib/db/testimonials';
 import './marketing.css';
 
 /**
@@ -11,7 +12,22 @@ import './marketing.css';
  * confine la landing — l'application, elle, continue de vivre sur les classes
  * Tailwind, sans que les deux se marchent dessus.
  */
-export default function MarketingLayout({ children }: { children: React.ReactNode }) {
+export default async function MarketingLayout({ children }: { children: React.ReactNode }) {
+  /*
+    ⚠️ **LE LIEN « Témoignages » DE L'EN-TÊTE DOIT SUIVRE L'EXISTENCE DE LA
+    SECTION.** Depuis que les témoignages viennent de la base, la section
+    disparaît quand aucun n'est publié — et le lien d'ancre de l'en-tête
+    pointerait alors vers un `#temoignages` inexistant : un clic sans effet,
+    c'est-à-dire le contrôle mort du §6.1, sur la page la plus vue du site.
+
+    La lecture est faite ICI plutôt que dans l'en-tête parce que celui-ci est un
+    composant CLIENT : lui faire interroger le DOM après montage ferait
+    clignoter le lien, et lui faire porter la requête le rendrait dynamique.
+    Cette coquille est statique, donc la requête a lieu au build et à la
+    régénération, pas à chaque visite.
+  */
+  const temoignagesPublies = (await getPublishedTestimonials()).length > 0;
+
   return (
     <div className="marketing">
       {/*
@@ -22,7 +38,7 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
         ne déplace rien.
       */}
       <div id="haut" tabIndex={-1} />
-      <SiteHeader />
+      <SiteHeader temoignages={temoignagesPublies} />
       <main>{children}</main>
       <SiteFooter />
       {/*

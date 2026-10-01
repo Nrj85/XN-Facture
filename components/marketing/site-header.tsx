@@ -13,7 +13,19 @@ const LIENS = [
   { href: '#temoignages', label: 'Témoignages' },
 ];
 
-export function SiteHeader() {
+/**
+ * @param temoignages Y a-t-il au moins un témoignage publié ?
+ *
+ * ⚠️ **Sans cela, le lien « Témoignages » mènerait à une ancre inexistante.**
+ * Depuis le 1er oct. 2026 la section vient de la base et disparaît quand rien
+ * n'est publié ; un lien qui ne fait rien est le contrôle mort du §6.1. La
+ * valeur est calculée dans la coquille `(marketing)/layout.tsx`, qui est un
+ * composant serveur STATIQUE — ce composant-ci est client, il ne peut ni
+ * interroger la base, ni sonder le DOM sans faire clignoter le lien.
+ */
+export function SiteHeader({ temoignages = true }: { temoignages?: boolean }) {
+  const liens = temoignages ? LIENS : LIENS.filter((l) => l.href !== '#temoignages');
+
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
 
@@ -52,7 +64,7 @@ export function SiteHeader() {
           </Link>
 
           <nav className={styles.nav} aria-label="Sections de la page">
-            {LIENS.map((lien) => (
+            {liens.map((lien) => (
               <a key={lien.href} href={lien.href} className={styles.navLink}>
                 {lien.label}
               </a>
@@ -89,7 +101,7 @@ export function SiteHeader() {
 
       {open && (
         <div id="menu-mobile" className={styles.sheet}>
-          {LIENS.map((lien, index) => (
+          {liens.map((lien, index) => (
             <a
               key={lien.href}
               href={lien.href}

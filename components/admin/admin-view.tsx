@@ -1,9 +1,11 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import Link from 'next/link';
 import {
   Building2,
   FileText,
+  MessageSquareQuote,
   Receipt,
   ShieldCheck,
   UserRound,
@@ -149,6 +151,24 @@ export function AdminView({
           Vue transversale de toutes les entreprises. Connecté en tant que{' '}
           <strong className="font-semibold text-ink">{adminEmail}</strong>.
         </p>
+
+        {/*
+          ⚠️ **SEUL LIEN D'ÉCRITURE DE CET ESPACE.** Le reste de l'écran est en
+          lecture seule par décision verrouillée (§8), et la base le garantit —
+          aucune politique d'écriture sur les tables métier. Les témoignages
+          font exception parce qu'ils sont du **contenu éditorial** : la
+          migration 0016 n'ouvre l'écriture que sur `site_testimonials`.
+
+          Le lien est posé ici, dans l'en-tête, plutôt qu'au milieu des cartes
+          de chiffres : c'est une destination, pas une statistique.
+        */}
+        <Link
+          href="/admin/temoignages"
+          className="mt-4 inline-flex min-h-9 items-center gap-2 rounded-[10px] border border-line bg-surface px-3 py-1.5 text-[13px] font-medium text-ink transition-colors duration-150 hover:border-line-strong hover:bg-sand"
+        >
+          <MessageSquareQuote className="h-4 w-4 text-brand-bright" aria-hidden />
+          Témoignages de la page d’accueil
+        </Link>
       </header>
 
       {/* Dire en clair ce que cet espace peut et ne peut pas faire. Un écran

@@ -17,6 +17,7 @@ import { InfoCardGrid, type InfoItem } from '@/components/marketing/info-card';
 import { Pricing } from '@/components/marketing/pricing';
 import { Testimonials } from '@/components/marketing/testimonials';
 import { FinalCta } from '@/components/marketing/site-footer';
+import { getPublishedTestimonials } from '@/lib/db/testimonials';
 
 export const metadata: Metadata = {
   // Titre absolu : le gabarit « %s · XN-Facture » doublerait la marque.
@@ -113,7 +114,22 @@ const ETAPES: InfoItem[] = [
   },
 ];
 
-export default function LandingPage() {
+/**
+ * ⚠️ **LA PAGE EST DEVENUE `async` ET RESTE STATIQUE — les deux à la fois.**
+ * Lire les témoignages en base n'a pas rendu `/` dynamique : la lecture passe
+ * par un client **sans cookie** (`getPublishedTestimonials`), et c'est
+ * `cookies()` — pas le simple fait d'attendre des données — qui force le rendu
+ * à la requête. Next continue donc de prérendre la page, et
+ * `revalidatePath('/')` la régénère quand l'éditeur enregistre.
+ *
+ * **Le contrôle qui tranche est la sortie de `npm run build`** : `○ /` et
+ * 1,81 ko. Si un jour on y lit un cookie, ce `○` devient `ƒ` et la première
+ * page que voit un prospect sur un réseau lent cesse d'être servie depuis le
+ * cache. C'est la ligne à surveiller après toute modification de ce fichier.
+ */
+export default async function LandingPage() {
+  const temoignages = await getPublishedTestimonials();
+
   return (
     <>
       <Hero />
@@ -156,14 +172,26 @@ export default function LandingPage() {
         <Pricing />
       </Section>
 
-      <Section
-        id="temoignages"
-        eyebrow="Retours"
-        title="Ce qu’en disent les premiers utilisateurs"
-        subtitle="Des ateliers, des cabinets, des indépendants — les mêmes contraintes, le même besoin de clarté."
-      >
-        <Testimonials />
-      </Section>
+      {/*
+        ⚠️ **AUCUN TÉMOIGNAGE PUBLIÉ ⇒ LA SECTION ENTIÈRE DISPARAÎT**, titre et
+        sous-titre compris. Monter la grille vide laisserait « Ce qu'en disent
+        les premiers utilisateurs » suivi d'un blanc : un produit dont personne
+        ne dit rien, affiché en toutes lettres. L'absence de section ne se
+        remarque pas ; une section vide, si.
+
+        C'est aussi ce qui a retiré de la page les trois témoignages inventés,
+        sans rien supprimer : ils sont en base, non publiés (migration 0016).
+      */}
+      {temoignages.length > 0 && (
+        <Section
+          id="temoignages"
+          eyebrow="Retours"
+          title="Ce qu’en disent les premiers utilisateurs"
+          subtitle="Des ateliers, des cabinets, des indépendants — les mêmes contraintes, le même besoin de clarté."
+        >
+          <Testimonials items={temoignages} />
+        </Section>
+      )}
 
       <FinalCta />
     </>
