@@ -165,9 +165,113 @@ aux deux endroits.** C'est le coût de la séparation, et il est borné à cette
 - Les chiffres de la maquette d'aperçu sont ceux du **contrôle chiffré de référence**
   (2 110 000 · 406 175 · 2 516 175). Inventer des montants aurait affiché une TVA fausse sur
   la page qui vend justement le calcul de la TVA.
-- ⚠️ **Les trois témoignages sont des exemples de mise en page, pas de vrais clients.** À
-  remplacer avant l'ouverture au public : des avis inventés sous des noms et des villes
-  précises seraient un mensonge, pas une maquette.
+- ⚠️ ~~**Les trois témoignages sont des exemples de mise en page, pas de vrais clients.**~~
+  **RETIRÉS DE LA PAGE LE 1er oct. 2026.** Ils viennent désormais de la base et sont **non
+  publiés** : la section n'apparaît plus du tout. Voir « Témoignages modifiables » ci-dessous.
+  Les textes sont conservés comme gabarit — rien n'a été perdu, et plus rien d'inventé n'est
+  en ligne.
+
+#### Témoignages modifiables sans développeur — migration 0016 (1er oct. 2026)
+
+Demande de l'utilisateur : *« je veux avoir la possibilité de modifier les éléments sur le
+front par moi-même, par exemple les témoignages, sans toutefois toujours passer par ici »*.
+Les textes vivaient en dur dans `components/marketing/testimonials.tsx` : seul un développeur
+pouvait les changer. Ils viennent maintenant de `site_testimonials` et s'éditent depuis
+**`/admin/temoignages`**.
+
+⚠️ **LA LANDING RESTE STATIQUE À 1,81 ko, et c'est le point technique central.** Lire en base
+aurait dû la rendre dynamique — ce qui aurait coûté le rendu serveur par visiteur sur la
+première page que voit un prospect, décision documentée plus haut. Ce n'est pas arrivé, parce
+que **ce n'est pas l'attente de données qui force le rendu à la requête, c'est `cookies()`**.
+La lecture publique passe donc par `createIsolatedClient()`, qui ne touche aucun cookie, et
+Next continue de prérendre la page.
+
+**Le contrôle qui tranche est la sortie de `npm run build` : `○ /` et 1,81 ko** — pas `ƒ /`.
+C'est la ligne à regarder après toute modification de `app/(marketing)/page.tsx` ou de sa
+coquille.
+
+⚠️ **CHAQUE ÉCRITURE DOIT APPELER `revalidatePath('/', 'layout')`.** Sans lui, un
+enregistrement réussi **n'apparaîtrait jamais** en ligne : la page est servie depuis le cache,
+et l'éditeur conclurait que la fonction ne marche pas. Le `'layout'` n'est pas décoratif — la
+coquille `(marketing)/layout.tsx` lit le même contenu pour décider d'afficher le lien
+« Témoignages » de l'en-tête, et un `revalidatePath('/')` seul laisserait l'en-tête en
+désaccord avec la page.
+
+⚠️ **AUCUN TÉMOIGNAGE PUBLIÉ ⇒ LA SECTION ENTIÈRE DISPARAÎT**, titre compris, **et le lien de
+l'en-tête avec elle**. Deux raisons : une grille vide sous « Ce qu'en disent les premiers
+utilisateurs » afficherait en toutes lettres qu'aucun client ne dit rien ; et un lien d'ancre
+vers un `#temoignages` inexistant est le contrôle mort du §6.1, sur la page la plus vue du
+site. Le drapeau est calculé dans la coquille (composant serveur) et passé à `SiteHeader`, qui
+est un composant **client** : lui faire sonder le DOM ferait clignoter le lien.
+
+⚠️ **`lib/testimonials.ts` NE DOIT RIEN IMPORTER DU SERVEUR — piège payé au build.**
+L'éditeur est un composant client et a besoin du type et des initiales ; tant que les requêtes
+vivaient dans ce fichier, les importer tirait `next/headers` dans le bundle client :
+
+```
+You're importing a component that needs "next/headers".
+Import trace: lib/supabase/server.ts → lib/testimonials.ts
+              → components/admin/testimonials-editor.tsx
+```
+
+D'où la séparation **`lib/testimonials.ts`** (type + `initials()`, pur) et
+**`lib/db/testimonials.ts`** (les lectures). **C'est exactement la séparation
+`lib/i18n/dictionaries.ts` / `index.ts`, et pour la même raison.** Ne pas la défaire.
+
+⚠️ **LES INITIALES SONT DÉRIVÉES DU NOM, plus un champ à saisir.** Un champ `initials` distinct
+pouvait rester à « KM » sous un nom qu'on venait de changer — et c'est un champ de moins à
+remplir sur un téléphone.
+
+⚠️ **LES LONGUEURS SONT CONTRAINTES PAR LA BASE** (`check` sur les trois textes, 0016), pas
+seulement par le formulaire. La grille est réglée au pixel : un texte de 2 000 caractères ne la
+rend pas « moins jolie », il la casse. Le formulaire compte les caractères à la saisie, mais un
+`PATCH` REST direct ne passe pas par lui — et son auteur est précisément quelqu'un qui a le
+droit d'écrire. ⚠️ **Les bornes de `lib/actions/testimonials.ts` recopient celles de la
+migration : si l'une bouge, l'autre doit bouger**, sinon le formulaire accepte ce que la base
+refuse.
+
+⚠️ **« Publier » EST SÉPARÉ DE « Enregistrer ».** C'est le seul geste qui change ce que voit le
+public, et le plus fréquent. Les fondre obligerait à renvoyer les trois textes pour basculer un
+booléen, donc à risquer d'écraser une saisie en cours.
+
+##### Ce que cela rouvre, et ce que cela ne rouvre pas
+
+⚠️ **L'ESPACE D'ADMINISTRATION N'EST PLUS STRICTEMENT EN LECTURE SEULE — décision §8 rouverte
+le 1er oct. 2026, à la demande de l'utilisateur, et POUR CETTE SEULE TABLE.** Aucune politique
+d'écriture n'a été ajoutée ailleurs : `platform_admins`, `subscriptions`,
+`subscription_orders`, `subscription_reminders` et `activity_log` restent sans aucune écriture
+possible depuis l'interface. **Ne pas prendre 0016 comme précédent** : la question à se poser
+reste « que peut faire quelqu'un qui obtient ce droit ? ». Ici, changer un texte d'accroche sur
+une page publique. Pour une facture, une formule ou un journal, la réponse est tout autre.
+
+**Vérifié de bout en bout, 15 contrôles, avec un administrateur jetable** :
+
+```
+depart            aucune section sur la landing · lien d en-tete absent
+client ordinaire  ecarte de /admin/temoignages
+administrateur    l editeur s ouvre · les 3 brouillons sont la · l ecran
+                  annonce qu aucun n est publie
+ajout             enregistre NON publie · absent de la landing
+publication       la base dit publie · LA SECTION REVIENT · le texte saisi est
+                  REELLEMENT sur la landing · le lien d en-tete revient
+retrait           disparait de nouveau, section comprise
+menage            3 temoignages, 0 publie, 7 entreprises, 7 comptes,
+                  un seul administrateur — le vrai
+```
+
+⚠️ **TROIS PIÈGES DE TEST PAYÉS ICI, DONT DEUX DÉJÀ CONSIGNÉS PLUS BAS.**
+
+1. **`innerText` rend le texte TRANSFORMÉ par CSS** — deux fois dans le même script. Le titre
+   (`.type-display`) et le badge d'état (`uppercase`) s'y lisent en capitales : `/Témoignages/`
+   et `/Brouillon/` ne matchaient jamais, et le test annonçait « 0 brouillon » sur un écran qui
+   en affichait trois. **Comparer sans tenir compte de la casse**, ou viser un libellé de
+   bouton, que le CSS ne transforme pas.
+2. **`[...document.querySelectorAll('input')]` INCLUT UN CHAMP CACHÉ** que Next pose pour les
+   Server Actions. Remplir « le premier et le deuxième champ » mettait donc le rôle au mauvais
+   endroit, et le serveur refusait « Précisez l'activité et la ville » sur un formulaire que je
+   croyais rempli. **Cibler par le `placeholder`**, qu'on écrit soi-même.
+3. **Un `node -e` dans un `bash -c` en guillemets doubles exécute les backticks** — déjà
+   consigné en section 9, repayé ici en voulant corriger un motif qui en contenait.
 
 **Apparition au défilement** (`marketing/reveal.tsx`). La maquette d'aperçu se construit
 morceau par morceau quand elle entre dans l'écran : barre du navigateur, formulaire de gauche,
@@ -2494,6 +2598,10 @@ supabase/
   migrations/0015_durcissement_droits.sql Droits d'exécution retirés à `anon` ;
                                 `search_path` figé. AUCUNE faille n'était
                                 exploitable — voir « Avis de sécurité » § 2
+  migrations/0016_temoignages.sql site_testimonials — contenu éditorial de la
+                                landing. SEULE table du projet ouverte en
+                                ÉCRITURE aux administrateurs. Ne pas en faire
+                                un précédent
 
 docs/
   mentions-legales-questions-juriste.md  Note de relecture juridique (à emporter chez
@@ -2511,6 +2619,7 @@ app/
   (auth)/verification/          Second facteur (TOTP). N'appelle PAS requireSession :
                                 c'est la page où l'on arrive en aal1 → boucle
   (admin)/admin/                Espace administrateur — coquille propre, sans entreprise
+  (admin)/admin/temoignages/    SEUL écran d'ÉCRITURE de l'espace (contenu éditorial)
   (app)/abonnement/             Formule de l'entreprise (lecture seule, sans caisse)
   (app)/layout.tsx              requireSession + CompanyProvider + AppShell
   (app)/dashboard|factures|devis|clients|parametres|paiements|rapports|aide/
@@ -2525,13 +2634,15 @@ app/
   globals.css                   Classes .type-display .label-caps .tabular, reduced-motion
 
 components/
-  admin/       admin-view, export-companies-button (export CSV des entreprises)
+  admin/       admin-view, export-companies-button (export CSV des entreprises),
+               testimonials-editor (témoignages — publier est séparé d'enregistrer)
   ui/          Primitives : button, icon-button, card, input, field, switch, combobox,
                date-picker, dialog, popover, action-menu, status-badge, empty-state,
                password-input (bascule afficher/masquer — les 7 champs du projet)
   layout/      app-shell, sidebar, topbar, logo, page-placeholder,
                account-badge (Admin + formule payante)
-  marketing/   site-header, site-footer (+ FinalCta), hero, app-preview, reveal,
+  marketing/   site-header (le lien « Témoignages » suit l'existence de la section),
+               site-footer (+ FinalCta), hero, app-preview, reveal,
                back-to-top (retour en haut, landing + pages légales),
                section, info-card, cta-button, pricing, testimonials, legal-page
                — chacun avec son .module.css, hors Tailwind
@@ -2574,6 +2685,8 @@ lib/
   actions/          auth, account (nom affiché), company, clients, invoices, quotes
                     · mfa (TOTP : enrôlement, défi, retrait — la GARDE est dans getSession)
                     · email-preferences (désabonnement, SANS session)
+                    · testimonials (contenu de la landing — CHAQUE écriture
+                      doit appeler revalidatePath('/', 'layout'))
                     · locale · result, schemas, context
   admin/company-export.ts  Lignes et CSV de l export des entreprises (anti-injection)
   vat.ts            Régime de TVA — contenu du bloc de totaux (5 rendus) et régime
@@ -2582,6 +2695,8 @@ lib/
   billing-config.ts Coordonnées d'encaissement et secret du webhook (ENVIRONNEMENT)
   site-origin.ts    Origine publique du site — source UNIQUE (emails, retours, webhook)
   auth-errors.ts    translateAuthError — PAS 'use server' (fonction synchrone partagée)
+  testimonials.ts   Type + initiales, PUR — aucun import serveur, l'éditeur est
+                    un composant client (même séparation que i18n/dictionaries)
   auth-providers.ts Affichage du bouton Google (XN_AUTH_GOOGLE) — l'activation
                     RÉELLE est chez Supabase, vérifiée par /auth/v1/settings
   payments/tara.ts  Tara/Dikalo : création du lien, filtrage des URL par schéma
