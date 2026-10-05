@@ -616,11 +616,27 @@ plus haut.
 
 #### Papier à en-tête — migration 0017 (5 oct. 2026)
 
-⚠️ **LA MIGRATION 0017 N'EST PAS APPLIQUÉE À LA BASE au moment où ces lignes sont écrites.**
-`SUPABASE_ACCESS_TOKEN` était **révoqué** ce jour-là — refusé jusque sur `GET /v1/projects`.
-Le fichier est écrit et le code l'accompagne, mais **rien n'a pu être essayé contre la base**.
-À appliquer par la console SQL Supabase, ou en régénérant un jeton. Tant que ce n'est pas fait,
-la carte des paramètres existe mais son enregistrement échoue.
+**Migration 0017 APPLIQUÉE et éprouvée contre la base réelle le 5 oct. 2026.**
+
+⚠️ **PIÈGE DE JETON PAYÉ CE JOUR-LÀ — « Read » N'EST PAS « Read-write ».** Les jetons Supabase
+sont désormais à **portée fine**, et un jeton accordé en lecture sur les 42 capacités laisse
+passer les `select` et la **génération des types**, mais fait répondre à tout DDL :
+
+```
+400  25006: cannot execute ALTER TABLE in a read-only transaction
+```
+
+⚠️ **Le paramètre `read_only: false` dans le corps de la requête NE CHANGE RIEN** — essayé :
+c'est la portée du jeton qui impose la transaction en lecture seule, pas un drapeau d'appel.
+Il faut **Database → Read-write** à la création ; le reste peut rester en lecture.
+⚠️ Et avec un jeton **à portée projet**, `GET /v1/projects` (liste du compte) peut répondre
+401 **alors que le jeton est valide** : sonder `GET /v1/projects/<ref>`, sinon on croit le
+jeton révoqué.
+
+⚠️ **CE PROJET N'A AUCUN REGISTRE DE MIGRATIONS** — `supabase_migrations.schema_migrations`
+n'existe pas, les **dix-sept** migrations ont toutes été appliquées en SQL direct. Ne pas créer
+ce registre à l'occasion d'une migration : il n'inscrirait que celle-là et laisserait croire
+que les seize autres n'ont jamais été jouées.
 
 Retour client : *« beaucoup d'entreprises ont leur propre papier à en-tête »*. Deux situations
 réelles, un seul mécanisme : **le document s'efface pour ne pas imprimer par-dessus ce que le
@@ -692,17 +708,44 @@ tel que le client le recevra » : s'il gardait le logo et le bloc Émetteur que 
 plus, la personne réglerait son papier et croirait que rien n'a changé. Un bandeau en pointillé
 remplace l'en-tête — un blanc nu se lirait comme une mise en page cassée.
 
-**Vérifié SANS la base, en rendant de vrais PDF et en les relisant (16 contrôles)** :
+**Vérifié CONTRE LA BASE RÉELLE, par la vraie route PDF, documents relus (18 contrôles)** :
 
 ```
-aucun en-tête      bloc Émetteur imprimé · ligne légale · Page 1/1
+compte jetable     inscription publique → entreprise → client → facture émise
+entreprise neuve   mode « none », 45 / 25 mm, ligne légale gardée — rien n'a changé
+aucun en-tête      adresse de l'émetteur imprimée · RCCM · Page 1/1 · 4 621 octets
 pré-imprimé        adresse et email de l'émetteur DISPARUS · destinataire conservé
-                   ligne légale conservée (défaut) · tient sur une page
+                   ligne légale conservée (défaut)
 sans ligne légale  RCCM absent · la PAGINATION survit
-image téléversée   émetteur absent · le PDF contient bien une image
+image téléversée   posée par un MEMBRE (201) · émetteur absent · le PDF porte une image
 marges réelles     120 mm + 80 mm → le document DÉBORDE sur une 2e page (Page 1/2)
-conversion         0 / 25,4 / 45 / 80 mm → 0 / 72 / 127,56 / 226,77 pt, exact
+contraintes        mode fantaisiste · 200 mm · 90 mm · http:// · SVG · file://
+                   — les SIX refusés par la base en 23514
+ménage             8 entreprises, 8 comptes, 0 orpheline, 0 journal orphelin,
+                   0 en-tête, un seul administrateur — le vrai
 ```
+
+**RLS éprouvée avec DEUX entreprises (9 contrôles)** — le premier jet ne prouvait rien, la
+base ne portant qu'un seul en-tête : il n'y avait rien à isoler.
+
+```
+A ne voit que le sien · ne LIT pas celui de B même en le visant
+A ne MODIFIE pas (0 ligne) · ne SUPPRIME pas (0 ligne) · n'ÉCRIT pas sous B (403)
+l'en-tête de B est INTACT après les quatre tentatives
+un visiteur ANONYME n'en voit aucun
+```
+
+⚠️ **`Prefer: return=representation` est indispensable sur le `DELETE`** — PostgREST rend 204
+même quand la RLS n'a rien laissé passer. Sans lui on conclut à une suppression réussie.
+
+⚠️ **PIÈGE DE TEST PAYÉ — UN COMPTE JETABLE EST RESTÉ EN BASE.** `/auth/v1/signup` rend
+l'utilisateur **à la racine** quand une confirmation par email est exigée
+(`mailer_autoconfirm = false`, le réglage de ce projet), et **sous `user`** seulement quand une
+session est émise. Mon script ne lisait que `user.id` : il levait **avant** d'avoir noté
+l'identifiant, et le `finally` a donc supprimé un compte `null` pendant qu'un vrai compte, avec
+un **mot de passe connu**, survivait. Constaté par le décompte (9 comptes au lieu de 8), retiré
+aussitôt. **Lire `inscrit.user?.id ?? inscrit.id`**, et noter l'identifiant avant toute
+assertion.
 
 ⚠️ **LA PREUVE DES MARGES PASSE PAR LE DÉBORDEMENT, et il a fallu y venir.** Deux mesures ont
 échoué avant : `pdftotext` est ici **Xpdf 4, sans `-bbox`** (pas de coordonnées), et son
@@ -2793,8 +2836,8 @@ lib/
   supabase/         config (env typé), client (navigateur), middleware,
                     server (RSC/actions + createIsolatedClient : vérifie un mot de
                     passe SANS toucher à la session — sinon elle retombe en aal1)
-  db/               database.types (GÉNÉRÉ — ⚠️ le bloc de 0017 est écrit À LA MAIN,
-                    à régénérer dès qu'un jeton valide existe),
+  db/               database.types (GÉNÉRÉ — ⚠️ il ne PROTÈGE pas : le client n'est
+                    pas typé, voir ci-dessous),
                     letterhead (image de l'en-tête — la SEULE lecture de
                     company_letterheads ; jamais dans Company),
                     types (alias de lignes), mappers (ligne ↔ domaine),
@@ -2844,6 +2887,16 @@ message générique.
 `formatMoney` sert dans huit composants présentationnels et que les traverser en props
 reviendrait à faire descendre l'entreprise partout. Les factures, devis et clients ne sont
 **jamais** dans un contexte.
+
+⚠️ **`database.types.ts` NE PROTÈGE PAS AUTANT QU'IL EN A L'AIR — constaté le 5 oct. 2026.**
+`createServerClient` est appelé **sans le générique `<Database>`** (`lib/supabase/server.ts`) :
+le client n'est donc pas typé, `from('table_inexistante')` compile, et les lignes reviennent en
+`any`. **La preuve est historique, pas théorique** : `site_testimonials` a manqué entièrement du
+fichier de types du 1er au 5 octobre pendant que **six** appels l'utilisaient, sans qu'une seule
+compilation échoue. Ce qui est réellement vérifié, ce sont les endroits qui nomment un alias de
+`lib/db/types.ts` — par exemple `.single<CompanyRow>()` dans `queries.ts`. **Ailleurs, ce
+fichier est de la documentation, pas un garde-fou.** Poser le générique est une amélioration
+réelle, mais elle touche 63 sites d'appel : à décider avec l'utilisateur, pas en passant.
 
 **Le mappeur `lib/db/mappers.ts` est la seule frontière** où `snake_case` devient `camelCase`
 et où `qty_milli` redevient une quantité. C'est ce qui permet à `toView`, `computeTotals`,

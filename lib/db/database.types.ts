@@ -5,8 +5,16 @@
  *   npx supabase gen types typescript --project-id tpzmmgcfpnsysaghdqrx \
  *     --schema public > lib/db/database.types.ts
  *
- * `lib/db/types.ts` en dérive ses alias : si une colonne change de nom ou de
- * nullabilité, la compilation échoue au lieu de laisser passer un `undefined`.
+ * ⚠️ **CE FICHIER NE PROTÈGE PAS AUTANT QU'IL EN A L'AIR — constaté le
+ * 5 oct. 2026.** `createServerClient` est appelé **sans le générique
+ * `<Database>`** (`lib/supabase/server.ts`) : le client n'est donc pas typé,
+ * `from('table_inexistante')` compile, et les lignes reviennent en `any`.
+ * Preuve : `site_testimonials` a manqué de ce fichier du 1er au 5 octobre
+ * pendant que SIX appels l'utilisaient, sans qu'une seule compilation échoue.
+ *
+ * Ce qui est réellement vérifié, ce sont les endroits qui nomment un alias de
+ * `lib/db/types.ts` — par exemple `.single<CompanyRow>()` dans `queries.ts`.
+ * Ailleurs, ce fichier est de la documentation, pas un garde-fou.
  */
 
 export type Json =
@@ -115,11 +123,11 @@ export type Database = {
           email: string
           id: string
           invoice_prefix: string
+          legal_name: string
           letterhead_bottom_mm: number
           letterhead_keep_legal: boolean
           letterhead_mode: string
           letterhead_top_mm: number
-          legal_name: string
           logo_data_url: string | null
           momo_mtn: string | null
           momo_orange: string | null
@@ -144,11 +152,11 @@ export type Database = {
           email?: string
           id?: string
           invoice_prefix?: string
+          legal_name: string
           letterhead_bottom_mm?: number
           letterhead_keep_legal?: boolean
           letterhead_mode?: string
           letterhead_top_mm?: number
-          legal_name: string
           logo_data_url?: string | null
           momo_mtn?: string | null
           momo_orange?: string | null
@@ -173,11 +181,11 @@ export type Database = {
           email?: string
           id?: string
           invoice_prefix?: string
+          legal_name?: string
           letterhead_bottom_mm?: number
           letterhead_keep_legal?: boolean
           letterhead_mode?: string
           letterhead_top_mm?: number
-          legal_name?: string
           logo_data_url?: string | null
           momo_mtn?: string | null
           momo_orange?: string | null
@@ -192,12 +200,6 @@ export type Database = {
         }
         Relationships: []
       }
-      // ⚠️ AJOUTÉ À LA MAIN — migration 0017, 5 oct. 2026. Ce fichier est
-      // normalement GÉNÉRÉ (`supabase gen types`), mais le jeton d'accès de
-      // gestion était révoqué ce jour-là. **À régénérer dès qu'un jeton valide
-      // est disponible**, pour que ce bloc redevienne le reflet du schéma et
-      // non une copie écrite de mémoire. Les quatre colonnes `letterhead_*`
-      // ajoutées à `companies` le sont pour la même raison.
       company_letterheads: {
         Row: {
           company_id: string
@@ -552,6 +554,39 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      site_testimonials: {
+        Row: {
+          author_name: string
+          author_role: string
+          created_at: string
+          id: string
+          position: number
+          published: boolean
+          quote: string
+          updated_at: string
+        }
+        Insert: {
+          author_name: string
+          author_role: string
+          created_at?: string
+          id?: string
+          position?: number
+          published?: boolean
+          quote: string
+          updated_at?: string
+        }
+        Update: {
+          author_name?: string
+          author_role?: string
+          created_at?: string
+          id?: string
+          position?: number
+          published?: boolean
+          quote?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       subscription_orders: {
         Row: {
