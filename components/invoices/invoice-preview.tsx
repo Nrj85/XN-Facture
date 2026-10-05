@@ -54,6 +54,20 @@ export function InvoicePreview({
 }) {
   const { company, formatMoney } = useCompany();
   const isQuote = variant === 'quote';
+
+  /*
+    ⚠️ **L'APERÇU DOIT SUIVRE LE PAPIER À EN-TÊTE, sinon il ment.** Il prétend
+    montrer « le document tel que le client le recevra » : s'il affichait le
+    logo et le bloc Émetteur que le PDF n'imprime plus, la personne réglerait
+    son papier et croirait que rien n'a changé. Même raison que l'opacité du
+    filigrane, reprise à l'identique entre les deux rendus.
+
+    Le bandeau remplace l'en-tête plutôt que de laisser un vide : un blanc nu
+    se lirait comme une mise en page cassée, pas comme une réservation voulue.
+  */
+  const enTete =
+    company.letterheadMode === 'preprinted' || company.letterheadMode === 'image';
+  const pied = !enTete || company.letterheadKeepLegal !== false;
   const bloc = totalsBlock(totals, vatExempt);
   return (
     <article className="relative isolate overflow-hidden rounded-[10px] border border-line bg-surface p-5 shadow-card sm:p-6">
@@ -76,7 +90,7 @@ export function InvoicePreview({
 
           Constaté pour de vrai : sans `isolate`, la capture de la carte avec et
           sans filigrane rendait deux images d'empreinte identique. */}
-      {company.logoDataUrl && (
+      {!enTete && company.logoDataUrl && (
         <span
           aria-hidden
           className="pointer-events-none absolute inset-0 -z-10 flex items-center justify-center opacity-[0.07]"
@@ -98,24 +112,35 @@ export function InvoicePreview({
             </span>
           </p>
         </div>
-        {company.logoDataUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={company.logoDataUrl}
-            alt=""
-            className="h-10 w-10 shrink-0 rounded-[9px] object-contain"
-          />
-        ) : (
-          <span
-            className="grid h-9 w-9 shrink-0 place-items-center rounded-[9px] bg-brand text-[12px] font-extrabold text-white"
-            aria-hidden
-          >
-            {company.name.slice(0, 2).toUpperCase()}
-          </span>
-        )}
+        {!enTete &&
+          (company.logoDataUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={company.logoDataUrl}
+              alt=""
+              className="h-10 w-10 shrink-0 rounded-[9px] object-contain"
+            />
+          ) : (
+            <span
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-[9px] bg-brand text-[12px] font-extrabold text-white"
+              aria-hidden
+            >
+              {company.name.slice(0, 2).toUpperCase()}
+            </span>
+          ))}
       </header>
 
+      {/* Dit ce qui se passe, au lieu de laisser un en-tête amputé que l'on
+          prendrait pour une mise en page cassée. */}
+      {enTete && (
+        <p className="mt-3 rounded-[10px] border border-dashed border-line-strong bg-sand px-3 py-2 text-[11.5px] leading-relaxed text-ink-2">
+          Votre papier à en-tête prend le relais : le logo et le bloc « Émetteur » ne sont pas
+          imprimés, et {company.letterheadTopMm} mm sont réservés en haut du document.
+        </p>
+      )}
+
       <div className="mt-5 grid gap-px overflow-hidden rounded-[10px] border border-line bg-line sm:grid-cols-2">
+        {!enTete && (
         <div className="bg-surface p-3.5">
           <p className="label-caps">Émetteur</p>
           <p className="mt-1.5 text-[12.5px] font-semibold text-ink">{company.legalName}</p>
@@ -127,6 +152,7 @@ export function InvoicePreview({
             NIU {company.niu}
           </p>
         </div>
+        )}
         <div className="bg-surface p-3.5">
           <p className="label-caps">{isQuote ? 'Destinataire' : 'Facturé à'}</p>
           <p className="mt-1.5 text-[12.5px] font-semibold text-ink">
@@ -263,8 +289,8 @@ export function InvoicePreview({
       <p className="mt-4 text-[11px] text-ink-3">
         {isQuote
           ? `Offre valable jusqu’au ${formatDate(dueDate)}`
-          : `Règlement à ${company.paymentTermsDays} jours`}{' '}
-        · {company.legalName} · RCCM {company.rccm}
+          : `Règlement à ${company.paymentTermsDays} jours`}
+        {pied ? ` · ${company.legalName} · RCCM ${company.rccm}` : ''}
       </p>
     </article>
   );

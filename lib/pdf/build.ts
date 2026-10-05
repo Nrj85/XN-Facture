@@ -51,6 +51,16 @@ export function buildInvoicePayload(
   invoice: InvoiceView,
   company: Company,
   client: Client | undefined,
+  /**
+   * Image du papier à en-tête, lue par la route appelante.
+   *
+   * ⚠️ **Elle n'est PAS prise sur `company`, et ne doit jamais y être.**
+   * `Company` traverse `getSession()` et `CompanyProvider` à chaque page :
+   * une image de page entière y serait transportée partout pour ne servir
+   * qu'ici. Elle vit dans `company_letterheads` et n'est lue que par les deux
+   * routes PDF.
+   */
+  letterhead?: string | null,
 ): PdfPayload {
   const totals = computeTotals(invoice.items, invoice.vatRate);
 
@@ -63,6 +73,7 @@ export function buildInvoicePayload(
     dueDate: invoice.dueDate,
     client: clientBlock(client, invoice.clientName, invoice.address),
     company: withSafeLogo(company),
+    letterheadDataUrl: letterhead ?? undefined,
     lines: invoice.items.map((item, index) => ({
       description: item.description,
       quantity: item.quantity,
@@ -84,6 +95,16 @@ export function buildQuotePayload(
   quote: QuoteView,
   company: Company,
   client: Client | undefined,
+  /**
+   * Image du papier à en-tête, lue par la route appelante.
+   *
+   * ⚠️ **Elle n'est PAS prise sur `company`, et ne doit jamais y être.**
+   * `Company` traverse `getSession()` et `CompanyProvider` à chaque page :
+   * une image de page entière y serait transportée partout pour ne servir
+   * qu'ici. Elle vit dans `company_letterheads` et n'est lue que par les deux
+   * routes PDF.
+   */
+  letterhead?: string | null,
 ): PdfPayload {
   const totals = computeTotals(quote.items, quote.vatRate);
 
@@ -97,6 +118,7 @@ export function buildQuotePayload(
     dueDate: quote.validUntil,
     client: clientBlock(client, quote.clientName, quote.address),
     company: withSafeLogo(company),
+    letterheadDataUrl: letterhead ?? undefined,
     lines: quote.items.map((item, index) => ({
       description: item.description,
       quantity: item.quantity,

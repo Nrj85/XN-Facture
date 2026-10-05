@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { LetterheadForm } from '@/components/settings/letterhead-form';
 import { MfaForm } from '@/components/settings/mfa-form';
 import { PersonalForm } from '@/components/settings/personal-form';
 import { SecurityForm } from '@/components/settings/security-form';
@@ -24,6 +25,18 @@ export default async function ParametresPage() {
   const { data: auth } = await supabase.auth.getUser();
   const mfaActive = (auth.user?.factors ?? []).some((f) => f.status === 'verified');
 
+  /*
+    ⚠️ **ON NE LIT QUE LA PRÉSENCE DE L'EN-TÊTE, PAS L'IMAGE.** Un `select`
+    sur `data_url` ferait transiter des centaines de kilo-octets jusqu'au
+    navigateur pour afficher « En-tête enregistré ». `head: true` avec un
+    décompte ne rapporte qu'un nombre.
+  */
+  const { count: enTetes } = await supabase
+    .from('company_letterheads')
+    .select('company_id', { count: 'exact', head: true })
+    .eq('company_id', session.companyId);
+  const aDejaUnEnTete = (enTetes ?? 0) > 0;
+
   const { count } = await supabase
     .from('invoices')
     .select('id', { count: 'exact', head: true })
@@ -44,6 +57,19 @@ export default async function ParametresPage() {
         L'accès au compte vient APRÈS le confort : on ne met pas un champ de
         mot de passe à côté d'un sélecteur de langue.
       */}
+      {/*
+        Le papier à en-tête change la FORME de chaque document émis, pas les
+        réglages de l'entreprise : il a sa propre carte, posée juste après les
+        sections d'entreprise et avant ce qui n'appartient qu'à la personne.
+      */}
+      <LetterheadForm
+        mode={session.company.letterheadMode}
+        topMm={session.company.letterheadTopMm}
+        bottomMm={session.company.letterheadBottomMm}
+        keepLegal={session.company.letterheadKeepLegal}
+        aDejaUneImage={aDejaUnEnTete}
+      />
+
       <SecurityForm currentEmail={session.email} />
       {/*
         La double authentification vient EN DERNIER : les cartes précédentes

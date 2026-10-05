@@ -7,6 +7,7 @@ import { getQuoteView, getSession } from '@/lib/db/queries';
 import { createClient } from '@/lib/supabase/server';
 import type { ClientRow } from '@/lib/db/types';
 import { toClient } from '@/lib/db/mappers';
+import { getLetterhead } from '@/lib/db/letterhead';
 
 export const runtime = 'nodejs';
 

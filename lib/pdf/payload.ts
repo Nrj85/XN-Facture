@@ -46,6 +46,22 @@ export interface PdfPayload {
   amountPaid: number;
   balanceDue: number;
   notes?: string;
+  /**
+   * Image du papier à en-tête, dessinée sur chaque page.
+   *
+   * ⚠️ **ELLE N'EST PAS DANS `company`, et c'est délibéré.** `Company` est lu
+   * par `getSession()` à chaque chargement de page et traverse
+   * `CompanyProvider` : une image de page entière y serait transportée partout
+   * pour ne servir qu'ici. Elle vit dans `company_letterheads` et n'est lue que
+   * par la route PDF, qui la pose sur la charge.
+   *
+   * Absente quand `company.letterheadMode` vaut `none` ou `preprinted` — dans
+   * le second cas l'entreprise imprime sur son propre papier, il n'y a rien à
+   * dessiner, seulement du blanc à réserver.
+   *
+   * Optionnelle : une charge produite avant la migration 0017 reste valide.
+   */
+  letterheadDataUrl?: string;
 }
 
 /**

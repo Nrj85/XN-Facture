@@ -7,6 +7,7 @@ import { getInvoiceView, getSession } from '@/lib/db/queries';
 import { createClient } from '@/lib/supabase/server';
 import type { ClientRow } from '@/lib/db/types';
 import { toClient } from '@/lib/db/mappers';
+import { getLetterhead } from '@/lib/db/letterhead';
 
 // `@react-pdf/renderer` a besoin des API Node (Buffer, streams) : la route ne
 // peut pas tourner sur le runtime Edge.

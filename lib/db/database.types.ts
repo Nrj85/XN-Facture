@@ -115,6 +115,10 @@ export type Database = {
           email: string
           id: string
           invoice_prefix: string
+          letterhead_bottom_mm: number
+          letterhead_keep_legal: boolean
+          letterhead_mode: string
+          letterhead_top_mm: number
           legal_name: string
           logo_data_url: string | null
           momo_mtn: string | null
@@ -140,6 +144,10 @@ export type Database = {
           email?: string
           id?: string
           invoice_prefix?: string
+          letterhead_bottom_mm?: number
+          letterhead_keep_legal?: boolean
+          letterhead_mode?: string
+          letterhead_top_mm?: number
           legal_name: string
           logo_data_url?: string | null
           momo_mtn?: string | null
@@ -165,6 +173,10 @@ export type Database = {
           email?: string
           id?: string
           invoice_prefix?: string
+          letterhead_bottom_mm?: number
+          letterhead_keep_legal?: boolean
+          letterhead_mode?: string
+          letterhead_top_mm?: number
           legal_name?: string
           logo_data_url?: string | null
           momo_mtn?: string | null
@@ -179,6 +191,38 @@ export type Database = {
           vat_registered?: boolean
         }
         Relationships: []
+      }
+      // ⚠️ AJOUTÉ À LA MAIN — migration 0017, 5 oct. 2026. Ce fichier est
+      // normalement GÉNÉRÉ (`supabase gen types`), mais le jeton d'accès de
+      // gestion était révoqué ce jour-là. **À régénérer dès qu'un jeton valide
+      // est disponible**, pour que ce bloc redevienne le reflet du schéma et
+      // non une copie écrite de mémoire. Les quatre colonnes `letterhead_*`
+      // ajoutées à `companies` le sont pour la même raison.
+      company_letterheads: {
+        Row: {
+          company_id: string
+          data_url: string
+          updated_at: string
+        }
+        Insert: {
+          company_id: string
+          data_url: string
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string
+          data_url?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "company_letterheads_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: true
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       company_members: {
         Row: {

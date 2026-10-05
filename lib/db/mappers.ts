@@ -51,13 +51,44 @@ export function toCompany(row: CompanyRow): Company {
     bankAccount: row.bank_account ?? undefined,
     momoMtn: row.momo_mtn ?? undefined,
     momoOrange: row.momo_orange ?? undefined,
+    // ⚠️ Repli sur les valeurs par défaut de la migration 0017 : les types
+    // générés peuvent être en retard sur le schéma, et une entreprise lue avant
+    // régénération renverrait `undefined` — ce qui ferait disparaître l'en-tête
+    // de quelqu'un qui l'a réglé. `?? 'none'` ne masque rien ici : c'est
+    // exactement le défaut de la colonne.
+    letterheadMode: (row.letterhead_mode as Company['letterheadMode']) ?? 'none',
+    letterheadTopMm: row.letterhead_top_mm ?? 45,
+    letterheadBottomMm: row.letterhead_bottom_mm ?? 25,
+    letterheadKeepLegal: row.letterhead_keep_legal ?? true,
   };
 }
 
-/** Champs modifiables d'une entreprise, prêts pour un `update`. */
+/**
+ * Champs modifiables d'une entreprise, prêts pour un `update`.
+ *
+ * ⚠️ **LES QUATRE COLONNES DU PAPIER À EN-TÊTE SONT EXCLUES, délibérément.**
+ * Elles ont leur propre action (`lib/actions/letterhead.ts`), et le formulaire
+ * d'entreprise n'a aucun champ qui les porte : les inclure ici ferait réécrire
+ * à chaque enregistrement des paramètres une valeur que le client n'a jamais
+ * envoyée. `companySchema` les retire de toute façon, donc elles arrivaient
+ * `undefined` — et seul le fait que `JSON.stringify` abandonne `undefined`
+ * empêchait l'écriture. **Une protection par accident n'est pas une
+ * protection** : la première sérialisation qui conserverait `undefined`
+ * remettrait le mode à « aucun » derrière le dos de l'utilisateur.
+ *
+ * Effet de bord utile : ce fichier ne nomme plus les colonnes de 0017, donc
+ * l'enregistrement des paramètres d'entreprise continue de fonctionner même
+ * sur une base où la migration n'est pas encore appliquée.
+ */
 export function fromCompany(company: Company): Omit<
   CompanyRow,
-  'id' | 'created_at' | 'updated_at'
+  | 'id'
+  | 'created_at'
+  | 'updated_at'
+  | 'letterhead_mode'
+  | 'letterhead_top_mm'
+  | 'letterhead_bottom_mm'
+  | 'letterhead_keep_legal'
 > {
   return {
     name: company.name,

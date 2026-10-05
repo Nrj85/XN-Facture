@@ -110,7 +110,39 @@ export interface Company {
   bankAccount?: string;
   momoMtn?: string;
   momoOrange?: string;
+  /**
+   * Papier à en-tête — RÉGLAGES seulement, jamais l'image.
+   *
+   * ⚠️ **L'image vit dans `company_letterheads`, et ne doit JAMAIS remonter
+   * ici.** `getSession()` fait un `select('*')` sur `companies` à chaque
+   * chargement de page, et cet objet traverse `CompanyProvider` : une image de
+   * page entière serait transportée à chaque visite de chaque membre. Ces
+   * quatre champs-ci pèsent quelques octets et sont nécessaires partout —
+   * l'aperçu comme le PDF doivent savoir si un en-tête prend le relais.
+   */
+  letterheadMode: LetterheadMode;
+  /** Blanc réservé en haut, en MILLIMÈTRES (on mesure son papier à la règle). */
+  letterheadTopMm: number;
+  /** Blanc réservé en bas, en millimètres. */
+  letterheadBottomMm: number;
+  /**
+   * Garder la ligne légale en pied de page malgré l'en-tête.
+   *
+   * **Vrai par défaut, et ce n'est pas un détail d'affichage.** Une facture
+   * camerounaise doit porter le NIU et le RCCM ; rien ne garantit que le papier
+   * de l'entreprise les porte. Le laisser à vrai rend le document conforme même
+   * quand l'en-tête est muet là-dessus.
+   */
+  letterheadKeepLegal: boolean;
 }
+
+/**
+ * - `none` — le document imprime son propre en-tête, comme avant.
+ * - `preprinted` — l'entreprise imprime sur du papier physique : on réserve le
+ *   blanc, on n'ajoute aucune image.
+ * - `image` — l'en-tête téléversé est dessiné sur chaque page.
+ */
+export type LetterheadMode = 'none' | 'preprinted' | 'image';
 
 /**
  * Statuts stockés d'un devis.

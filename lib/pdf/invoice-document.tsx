@@ -27,6 +27,27 @@ const PAPER = '#FBF8F3';
 const BRAND = '#E32D05';
 
 /**
+ * Millimètres → points PostScript. **Seule conversion du projet.**
+ *
+ * L'utilisateur mesure son papier à en-tête à la règle, donc les réglages sont
+ * stockés en millimètres (migration 0017) ; `@react-pdf` compte en points.
+ * 72 pt = 1 pouce = 25,4 mm. La faire ailleurs qu'ici garantirait qu'un jour
+ * les deux conversions divergent, sur une marge d'impression.
+ */
+const mm = (valeur: number) => (valeur * 72) / 25.4;
+
+/**
+ * Le papier à en-tête prend-il le relais ?
+ *
+ * ⚠️ **`preprinted` COMPTE AUTANT QUE `image`.** L'erreur serait de ne traiter
+ * que le cas où une image existe : quelqu'un qui imprime sur son papier
+ * physique n'en téléverse aucune, et c'est précisément lui qui a le plus besoin
+ * que le document s'efface — sinon le logo généré s'imprime PAR-DESSUS le logo
+ * déjà sur la feuille.
+ */
+const sousEnTete = (mode: string | undefined) => mode === 'preprinted' || mode === 'image';
+
+/**
  * `Intl` sépare les milliers par une espace fine insécable (U+202F), absente du
  * jeu WinAnsi des polices intégrées au PDF : elle s'y afficherait comme un
  * caractère manquant. On la remplace par une insécable classique, qui, elle, en
@@ -41,6 +62,9 @@ const styles = StyleSheet.create({
     paddingTop: 40,
     paddingBottom: 48,
     paddingHorizontal: 44,
+    // ⚠️ Ces deux valeurs sont REMPLACÉES quand un papier à en-tête est actif —
+    // voir `margesPapier()` plus bas. Elles restent le défaut, c'est-à-dire le
+    // document tel qu'il était avant la migration 0017.
     fontFamily: 'Helvetica',
     fontSize: 9,
     color: INK,
@@ -205,18 +229,62 @@ export function InvoiceDocument({ payload }: { payload: PdfPayload }) {
     Boolean(company.bankName || company.bankAccount || company.momoMtn || company.momoOrange);
   const docLabel = isQuote ? 'Devis' : 'Facture';
 
+  // --- Papier à en-tête ------------------------------------------------------
+  // ⚠️ **TOUT CE QUE LE PAPIER PORTE DÉJÀ DOIT DISPARAÎTRE DU DOCUMENT.** Le
+  // PDF imprime aujourd'hui le logo, le bloc « Émetteur » et une ligne légale
+  // en pied de page — c'est-à-dire exactement le contenu d'un papier à en-tête.
+  // Les laisser produirait deux en-têtes superposés sur une feuille
+  // pré-imprimée, et deux fois la même adresse sur un en-tête téléversé.
+  const enTete = sousEnTete(company.letterheadMode);
+  const margesPapier = enTete
+    ? {
+        paddingTop: mm(company.letterheadTopMm ?? 45),
+        paddingBottom: mm(company.letterheadBottomMm ?? 25),
+      }
+    : null;
+
+  // ⚠️ **LE FILIGRANE DISPARAÎT AUSSI.** Il reprend le logo en grand au centre
+  // de la page : posé sous un papier à en-tête, il se bat avec le dessin de
+  // l'entreprise au lieu de le servir.
+  const filigrane = !enTete && company.logoDataUrl;
+
+  // ⚠️ **LA LIGNE LÉGALE RESTE PAR DÉFAUT**, et ce n'est pas un choix
+  // esthétique. Une facture camerounaise doit porter le NIU et le RCCM, et rien
+  // ne garantit que le papier de l'entreprise les porte. L'écran de réglage le
+  // dit explicitement et laisse le choix ; le défaut, lui, est celui qui rend le
+  // document conforme.
+  const pied = !enTete || company.letterheadKeepLegal !== false;
+
   return (
     <Document
       title={payload.number ?? docLabel}
       author={company.legalName}
       subject={`${docLabel} ${company.legalName} — ${client.name}`}
     >
-      <Page size="A4" style={styles.page}>
+      <Page size="A4" style={margesPapier ? [styles.page, margesPapier] : styles.page}>
+        {/* L'en-tête téléversé couvre la page ENTIÈRE et se répète à chaque
+            page (`fixed`), comme le ferait une rame de papier pré-imprimé : la
+            deuxième feuille d'une facture longue porte le même en-tête que la
+            première.
+
+            ⚠️ Rendu AVANT tout le reste et en `position: absolute` sans
+            `padding` : les marges de la page ne s'y appliquent pas, sinon
+            l'image serait repoussée vers l'intérieur et ne couvrirait plus les
+            bords — exactement là où un en-tête met son dessin. */}
+        {payload.letterheadDataUrl && company.letterheadMode === 'image' && (
+          <View
+            style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+            fixed
+          >
+            {/* eslint-disable-next-line jsx-a11y/alt-text */}
+            <Image src={payload.letterheadDataUrl} style={{ width: '100%', height: '100%' }} />
+          </View>
+        )}
         {/* Filigrane : rendu en PREMIER pour que tout le contenu passe
             par-dessus, et `fixed` pour qu'il se répète à chaque page. Absent
             si l'entreprise n'a pas encore de logo — pas de repli textuel ici,
             deux lettres géantes en fond ne ressembleraient à rien. */}
-        {company.logoDataUrl && (
+        {filigrane && (
           <View style={styles.watermark} fixed>
             {/* eslint-disable-next-line jsx-a11y/alt-text */}
             <Image src={company.logoDataUrl} style={styles.watermarkImage} />
@@ -234,30 +302,46 @@ export function InvoiceDocument({ payload }: { payload: PdfPayload }) {
               <Text style={styles.draft}>{isQuote ? 'BROUILLON — NON ÉMIS' : 'BROUILLON — NON ÉMISE'}</Text>
             )}
           </View>
-          {company.logoDataUrl ? (
-            // `Image` vient de @react-pdf : c'est une primitive de dessin PDF,
-            // pas une balise HTML, et elle n'accepte pas d'attribut `alt`. La
-            // règle jsx-a11y ne s'applique donc pas ici.
-            // eslint-disable-next-line jsx-a11y/alt-text
-            <Image src={company.logoDataUrl} style={styles.logo} />
-          ) : (
-            <Text style={styles.logoFallback}>{company.name.slice(0, 2).toUpperCase()}</Text>
-          )}
+          {/* ⚠️ **AUCUN LOGO SOUS UN PAPIER À EN-TÊTE** — ni l'image, ni la
+              tuile de repli aux initiales. Le papier en porte déjà un, et deux
+              logos dans le même angle est précisément ce que cette
+              fonctionnalité doit éviter. */}
+          {!enTete &&
+            (company.logoDataUrl ? (
+              // `Image` vient de @react-pdf : c'est une primitive de dessin
+              // PDF, pas une balise HTML, et elle n'accepte pas d'attribut
+              // `alt`. La règle jsx-a11y ne s'applique donc pas ici.
+              // eslint-disable-next-line jsx-a11y/alt-text
+              <Image src={company.logoDataUrl} style={styles.logo} />
+            ) : (
+              <Text style={styles.logoFallback}>{company.name.slice(0, 2).toUpperCase()}</Text>
+            ))}
         </View>
 
         <View style={styles.parties}>
-          <View style={styles.party}>
-            <Text style={styles.label}>Émetteur</Text>
-            <Text style={styles.partyName}>{company.legalName}</Text>
-            <Text style={styles.partyLine}>
-              {company.address}
-              {'\n'}
-              {company.city}, {company.country}
-              {company.phone ? `\n${pdfText(company.phone)}` : ''}
-              {company.email ? `\n${company.email}` : ''}
-              {company.niu ? `\nNIU ${company.niu}` : ''}
-            </Text>
-          </View>
+          {/* ⚠️ **LE BLOC ÉMETTEUR DISPARAÎT SOUS UN PAPIER À EN-TÊTE** :
+              adresse, téléphone, email et NIU y sont déjà. Le destinataire,
+              lui, reste — il change à chaque facture, aucun papier ne peut le
+              porter.
+
+              La grille à deux colonnes (`flex: 1` chacune) se réduit alors à
+              une seule, qui occupe toute la largeur. C'est voulu : un bloc
+              « Facturé à » sur la moitié gauche avec un vide à droite se lirait
+              comme une colonne manquante. */}
+          {!enTete && (
+            <View style={styles.party}>
+              <Text style={styles.label}>Émetteur</Text>
+              <Text style={styles.partyName}>{company.legalName}</Text>
+              <Text style={styles.partyLine}>
+                {company.address}
+                {'\n'}
+                {company.city}, {company.country}
+                {company.phone ? `\n${pdfText(company.phone)}` : ''}
+                {company.email ? `\n${company.email}` : ''}
+                {company.niu ? `\nNIU ${company.niu}` : ''}
+              </Text>
+            </View>
+          )}
           <View style={styles.party}>
             <Text style={styles.label}>{isQuote ? 'Destinataire' : 'Facturé à'}</Text>
             <Text style={styles.partyName}>{client.name}</Text>
@@ -372,16 +456,24 @@ export function InvoiceDocument({ payload }: { payload: PdfPayload }) {
 
         {payload.notes && <Text style={styles.notes}>{payload.notes}</Text>}
 
+        {/* ⚠️ **LA PAGINATION SURVIT TOUJOURS, MÊME SANS LIGNE LÉGALE.** Une
+            facture de trois feuilles dont on ne sait pas laquelle est la
+            deuxième n'est pas une facture : la numérotation des pages n'est pas
+            une mention légale, c'est ce qui rend le document manipulable. Seule
+            l'identification de l'émetteur se retire, et seulement si
+            l'entreprise a décidé que son papier la portait. */}
         <Text
           style={styles.footer}
-          render={({ pageNumber, totalPages }) =>
-            pdfText(
+          render={({ pageNumber, totalPages }) => {
+            const pages = `Page ${pageNumber}/${totalPages}`;
+            if (!pied) return pages;
+            return pdfText(
               `${company.legalName} · ${company.city}, ${company.country}` +
                 (company.rccm ? ` · RCCM ${company.rccm}` : '') +
                 (company.niu ? ` · NIU ${company.niu}` : '') +
-                `  —  Page ${pageNumber}/${totalPages}`,
-            )
-          }
+                `  —  ${pages}`,
+            );
+          }}
           fixed
         />
       </Page>

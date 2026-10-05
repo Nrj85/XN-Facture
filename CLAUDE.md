@@ -614,6 +614,113 @@ Ces quatre sections décrivent l'ENTREPRISE et sont partagées par l'équipe. La
 « Préférences personnelles » qui les suit n'appartient qu'à la personne au clavier — voir
 plus haut.
 
+#### Papier à en-tête — migration 0017 (5 oct. 2026)
+
+⚠️ **LA MIGRATION 0017 N'EST PAS APPLIQUÉE À LA BASE au moment où ces lignes sont écrites.**
+`SUPABASE_ACCESS_TOKEN` était **révoqué** ce jour-là — refusé jusque sur `GET /v1/projects`.
+Le fichier est écrit et le code l'accompagne, mais **rien n'a pu être essayé contre la base**.
+À appliquer par la console SQL Supabase, ou en régénérant un jeton. Tant que ce n'est pas fait,
+la carte des paramètres existe mais son enregistrement échoue.
+
+Retour client : *« beaucoup d'entreprises ont leur propre papier à en-tête »*. Deux situations
+réelles, un seul mécanisme : **le document s'efface pour ne pas imprimer par-dessus ce que le
+papier porte déjà** — logo, bloc « Émetteur », ligne légale.
+
+| Mode | Ce qui se passe |
+|---|---|
+| `none` | Rien ne change. **Défaut**, donc aucune entreprise existante n'est touchée |
+| `preprinted` | Papier physique : on réserve le blanc, on ne dessine rien |
+| `image` | L'en-tête téléversé est dessiné sur **chaque** page (`fixed`) |
+
+⚠️ **`preprinted` COMPTE AUTANT QUE `image`, et c'est le piège de conception.** On serait tenté
+de ne traiter que le cas où une image existe — or celui qui imprime sur son papier physique n'en
+téléverse aucune, et c'est **lui** qui a le plus besoin que le document s'efface : sinon le logo
+généré s'imprime par-dessus le logo déjà sur la feuille.
+
+⚠️ **L'IMAGE NE VIT PAS SUR `companies`.** `getSession()` y fait un `select('*')` **à chaque
+chargement de page**, et le résultat traverse `CompanyProvider`. Une image de page entière y
+serait transportée à chaque visite de chaque membre, pour ne servir qu'au PDF. Les RÉGLAGES
+(mode, deux marges, un booléen) restent sur `companies` — l'aperçu et le PDF doivent les
+connaître partout ; l'IMAGE vit dans `company_letterheads`, lue par `lib/db/letterhead.ts`
+seulement. **Ne jamais la faire remonter dans `Company`** : le coût ne se verrait ni au build,
+ni aux types, seulement sur la bande passante des utilisateurs.
+
+⚠️ **ON NE LIT L'IMAGE QUE SI ELLE SERT.** Les routes PDF n'interrogent
+`company_letterheads` que si `letterheadMode === 'image'` — le mode est déjà en main, et un
+aller-retour vers Dublin pour un `null` à chaque PDF serait gratuit. L'écran de réglage, lui,
+ne lit que la **présence** (`head: true` + décompte), jamais les octets.
+
+⚠️ **LES MARGES SONT EN MILLIMÈTRES.** On mesure son papier à la règle ; personne ne connaît la
+hauteur de son en-tête en points PostScript. **La conversion (× 72 ÷ 25,4) vit à UN seul
+endroit**, `invoice-document.tsx`. Bornes en base : 0–120 mm en haut, 0–80 en bas — une A4 fait
+297 mm, et 150 mm réservés ne laisseraient pas la place d'un tableau de lignes.
+
+⚠️ **LA LIGNE LÉGALE RESTE PAR DÉFAUT (`letterhead_keep_legal`), et ce n'est pas un choix
+esthétique.** Une facture camerounaise doit porter le NIU et le RCCM ; rien ne garantit que le
+papier de l'entreprise les porte. L'écran **avertit en rouge** quand on la retire : « votre
+papier DOIT alors porter votre NIU et votre RCCM ». C'est la seule chose qui sépare un réglage
+de forme d'une facture non conforme.
+
+⚠️ **LA PAGINATION SURVIT TOUJOURS**, même sans ligne légale. Elle n'est pas une mention
+légale : c'est ce qui rend un document de trois feuilles manipulable.
+
+⚠️ **MÊME LISTE BLANCHE QUE LE LOGO POUR L'IMAGE — c'est le SSRF du 26 sept. 2026.** Elle finit
+dans `<Image src={…} />` de `@react-pdf`, qui va chercher une URL distante **depuis le
+serveur**. `image/svg+xml` est exclu : un SVG est un document, il porte du script. Le filtre
+existe **trois fois** — contrainte `check` en base, zod dans l'action, et relecture dans
+`getLetterhead()` — parce qu'ils protègent trois choses différentes : écrire, soumettre,
+imprimer.
+
+⚠️ **`fromCompany` EXCLUT LES QUATRE COLONNES, et ce n'est pas un oubli.** Elles y étaient
+d'abord, et `tsc` était content : `companySchema` ne les porte pas, elles arrivaient donc
+`undefined`, et **seul le fait que `JSON.stringify` abandonne `undefined`** empêchait
+l'enregistrement des paramètres d'entreprise d'écraser le réglage d'en-tête. Une protection par
+accident n'est pas une protection. Elles sont désormais dans le `Omit` de la signature, donc le
+formulaire d'entreprise ne nomme plus ces colonnes du tout — ce qui lui permet aussi de
+continuer à fonctionner sur une base où 0017 n'est pas appliquée.
+
+⚠️ **CE QUI CASSE, ET CE QUI NE CASSE PAS, SANS LA MIGRATION.** Vérifié en relisant chaque
+accès : `getSession()` fait `select('*')`, donc les colonnes absentes retombent sur les valeurs
+par défaut du mappeur · le décompte sur `company_letterheads` revient en erreur, `count` est
+`null`, l'écran lit « aucun en-tête » · les routes PDF n'interrogent la table que si le mode
+vaut `image`, ce qui est impossible sans la migration. **Seule la carte de réglage est un
+contrôle mort** (§6.1) : elle s'affiche et son enregistrement échoue avec un message français.
+C'est la raison pour laquelle ce travail **n'est pas poussé** tant que 0017 n'est pas appliquée.
+
+⚠️ **L'APERÇU SUIT LE MÊME RÉGLAGE** (`invoice-preview.tsx`). Il prétend montrer « le document
+tel que le client le recevra » : s'il gardait le logo et le bloc Émetteur que le PDF n'imprime
+plus, la personne réglerait son papier et croirait que rien n'a changé. Un bandeau en pointillé
+remplace l'en-tête — un blanc nu se lirait comme une mise en page cassée.
+
+**Vérifié SANS la base, en rendant de vrais PDF et en les relisant (16 contrôles)** :
+
+```
+aucun en-tête      bloc Émetteur imprimé · ligne légale · Page 1/1
+pré-imprimé        adresse et email de l'émetteur DISPARUS · destinataire conservé
+                   ligne légale conservée (défaut) · tient sur une page
+sans ligne légale  RCCM absent · la PAGINATION survit
+image téléversée   émetteur absent · le PDF contient bien une image
+marges réelles     120 mm + 80 mm → le document DÉBORDE sur une 2e page (Page 1/2)
+conversion         0 / 25,4 / 45 / 80 mm → 0 / 72 / 127,56 / 226,77 pt, exact
+```
+
+⚠️ **LA PREUVE DES MARGES PASSE PAR LE DÉBORDEMENT, et il a fallu y venir.** Deux mesures ont
+échoué avant : `pdftotext` est ici **Xpdf 4, sans `-bbox`** (pas de coordonnées), et son
+`-layout` ne produit **aucune ligne blanche** pour une marge haute — un premier jet mesurait
+« 0 » dans les quatre cas et ne prouvait rien. Lire les coordonnées dans le flux PDF n'a pas
+marché non plus : `@react-pdf` place le texte par une matrice de retournement **constante**
+(`ty = 841,89` partout), donc aucune différence ne s'y lit. **Une marge extrême qui pousse le
+contenu sur une deuxième page est une conséquence observable**, et la pagination la dit.
+
+⚠️ **Pour rendre le composant hors de Next**, `scratchpad/transpile.mjs` transpile l'arbre dans
+un dossier temporaire **à l'intérieur** du projet (sinon `node_modules` ne remonte pas), puis le
+supprime. Deux impasses déjà payées : `import()` sur une URL de données ne résout aucun
+spécificateur nu, et transpiler le seul fichier laisse ses imports `@/lib/…` sans résolution.
+
+⚠️ **PIÈGE DE TEST — un PNG écrit de mémoire est invalide.** Pour la deuxième fois dans ce
+projet (voir la preuve du SSRF), un PNG de synthèse en base64 a produit « Incomplete or corrupt
+PNG file ». **Prendre une vraie image du dépôt** (`app/icon.png`).
+
 #### Facturer SANS TVA — migration 0014 (25 sept. 2026)
 
 Toutes les entreprises de la zone ne collectent pas la TVA : en dessous des seuils, un
@@ -2602,6 +2709,10 @@ supabase/
                                 landing. SEULE table du projet ouverte en
                                 ÉCRITURE aux administrateurs. Ne pas en faire
                                 un précédent
+  migrations/0017_papier_en_tete.sql ⚠️ **NON APPLIQUÉE** (jeton de gestion
+                                révoqué le 5 oct. 2026). Réglages d'en-tête sur
+                                `companies` + image dans `company_letterheads`.
+                                L'image ne remonte JAMAIS dans `Company`
 
 docs/
   mentions-legales-questions-juriste.md  Note de relecture juridique (à emporter chez
@@ -2660,6 +2771,8 @@ components/
   quotes/      quote-form, quote-list, quote-detail, quote-editor, quote-quick-actions
   clients/     client-list
   settings/    settings-form, logo-uploader, personal-form (nom + langue),
+               letterhead-form (papier à en-tête — avertit en ROUGE si l'on
+               retire la ligne NIU/RCCM),
                security-form (adresse email + mot de passe),
                mfa-form (double authentification — QR, clé, activation, retrait)
   subscription/ plan-limit (fenêtre de plafond), plan-chooser (choix + commande),
@@ -2680,13 +2793,18 @@ lib/
   supabase/         config (env typé), client (navigateur), middleware,
                     server (RSC/actions + createIsolatedClient : vérifie un mot de
                     passe SANS toucher à la session — sinon elle retombe en aal1)
-  db/               database.types (GÉNÉRÉ), types (alias de lignes), mappers (ligne ↔ domaine),
+  db/               database.types (GÉNÉRÉ — ⚠️ le bloc de 0017 est écrit À LA MAIN,
+                    à régénérer dès qu'un jeton valide existe),
+                    letterhead (image de l'en-tête — la SEULE lecture de
+                    company_letterheads ; jamais dans Company),
+                    types (alias de lignes), mappers (ligne ↔ domaine),
                     queries (lectures serveur, `getSession` et `requireSession`)
   actions/          auth, account (nom affiché), company, clients, invoices, quotes
                     · mfa (TOTP : enrôlement, défi, retrait — la GARDE est dans getSession)
                     · email-preferences (désabonnement, SANS session)
                     · testimonials (contenu de la landing — CHAQUE écriture
                       doit appeler revalidatePath('/', 'layout'))
+                    · letterhead (papier à en-tête — MÊME liste blanche que le logo)
                     · locale · result, schemas, context
   admin/company-export.ts  Lignes et CSV de l export des entreprises (anti-injection)
   vat.ts            Régime de TVA — contenu du bloc de totaux (5 rendus) et régime
