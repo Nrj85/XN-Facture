@@ -47,6 +47,25 @@ export default async function ParametresPage() {
     <div className="space-y-5">
       <SettingsForm issuedCount={count ?? 0} />
       {/*
+        Le papier à en-tête décrit l'ENTREPRISE — il s'applique aux documents de
+        toute l'équipe — donc il reste du côté des réglages partagés, juste
+        après eux. Il a sa propre carte parce qu'il change la FORME de chaque
+        document émis et non une valeur imprimée dessus.
+
+        ⚠️ **Il était d'abord posé APRÈS « Préférences personnelles », ce qui
+        coupait les cartes personnelles en deux** — constaté en capture, pas à
+        la relecture : le commentaire annonçait déjà ce placement-ci pendant que
+        le code en faisait un autre. L'écran doit lire « ce qui est partagé,
+        puis ce qui est à moi », sans retour en arrière.
+      */}
+      <LetterheadForm
+        mode={session.company.letterheadMode}
+        topMm={session.company.letterheadTopMm}
+        bottomMm={session.company.letterheadBottomMm}
+        keepLegal={session.company.letterheadKeepLegal}
+        aDejaUneImage={aDejaUnEnTete}
+      />
+      {/*
         Les préférences personnelles — nom et langue — sont posées APRÈS les
         réglages d'entreprise, dans leur propre carte : elles ne concernent que
         la personne au clavier, alors que tout ce qui précède est partagé par
@@ -57,19 +76,6 @@ export default async function ParametresPage() {
         L'accès au compte vient APRÈS le confort : on ne met pas un champ de
         mot de passe à côté d'un sélecteur de langue.
       */}
-      {/*
-        Le papier à en-tête change la FORME de chaque document émis, pas les
-        réglages de l'entreprise : il a sa propre carte, posée juste après les
-        sections d'entreprise et avant ce qui n'appartient qu'à la personne.
-      */}
-      <LetterheadForm
-        mode={session.company.letterheadMode}
-        topMm={session.company.letterheadTopMm}
-        bottomMm={session.company.letterheadBottomMm}
-        keepLegal={session.company.letterheadKeepLegal}
-        aDejaUneImage={aDejaUnEnTete}
-      />
-
       <SecurityForm currentEmail={session.email} />
       {/*
         La double authentification vient EN DERNIER : les cartes précédentes

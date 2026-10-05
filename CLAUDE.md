@@ -703,6 +703,18 @@ vaut `image`, ce qui est impossible sans la migration. **Seule la carte de régl
 contrôle mort** (§6.1) : elle s'affiche et son enregistrement échoue avec un message français.
 C'est la raison pour laquelle ce travail **n'est pas poussé** tant que 0017 n'est pas appliquée.
 
+⚠️ **LA CARTE EST POSÉE AVEC LES RÉGLAGES D'ENTREPRISE, pas après les préférences
+personnelles.** Elle décrit l'entreprise et s'applique aux documents de toute l'équipe. Elle
+était d'abord placée entre « Préférences personnelles » et « Sécurité », ce qui **coupait les
+cartes personnelles en deux** — et le commentaire de `page.tsx` annonçait déjà le bon
+placement pendant que le code en faisait un autre. **Constaté en capture, pas à la relecture** :
+l'écran doit se lire « ce qui est partagé, puis ce qui est à moi », sans retour en arrière.
+
+⚠️ **Les libellés sont en LANGAGE COURANT, pas dans le vocabulaire interne** — « J'imprime sur
+mon papier », « J'ai mon en-tête en fichier ». `preprinted` et `image` ne sortent jamais à
+l'écran. Piège de test payé : mon assertion cherchait « pré-imprimé » et annonçait un défaut
+sur une carte parfaitement correcte.
+
 ⚠️ **L'APERÇU SUIT LE MÊME RÉGLAGE** (`invoice-preview.tsx`). Il prétend montrer « le document
 tel que le client le recevra » : s'il gardait le logo et le bloc Émetteur que le PDF n'imprime
 plus, la personne réglerait son papier et croirait que rien n'a changé. Un bandeau en pointillé
