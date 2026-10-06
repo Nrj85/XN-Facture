@@ -33,6 +33,7 @@ export function InvoicePreview({
   totals,
   vatExempt = false,
   notes,
+  letterheadDataUrl,
 }: {
   /**
    * Un devis et une facture sont le même document à trois libellés près. Un
@@ -51,6 +52,16 @@ export function InvoicePreview({
   /** Hors du champ de la TVA : aucune ligne de taxe, une mention à la place. */
   vatExempt?: boolean;
   notes?: string;
+  /**
+   * L'image du papier à en-tête, quand l'entreprise en a téléversé une.
+   *
+   * ⚠️ **ELLE NE VIENT PAS DE `CompanyProvider`, et ne doit pas y venir.**
+   * `getSession()` fait un `select('*')` sur `companies` à chaque chargement de
+   * page : une image de page entière y serait transportée partout, pour ne
+   * servir qu'ici et au PDF. Elle est donc lue par les SIX pages qui portent un
+   * aperçu, et par elles seules.
+   */
+  letterheadDataUrl?: string | null;
 }) {
   const { company, formatMoney } = useCompany();
   const isQuote = variant === 'quote';
@@ -130,9 +141,41 @@ export function InvoicePreview({
           ))}
       </header>
 
-      {/* Dit ce qui se passe, au lieu de laisser un en-tête amputé que l'on
-          prendrait pour une mise en page cassée. */}
-      {enTete && (
+      {/*
+        ⚠️ **ON MONTRE L'EN-TÊTE RÉEL, PAS UN CADRE QUI LE DÉCRIT — correction
+        du 6 oct. 2026, remontée par l'utilisateur.** L'aperçu affichait
+        auparavant un bandeau en pointillé annonçant que « de l'espace est
+        réservé ». Le PDF, lui, imprimait bien l'image sur la page entière :
+        l'écran était donc la SEULE chose à contredire la fonction, et il se
+        lisait comme si le produit ne savait que ménager une marge.
+
+        ⚠️ **La carte n'a PAS les proportions d'une A4** — sa hauteur suit son
+        contenu. Étirer l'image dessus la déformerait, c'est-à-dire referait à
+        l'écran le défaut qu'on vient de corriger au téléversement. On montre
+        donc les deux BANDES, à leur échelle exacte : la carte fait la largeur
+        d'une page, donc une bande de `topMm` se rend par un cadre au rapport
+        `210 / topMm` dans lequel l'image, posée à la pleine largeur et au
+        rapport A4, est rognée. Ce qu'on voit est l'endroit réel du dessin.
+      */}
+      {enTete && letterheadDataUrl && company.letterheadTopMm > 0 && (
+        <div
+          className="mt-3 overflow-hidden rounded-t-[10px] border border-line"
+          style={{ aspectRatio: `210 / ${company.letterheadTopMm}` }}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={letterheadDataUrl}
+            alt=""
+            className="block w-full"
+            style={{ aspectRatio: '210 / 297' }}
+          />
+        </div>
+      )}
+
+      {/* Papier pré-imprimé : rien à montrer, l'image n'existe pas. On le dit
+          plutôt que de laisser un vide qu'on prendrait pour une mise en page
+          cassée. */}
+      {enTete && !letterheadDataUrl && (
         <p className="mt-3 rounded-[10px] border border-dashed border-line-strong bg-sand px-3 py-2 text-[11.5px] leading-relaxed text-ink-2">
           Votre papier à en-tête prend le relais : le logo et le bloc « Émetteur » ne sont pas
           imprimés, et {company.letterheadTopMm} mm sont réservés en haut du document.
@@ -292,6 +335,26 @@ export function InvoicePreview({
           : `Règlement à ${company.paymentTermsDays} jours`}
         {pied ? ` · ${company.legalName} · RCCM ${company.rccm}` : ''}
       </p>
+
+      {/* La bande BASSE du même en-tête, à la même échelle. Beaucoup de papiers
+          portent leurs coordonnées en pied plutôt qu'en tête : ne montrer que
+          le haut aurait laissé croire que cette partie-là n'est pas imprimée,
+          alors que le PDF la dessine aussi. `objectPosition: bottom` prend le
+          bas de l'image, puisque c'est de cette zone qu'il s'agit. */}
+      {enTete && letterheadDataUrl && company.letterheadBottomMm > 0 && (
+        <div
+          className="mt-4 overflow-hidden rounded-b-[10px] border border-line"
+          style={{ aspectRatio: `210 / ${company.letterheadBottomMm}` }}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={letterheadDataUrl}
+            alt=""
+            className="block h-full w-full"
+            style={{ objectFit: 'cover', objectPosition: 'bottom' }}
+          />
+        </div>
+      )}
     </article>
   );
 }

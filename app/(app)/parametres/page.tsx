@@ -5,6 +5,7 @@ import { PersonalForm } from '@/components/settings/personal-form';
 import { SecurityForm } from '@/components/settings/security-form';
 import { SettingsForm } from '@/components/settings/settings-form';
 import { createClient } from '@/lib/supabase/server';
+import { getLetterhead } from '@/lib/db/letterhead';
 import { requireSession } from '@/lib/db/queries';
 import { getLocale } from '@/lib/i18n';
 
@@ -26,16 +27,19 @@ export default async function ParametresPage() {
   const mfaActive = (auth.user?.factors ?? []).some((f) => f.status === 'verified');
 
   /*
-    ⚠️ **ON NE LIT QUE LA PRÉSENCE DE L'EN-TÊTE, PAS L'IMAGE.** Un `select`
-    sur `data_url` ferait transiter des centaines de kilo-octets jusqu'au
-    navigateur pour afficher « En-tête enregistré ». `head: true` avec un
-    décompte ne rapporte qu'un nombre.
+    ⚠️ **ON LIT L'IMAGE ENTIÈRE ICI — revirement assumé du 6 oct. 2026.**
+    Cet écran ne lisait que la PRÉSENCE (`head: true` + décompte), pour
+    s'épargner des centaines de kilo-octets. Le résultat était qu'on téléversait
+    son papier à en-tête sans jamais le revoir : l'écran affichait « En-tête
+    enregistré » et rien d'autre, et le seul moyen de vérifier ce qui avait été
+    gardé — et où les marges tombaient dessus — était d'émettre une facture
+    d'essai puis d'ouvrir son PDF.
+
+    La règle « on ne lit que ce qui sert » n'est pas abandonnée, elle est
+    appliquée : ici, l'image EST ce qui sert. Elle reste hors de `Company`,
+    donc aucune autre page ne la transporte.
   */
-  const { count: enTetes } = await supabase
-    .from('company_letterheads')
-    .select('company_id', { count: 'exact', head: true })
-    .eq('company_id', session.companyId);
-  const aDejaUnEnTete = (enTetes ?? 0) > 0;
+  const letterhead = await getLetterhead(session.companyId);
 
   const { count } = await supabase
     .from('invoices')
@@ -63,7 +67,7 @@ export default async function ParametresPage() {
         topMm={session.company.letterheadTopMm}
         bottomMm={session.company.letterheadBottomMm}
         keepLegal={session.company.letterheadKeepLegal}
-        aDejaUneImage={aDejaUnEnTete}
+        imageActuelle={letterhead}
       />
       {/*
         Les préférences personnelles — nom et langue — sont posées APRÈS les

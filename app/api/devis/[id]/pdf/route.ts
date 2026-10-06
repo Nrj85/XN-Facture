@@ -7,7 +7,7 @@ import { getQuoteView, getSession } from '@/lib/db/queries';
 import { createClient } from '@/lib/supabase/server';
 import type { ClientRow } from '@/lib/db/types';
 import { toClient } from '@/lib/db/mappers';
-import { getLetterhead } from '@/lib/db/letterhead';
+import { letterheadIfUsed } from '@/lib/db/letterhead';
 
 export const runtime = 'nodejs';
 
@@ -38,10 +38,19 @@ export async function GET(
     .eq('id', quote.clientId)
     .maybeSingle<ClientRow>();
 
+  // Meme defaut que sur la route des factures : le quatrieme argument
+  // manquait, donc le devis reservait le blanc sans jamais imprimer
+  // l'en-tete. Voir le commentaire detaille dans la route des factures.
+  const letterhead = await letterheadIfUsed(
+    session.companyId,
+    session.company.letterheadMode,
+  );
+
   const payload = buildQuotePayload(
     quote,
     session.company,
     clientRow ? toClient(clientRow) : undefined,
+    letterhead,
   );
 
   try {

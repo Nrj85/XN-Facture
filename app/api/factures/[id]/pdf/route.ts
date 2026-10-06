@@ -7,7 +7,7 @@ import { getInvoiceView, getSession } from '@/lib/db/queries';
 import { createClient } from '@/lib/supabase/server';
 import type { ClientRow } from '@/lib/db/types';
 import { toClient } from '@/lib/db/mappers';
-import { getLetterhead } from '@/lib/db/letterhead';
+import { letterheadIfUsed } from '@/lib/db/letterhead';
 
 // `@react-pdf/renderer` a besoin des API Node (Buffer, streams) : la route ne
 // peut pas tourner sur le runtime Edge.
@@ -47,10 +47,31 @@ export async function GET(
     .eq('id', invoice.clientId)
     .maybeSingle<ClientRow>();
 
+  /*
+    ⚠️ **CE QUATRIÈME ARGUMENT MANQUAIT, et c'était LE défaut de la
+    fonctionnalité — remonté par l'utilisateur le 6 oct. 2026.** L'import de
+    `getLetterhead` était bien présent en tête de fichier, mais l'appel n'avait
+    jamais été écrit : la route réservait le blanc en haut et en bas, et
+    n'imprimait **jamais** le papier à en-tête. Vu du client, la fonction ne
+    savait que ménager une marge — exactement ce qu'il a décrit.
+
+    ⚠️ **Un import inutilisé ne fait échouer NI `tsc` NI `lint` ici**, et mon
+    contrôle de bout en bout cherchait la chaîne `/Image` dans les octets du
+    PDF : elle y est pour d'autres raisons, donc l'assertion passait au vert sur
+    un document sans en-tête. **Un contrôle qui ne peut pas échouer ne prouve
+    rien** — celui qui tranche mesure le placement de l'image dans le flux et
+    attend la page entière (595,28 × 841,89 pt).
+  */
+  const letterhead = await letterheadIfUsed(
+    session.companyId,
+    session.company.letterheadMode,
+  );
+
   const payload = buildInvoicePayload(
     invoice,
     session.company,
     clientRow ? toClient(clientRow) : undefined,
+    letterhead,
   );
 
   try {

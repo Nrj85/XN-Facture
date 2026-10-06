@@ -13,6 +13,12 @@ import type { LetterheadMode } from '@/lib/types';
 const MAX_SOURCE_OCTETS = 8 * 1024 * 1024;
 /** A4 à 150 ppp. Au-delà, le poids explose sans gain visible à l'impression. */
 const LARGEUR_CIBLE = 1240;
+/**
+ * Proportion d'une page A4 (297 / 210). L'en-tête est stocké à CETTE
+ * proportion, parce que le PDF le dessine sur la page entière : toute autre
+ * proportion serait étirée au rendu.
+ */
+const RATIO_A4 = 297 / 210;
 
 /**
  * Redimensionne et ré-encode l'en-tête avant stockage.
@@ -36,19 +42,43 @@ function preparer(file: File): Promise<string> {
       const image = new Image();
       image.onerror = () => reject(new Error('Ce fichier n’est pas une image exploitable.'));
       image.onload = () => {
-        const echelle = Math.min(1, LARGEUR_CIBLE / image.width);
+        /*
+          ⚠️ **LA TOILE EST AU FORMAT A4, PAS AU FORMAT DU FICHIER — et c'est
+          la correction du 6 oct. 2026.** Le PDF dessine l'en-tête sur la page
+          ENTIÈRE (mesuré : 595,28 × 841,89 pt, bord à bord). Tant qu'on
+          stockait l'image à ses proportions d'origine, un fichier qui n'était
+          pas à l'exacte proportion A4 était donc **étiré** : un en-tête un peu
+          trop large s'écrasait en hauteur, et le logo de l'entreprise sortait
+          déformé sur chaque facture, sans que rien ne l'explique.
+
+          On l'inscrit donc dans une toile A4 en conservant ses proportions,
+          centré sur du blanc. Ce qui est stocké EST au format de la page : le
+          PDF n'a plus rien à étirer. Le prix est une bande blanche quand le
+          fichier n'est pas à la bonne proportion — c'est préférable à un
+          dessin déformé, et l'écran le dit.
+        */
         const canvas = document.createElement('canvas');
-        canvas.width = Math.round(image.width * echelle);
-        canvas.height = Math.round(image.height * echelle);
+        canvas.width = LARGEUR_CIBLE;
+        canvas.height = Math.round(LARGEUR_CIBLE * RATIO_A4);
         const ctx = canvas.getContext('2d');
         if (!ctx) {
           reject(new Error('Redimensionnement impossible sur ce navigateur.'));
           return;
         }
-        // Fond blanc : un PNG transparent ré-encodé en JPEG virerait au noir.
+        // Fond blanc : un PNG transparent ré-encodé en JPEG virerait au noir,
+        // et c'est aussi lui qui comble les bandes quand les proportions
+        // diffèrent de l'A4.
         ctx.fillStyle = '#FFFFFF';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+        // `contain` : on prend la plus petite des deux échelles, donc rien
+        // n'est rogné. Rogner couperait précisément le bord où un en-tête pose
+        // son dessin.
+        const echelle = Math.min(canvas.width / image.width, canvas.height / image.height);
+        const l = image.width * echelle;
+        const h = image.height * echelle;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(image, (canvas.width - l) / 2, (canvas.height - h) / 2, l, h);
 
         const png = canvas.toDataURL('image/png');
         resolve(png.length <= 2 * 1024 * 1024 ? png : canvas.toDataURL('image/jpeg', 0.9));
@@ -75,20 +105,40 @@ export function LetterheadForm({
   topMm: topInitial,
   bottomMm: bottomInitial,
   keepLegal: legalInitial,
-  aDejaUneImage,
+  imageActuelle,
 }: {
   mode: LetterheadMode;
   topMm: number;
   bottomMm: number;
   keepLegal: boolean;
-  aDejaUneImage: boolean;
+  /**
+   * L'en-tête déjà enregistré, ou `null`.
+   *
+   * ⚠️ **C'ÉTAIT UN BOOLÉEN, et c'était le défaut remonté le 6 oct. 2026.**
+   * L'écran se contentait d'annoncer « En-tête enregistré » : on téléversait un
+   * fichier sans jamais revoir ce qui avait été gardé, ni comment il tomberait
+   * sur la page. Le seul moyen de vérifier était d'émettre une facture et
+   * d'ouvrir son PDF.
+   *
+   * ⚠️ **Oui, cela fait transiter l'image jusqu'au navigateur — sur CET écran
+   * seulement.** C'est le revirement assumé de la règle « on ne lit que la
+   * présence » : elle vaut pour les pages où l'image ne sert pas. Ici, la
+   * montrer EST la fonction de l'écran.
+   */
+  imageActuelle: string | null;
 }) {
   const [mode, setMode] = useState<LetterheadMode>(modeInitial);
   const [topMm, setTopMm] = useState(topInitial);
   const [bottomMm, setBottomMm] = useState(bottomInitial);
   const [keepLegal, setKeepLegal] = useState(legalInitial);
   const [dataUrl, setDataUrl] = useState<string | undefined>(undefined);
-  const [aImage, setAImage] = useState(aDejaUneImage);
+  const [aImage, setAImage] = useState(imageActuelle !== null);
+  /**
+   * Ce qu'on AFFICHE : le fichier qu'on vient de choisir s'il y en a un,
+   * sinon celui déjà enregistré. L'aperçu doit suivre la saisie en cours, sans
+   * quoi on remplacerait son en-tête en continuant de voir l'ancien.
+   */
+  const visuel = dataUrl ?? (aImage ? imageActuelle : null);
 
   const [erreur, setErreur] = useState<string | null>(null);
   const [succes, setSucces] = useState<string | null>(null);
@@ -175,14 +225,14 @@ export function LetterheadForm({
             [
               ['none', 'Aucun', 'Le document imprime son propre en-tête, comme aujourd’hui.'],
               [
-                'preprinted',
-                'J’imprime sur mon papier',
-                'Rien à téléverser. Le document laisse le blanc nécessaire en haut et en bas.',
-              ],
-              [
                 'image',
                 'J’ai mon en-tête en fichier',
                 'Il est dessiné sur chaque page — utile quand la facture part par email ou WhatsApp.',
+              ],
+              [
+                'preprinted',
+                'J’imprime sur mon papier',
+                'Rien à téléverser. Le document laisse le blanc nécessaire en haut et en bas.',
               ],
             ] as const
           ).map(([valeur, titre, aide]) => (
@@ -248,8 +298,42 @@ export function LetterheadForm({
                 <p className="text-[11.5px] leading-relaxed text-ink-3">
                   L’image doit être la <strong className="font-semibold">page entière</strong> de
                   votre papier, en-tête et pied compris, au format A4. Elle est réduite à 1240 px de
-                  large avant d’être enregistrée.
+                  large et mise au format A4 avant d’être enregistrée.
                 </p>
+
+                {/*
+                  ⚠️ **ON MONTRE L'EN-TÊTE, ET OÙ LA FACTURE VIENDRA SE POSER.**
+                  Une vignette seule dirait « voici votre fichier » ; elle ne
+                  dirait pas si les 45 mm réservés tombent sous le logo ou en
+                  plein milieu du dessin. Les deux filets repèrent les bandes
+                  réservées, à l'échelle exacte de la page — c'est le seul moyen
+                  de régler ses marges sans émettre une facture d'essai.
+                */}
+                {visuel && (
+                  <figure className="mt-1">
+                    <div
+                      className="relative mx-auto w-full max-w-[220px] overflow-hidden rounded-[10px] border border-line bg-surface"
+                      style={{ aspectRatio: '210 / 297' }}
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={visuel} alt="" className="block h-full w-full" />
+                      <span
+                        aria-hidden
+                        className="absolute inset-x-0 top-0 border-b border-dashed border-brand-bright bg-brand-bright/10"
+                        style={{ height: `${(topMm / 297) * 100}%` }}
+                      />
+                      <span
+                        aria-hidden
+                        className="absolute inset-x-0 bottom-0 border-t border-dashed border-brand-bright bg-brand-bright/10"
+                        style={{ height: `${(bottomMm / 297) * 100}%` }}
+                      />
+                    </div>
+                    <figcaption className="mt-1.5 text-center text-[11.5px] leading-relaxed text-ink-3">
+                      Votre papier tel qu’il sera imprimé. Les zones teintées sont réservées :
+                      la facture s’écrit entre les deux.
+                    </figcaption>
+                  </figure>
+                )}
                 {aImage && (
                   <Button type="button" variant="ghost" disabled={enCours} onClick={retirer}>
                     Retirer l’en-tête

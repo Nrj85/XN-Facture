@@ -58,6 +58,22 @@ export async function getLetterhead(companyId: string): Promise<string | null> {
   }
 }
 
+/**
+ * L'image **seulement si elle sert** : rien à lire quand l'entreprise n'est pas
+ * en mode « en-tête téléversé ».
+ *
+ * ⚠️ **Point UNIQUE de cette condition.** Elle est vraie pour les deux routes
+ * PDF et pour les six pages qui portent un aperçu : la recopier huit fois
+ * garantirait qu'un jour l'une d'elles lise l'image pour rien — un aller-retour
+ * vers Dublin à chaque chargement, pour un `null`.
+ */
+export async function letterheadIfUsed(
+  companyId: string,
+  mode: string | undefined,
+): Promise<string | null> {
+  return mode === 'image' ? getLetterhead(companyId) : null;
+}
+
 /** Pose ou remplace l'image. Un seul en-tête par entreprise (clé primaire). */
 export async function saveLetterhead(companyId: string, dataUrl: string): Promise<boolean> {
   const { error } = await createClient()

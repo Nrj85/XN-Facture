@@ -78,10 +78,19 @@ export function QuoteForm({
   clients,
   today,
   quote,
+  letterheadDataUrl,
 }: {
   clients: Client[];
   today: string;
   quote?: QuoteView;
+  /**
+   * Image du papier a en-tete, quand l'entreprise en a televerse une.
+   *
+   * Elle vient de la PAGE, pas de `CompanyProvider` : `getSession()` fait un
+   * `select('*')` sur `companies` a chaque chargement, et une image de page
+   * entiere y serait transportee partout pour ne servir qu'a l'apercu.
+   */
+  letterheadDataUrl?: string | null;
 }) {
   const router = useRouter();
   const { company } = useCompany();
@@ -374,6 +383,7 @@ export function QuoteForm({
             <Card className="p-4 sm:p-5">
               <p className="label-caps mb-3">Aperçu</p>
               <InvoicePreview
+                letterheadDataUrl={letterheadDataUrl}
                 variant="quote"
                 number={quote?.number ?? null}
                 client={selectedClient}

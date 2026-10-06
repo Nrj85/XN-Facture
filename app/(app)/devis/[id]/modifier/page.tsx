@@ -3,6 +3,7 @@ import { QuoteForm } from '@/components/quotes/quote-form';
 import { NotFoundCard } from '@/components/documents/not-found-card';
 import { getClients, getQuoteView, requireSession } from '@/lib/db/queries';
 import { today } from '@/lib/today';
+import { letterheadIfUsed } from '@/lib/db/letterhead';
 
 export const metadata: Metadata = { title: 'Modifier le devis' };
 
@@ -14,6 +15,12 @@ export default async function ModifierDevisPage({
   // ⚠️ Next 15 : `params` et `searchParams` sont des PROMESSES.
   const { id } = await params;
   const session = await requireSession();
+
+  // L'image du papier a en-tete, lue UNIQUEMENT si l'entreprise est en mode
+  // << en-tete televerse >>. L'apercu doit montrer le document tel qu'il sera
+  // imprime : sans elle, il afficherait une page blanche la ou le PDF dessine
+  // l'en-tete, et la personne croirait que la fonction ne marche pas.
+  const letterhead = await letterheadIfUsed(session.companyId, session.company.letterheadMode);
 
   const [quote, clients] = await Promise.all([
     getQuoteView(session.companyId, id),
@@ -31,5 +38,5 @@ export default async function ModifierDevisPage({
     );
   }
 
-  return <QuoteForm clients={clients} today={today()} quote={quote} />;
+  return <QuoteForm clients={clients} today={today()} quote={quote} letterheadDataUrl={letterhead} />;
 }

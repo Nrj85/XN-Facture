@@ -614,7 +614,72 @@ Ces quatre sections décrivent l'ENTREPRISE et sont partagées par l'équipe. La
 « Préférences personnelles » qui les suit n'appartient qu'à la personne au clavier — voir
 plus haut.
 
-#### Papier à en-tête — migration 0017 (5 oct. 2026)
+#### Papier à en-tête — migration 0017 (5 oct. 2026), RÉPARÉ le 6 oct. 2026
+
+⚠️ **LA FONCTION NE MARCHAIT PAS, ET JE L'AVAIS DÉCLARÉE VÉRIFIÉE.** Remonté par
+l'utilisateur : *« je veux que le papier en-tête soit inséré tel qu'il a été édité par
+l'entreprise et téléversé tel quel, pas seulement laisser un espace en haut et en bas »*.
+Il avait raison sur toute la ligne, et la preuve était dans sa propre base : il avait
+téléversé son papier le 5 oct. à 11h08, en mode `image`, et **le PDF ne l'imprimait pas**.
+
+**La cause, en une ligne :** `buildInvoicePayload` était appelé avec **trois** arguments au
+lieu de quatre. L'import de `getLetterhead` était bien en tête des deux routes PDF ; l'appel
+n'avait jamais été écrit. Les routes réservaient donc le blanc et ne dessinaient rien.
+
+⚠️ **UN IMPORT INUTILISÉ NE FAIT ÉCHOUER NI `tsc` NI `lint` ICI**, et le quatrième paramètre
+de `buildInvoicePayload` est **facultatif** : rien, dans la chaîne de vérification habituelle,
+ne pouvait attraper cet oubli.
+
+⚠️ **CE QUI A VRAIMENT ÉCHOUÉ, C'EST MON CONTRÔLE — et c'est la leçon à retenir.**
+L'assertion était `buf.includes('/Image')`. Cette chaîne existe dans un PDF produit par
+`@react-pdf` **même quand aucune image n'est dessinée** : elle passait donc au vert sur des
+documents sans en-tête. **Une assertion qui ne peut pas échouer ne prouve rien, et elle est
+pire que pas d'assertion — elle donne le droit d'écrire « vérifié ».** Le contrôle qui tranche
+mesure le placement dans le flux (`cm … Do`) et exige la page entière, **avec sa
+contre-épreuve** : en mode pré-imprimé, aucune image pleine page ne doit exister.
+`scratchpad/mesure-pdf.mjs`.
+
+⚠️ **DEUXIÈME DÉFAUT, CELUI QUI EXPLIQUE LA PERCEPTION : l'aperçu ne montrait jamais
+l'en-tête.** Il affichait un cadre en pointillé annonçant que « de l'espace est réservé » —
+donc même si le PDF avait fonctionné, l'écran aurait continué de décrire une fonction qui ne
+sait que ménager une marge. **L'aperçu affiche désormais les deux bandes RÉELLES**, haute et
+basse, à l'échelle exacte : la carte fait la largeur d'une page, donc une bande de `topMm` se
+rend par un cadre au rapport `210 / topMm` où l'image, posée pleine largeur au rapport A4, est
+rognée. Étirer l'image sur la carte l'aurait déformée — la carte n'a pas les proportions d'une
+A4, sa hauteur suit son contenu.
+
+⚠️ **L'image est passée par les SIX pages qui portent un aperçu, jamais par `CompanyProvider`.**
+`letterheadIfUsed()` (`lib/db/letterhead.ts`) est le point **unique** de la condition « on ne
+lit que si le mode est `image` » — elle sert aux deux routes PDF et aux six pages, et la
+recopier huit fois garantirait qu'une d'elles lise pour rien.
+
+⚠️ **TROISIÈME DÉFAUT : le téléversement ne normalisait pas au format A4.** Le PDF dessine
+l'en-tête sur la page entière ; une image aux proportions d'origine était donc **étirée**. Elle
+est désormais inscrite dans une toile A4 (`contain`, centrée, sur blanc) : ce qui est stocké
+EST au format de la page. *Mesuré sur le fichier réel de l'utilisateur : 1240 × 1752 px, soit
+0,1 % d'écart avec l'A4 — aucune déformation visible, rien à re-téléverser.*
+
+⚠️ **LA CARTE DE RÉGLAGE MONTRE L'EN-TÊTE, et c'est un revirement assumé.** Elle ne lisait que
+la PRÉSENCE (`head: true` + décompte) pour s'épargner des kilo-octets, et affichait « En-tête
+enregistré » — on téléversait donc son papier sans jamais le revoir. La règle « on ne lit que
+ce qui sert » n'est pas abandonnée, elle est **appliquée** : sur cet écran, l'image EST ce qui
+sert. La vignette repère en plus les deux zones réservées, sinon on ne peut pas savoir si les
+45 mm tombent sous le logo ou en plein dessin.
+
+⚠️ **« J'ai mon en-tête en fichier » est passé AVANT « J'imprime sur mon papier ».** C'est
+l'option que cherchait l'utilisateur, et la seule qui tienne quand la facture part par email ou
+WhatsApp — le cas courant ici.
+
+**Vérifié après correction, local, PDF mesurés et écrans regardés (19 + 8 contrôles)** :
+
+```
+PDF, vraie route   en-tete dessine sur 595,28 x 841,89 pt — la PAGE ENTIERE
+contre-epreuve     pre-imprime : AUCUNE image pleine page
+carte de reglage   vignette 218 x 309 px · les 2 zones reservees reperees
+apercu de facture  la bande d en-tete ET le pied sont affiches, plus aucun pointille
+```
+
+#### Papier à en-tête — conception (5 oct. 2026)
 
 **Migration 0017 APPLIQUÉE et éprouvée contre la base réelle le 5 oct. 2026.**
 
@@ -717,8 +782,9 @@ sur une carte parfaitement correcte.
 
 ⚠️ **L'APERÇU SUIT LE MÊME RÉGLAGE** (`invoice-preview.tsx`). Il prétend montrer « le document
 tel que le client le recevra » : s'il gardait le logo et le bloc Émetteur que le PDF n'imprime
-plus, la personne réglerait son papier et croirait que rien n'a changé. Un bandeau en pointillé
-remplace l'en-tête — un blanc nu se lirait comme une mise en page cassée.
+plus, la personne réglerait son papier et croirait que rien n'a changé. **Depuis le
+6 oct. 2026 il affiche les bandes RÉELLES de l'en-tête** — le bandeau en pointillé ne subsiste
+que pour le papier pré-imprimé, où il n'y a aucune image à montrer.
 
 **Vérifié CONTRE LA BASE RÉELLE, par la vraie route PDF, documents relus (18 contrôles)** :
 
@@ -3468,6 +3534,13 @@ doivent être identiques dans le formulaire, l'aperçu, le détail et le PDF.
 - **Un contrôle qui échoue est un fait à rapporter**, pas une gêne à contourner. Si un test
   échoue parce que le test se trompe, le dire et corriger le test — c'est arrivé plusieurs fois.
 - Ne pas annoncer « vérifié » ce qui n'a pas été exécuté.
+- ⚠️ **UNE ASSERTION QUI NE PEUT PAS ÉCHOUER EST PIRE QUE PAS D'ASSERTION — payé le
+  6 oct. 2026.** `buf.includes('/Image')` devait prouver qu'un en-tête était dessiné dans un
+  PDF. Cette chaîne y est de toute façon : le contrôle passait au vert sur des documents qui
+  n'en portaient aucun, j'ai écrit « vérifié », et la fonction était morte depuis le début —
+  c'est l'utilisateur qui l'a découverte. **Avant d'écrire une assertion, se demander ce qui la
+  ferait échouer** ; si la réponse ne vient pas, elle ne mesure rien. Le réflexe qui tranche
+  est la **contre-épreuve** : faire tourner le même contrôle sur un cas où il DOIT échouer.
 - Un doute sur un calcul se lève en le refaisant, pas en le supposant. Mon arithmétique
   mentale s'est déjà trompée là où le code avait raison.
 
