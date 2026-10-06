@@ -1118,7 +1118,29 @@ cliente, imprimé sur SES factures.
 
 #### Tara (Dikalo) — liens de paiement (migration 0010)
 
-`POST https://www.dikalo.co/api/tara/paymentlinks` rend **six liens** pour un même règlement :
+⚠️ **LE DOMAINE ÉTAIT FAUX : L'INTÉGRATION N'A JAMAIS PU FONCTIONNER — découvert le
+6 oct. 2026.** Le code appelait `www.dikalo.co`, qui **n'a aucun enregistrement DNS**. Mesuré,
+et non déduit :
+
+```
+POST https://www.dikalo.co/api/tara/paymentlinks  -> 000   (aucune resolution DNS)
+POST https://www.dklo.co/api/tara/paymentlinks    -> 200
+  {"status":"ERROR","message":"API_KEY_IS_NULL"}
+```
+
+⚠️ **RIEN NE L'A SIGNALÉ, et c'est l'enseignement principal.** La règle « un échec de Tara ne
+fait jamais échouer la commande » est bonne — mais elle rendait une panne **totale**
+indiscernable d'une fonctionnalité volontairement désactivée : dans les deux cas, l'écran
+retombe sur le mobile money manuel. **Un repli muet masque la panne qu'il amortit.** Le motif
+d'échec (`injoignable`, `http-404`, `refus-…`) doit être journalisé, sans quoi personne ne
+saura jamais que l'appel ne part nulle part.
+
+⚠️ **Ces trois corrections viennent de la skill `tara-api-developer`** (installée le
+6 oct. 2026), pas d'une documentation retrouvée. ⚠️ **Son dossier `reference/` n'a PAS été
+synchronisé** : seul `SKILL.md` est présent, donc les schémas détaillés des webhooks et des
+endpoints restent indisponibles.
+
+`POST https://www.dklo.co/api/tara/paymentlinks` rend **six liens** pour un même règlement :
 général, carte, WhatsApp, SMS, Telegram, Dikalo. Au Cameroun cette variété compte autant que le
 paiement lui-même — tout le monde n'a pas la même application.
 
@@ -1147,13 +1169,48 @@ règlement a abouti ; annoncer un succès non constaté serait démenti par la f
 fermée. Le message est affiché seulement si la référence de l'URL correspond à la commande
 réellement en attente.
 
-**Ce que la documentation de Tara NE dit PAS — à demander avant d'activer automatiquement :**
+**Les trois questions bloquantes du 17 sept. 2026 — RÉPONDUES le 6 oct. 2026**, par la skill
+`tara-api-developer` :
 
-1. **Le contenu du webhook** — quels champs, quelles valeurs de statut.
-2. **Comment prouver qu'un appel vient de Tara** — signature, en-tête secret, liste d'IP.
-   Sans ça, l'URL du webhook est un sésame : qui la découvre s'offre la formule Pro.
-3. **Un point de vérification** pour interroger l'état d'un paiement plutôt que de croire ce
-   qu'on reçoit.
+1. **Contenu du webhook** — *partiellement*. **Trois formats de charge circulent** selon le type
+   de paiement, et **aucun champ `event` ne les distingue : seul `status` varie.** ⚠️ **`amount`
+   est une CHAÎNE** (`"100"`, pas `100`) : à convertir avant tout calcul, sinon une
+   concaténation passera pour une addition sur de l'argent. Les schémas exacts sont dans un
+   fichier `reference/webhooks.md` **qui n'a pas été synchronisé** — donc toujours inconnus.
+2. **Preuve d'origine — TOUJOURS PAS DOCUMENTÉE, et il ne faut pas l'inventer.** Le tableau de
+   bord Tara engendre bien un « webhook secret » et leur documentation parle de signatures
+   HMAC, mais **aucun en-tête, aucun algorithme, aucune chaîne canonique n'est publié**.
+   Écrire une vérification HMAC devinée donnerait une fausse assurance — pire que rien.
+3. ✅ **UN POINT DE VÉRIFICATION EXISTE : `POST /transactions/status`.** **C'est lui qui
+   débloque le webhook**, et il remplace avantageusement la signature manquante : au lieu de
+   chercher à prouver qu'un appel vient de Tara, **on ne croit pas l'appel du tout** — il ne
+   sert que de signal, et on rappelle Tara avec le `productId` (notre référence de commande)
+   pour lire l'état réel. Un attaquant qui découvre l'URL du webhook ne gagne alors rien :
+   c'est la réponse de Tara qui décide, pas la sienne.
+
+⚠️ **AUCUNE IDEMPOTENCE, AUCUN RENVOI AUTOMATIQUE côté Tara.** Rien n'empêche de recevoir deux
+fois la même notification, et rien ne la rejoue si elle se perd (il existe un
+`POST /resend-webhook` manuel). La déduplication est donc **à notre charge**, sur
+`paymentId` + `productId` — ce que `subscription_payments` porte déjà avec son
+`unique (provider, provider_reference)`. **Cette contrainte n'était pas une précaution de
+confort : elle est la seule protection existante.**
+
+**Autres règles de l'API, à connaître avant d'y toucher :**
+
+- ⚠️ **HTTP 200 NE VEUT PAS DIRE SUCCÈS.** L'échec est annoncé dans le CORPS. La documentation
+  annonce `status: "FAILURE"` ; **l'API réelle nous a répondu `"ERROR"`** — `createPaymentLink`
+  accepte donc les deux.
+- ⚠️ **La clé part dans le CORPS *et* en `Authorization: Bearer`.** La documentation ne montre
+  que le corps, le SDK officiel ajoute l'en-tête, et aucune source ne tranche. `x-api-key`
+  n'existe nulle part : ne pas l'inventer.
+- ⚠️ **`/api/tara/order` est MORT (410 Gone)** et **`cmmobile` est dépréciée depuis le
+  1er janv. 2026** — pour encaisser, c'est `mobilepay`. Nous n'utilisons ni l'un ni l'autre.
+- Le montant est un **entier en devise locale** (XAF ici) : cela coïncide avec la règle FCFA du
+  §5, mais c'est une coïncidence heureuse, pas une garantie du prestataire.
+- ⚠️ **`"API_ORDER_SUCESSFULL"` s'écrit avec un seul `C`** — faute de frappe présente dans la
+  réponse réelle. La recopier telle quelle si on la teste un jour ; ne pas la « corriger ».
+- **Pas d'URL de bac à sable distincte** : le même hôte sert les deux, le mode est réglé par
+  business côté Tara.
 
 En attendant, `TARA_WEBHOOK_SECRET` (24 caractères minimum) forme un segment imprévisible dans
 l'URL de notification. **Ce n'est PAS l'équivalent d'une signature** et ne prétend pas l'être :
@@ -2715,7 +2772,7 @@ le même code échoue au deuxième usage et accuse la garde. Attendre une fenêt
 | **Mots de passe compromis** (`password_hibp_enabled`) | **Bloqué : `402 Payment Required`** — plan Supabase payant. Le message français est écrit, déployé et placé AVANT le fourre-tout de `translateAuthError` ; il n'attend que le réglage |
 | **CAPTCHA** (`security_captcha_enabled`) | Exige un compte hCaptcha ou Turnstile et ses clés : **impossible sans l'utilisateur** |
 | **`PUT /auth/v1/user` change le mot de passe sans l'ancien** | `security_update_password_require_reauthentication` et `..._require_current_password` valent `false`. Notre Server Action exige l'ancien, **mais l'appel direct à l'API le contourne**. Basculer le réglage sans adapter le code **casserait les changements de mot de passe pour tout le monde** : c'est un changement en deux temps (code, puis réglage), à faire avec une vérification dédiée |
-| **Signature du webhook Tara** | Impossible sans la spécification de Tara, toujours manquante |
+| **Signature du webhook Tara** | **Toujours non publiée** par Tara — mais ce n'est plus bloquant : `POST /transactions/status` permet de **ne pas croire** la notification et d'aller lire l'état réel. Voir « Tara (Dikalo) », §2 |
 | ~~**`/favicon.ico` répond 404**~~ | **RÉGLÉ le 28 sept. 2026** — le projet n'avait **aucune** icône. Voir ci-dessous |
 
 ⚠️ **Le 404 du favicon a fait échouer mon contrôle de CSP à tort.** Le test comptait toute

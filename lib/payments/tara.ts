@@ -3,7 +3,7 @@ import { z } from 'zod';
 /**
  * Tara (Dikalo) — création d'un lien de paiement.
  *
- * `POST https://www.dikalo.co/api/tara/paymentlinks` rend six liens pour un
+ * `POST https://www.dklo.co/api/tara/paymentlinks` rend six liens pour un
  * même règlement : lien général, carte, WhatsApp, SMS, Telegram, Dikalo.
  * Au Cameroun, cette variété compte autant que le paiement lui-même — tout le
  * monde n'a pas la même application installée.
@@ -17,7 +17,26 @@ import { z } from 'zod';
  * — manuelle tant que son contenu n'est pas documenté.
  */
 
-const ENDPOINT = 'https://www.dikalo.co/api/tara/paymentlinks';
+/**
+ * ⚠️ **LE DOMAINE ÉTAIT FAUX, ET L'INTÉGRATION N'A JAMAIS PU FONCTIONNER —
+ * corrigé le 6 oct. 2026.** Le code appelait `www.dikalo.co`, qui **n'a aucun
+ * enregistrement DNS** : la requête n'atteignait personne. Mesuré, et non
+ * déduit :
+ *
+ * ```
+ * POST https://www.dikalo.co/api/tara/paymentlinks  -> 000 (connexion impossible)
+ * POST https://www.dklo.co/api/tara/paymentlinks    -> 200
+ *   {"status":"ERROR","message":"API_KEY_IS_NULL"}
+ * ```
+ *
+ * ⚠️ **RIEN NE L'A SIGNALÉ, et c'est le vrai enseignement.** « Un échec de Tara
+ * ne fait jamais échouer la commande » : le parcours retombait donc en silence
+ * sur le règlement mobile money manuel, exactement comme s'il n'y avait aucune
+ * clé configurée. Un repli muet rend une panne totale indiscernable d'une
+ * fonctionnalité désactivée. **Le motif d'échec doit être journalisé** — voir
+ * `reason` plus bas, qui distingue déjà `injoignable` de `http-404`.
+ */
+const ENDPOINT = 'https://www.dklo.co/api/tara/paymentlinks';
 
 /**
  * ⚠️ **Les liens sont validés SCHÉMA PAR SCHÉMA, et c'est indispensable.**
@@ -117,7 +136,21 @@ export async function createPaymentLink(
   try {
     reponse = await fetch(ENDPOINT, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        /*
+          ⚠️ **LA CLÉ EST ENVOYÉE AUX DEUX ENDROITS, délibérément.** La
+          documentation publique de Tara ne montre que `apiKey` dans le CORPS,
+          sans aucun en-tête ; leur SDK officiel envoie **en plus** un
+          `Authorization: Bearer`. Aucune source ne dit lequel fait foi. Les
+          poser tous les deux couvre les deux modèles, et c'est ce que fait le
+          SDK. (`x-api-key` n'existe nulle part — ne pas l'inventer.)
+
+          Cela ne change rien à la règle du projet : l'appel reste **côté
+          serveur**, et la clé n'est jamais préfixée `NEXT_PUBLIC_`.
+        */
+        Authorization: `Bearer ${config.apiKey}`,
+      },
       body: JSON.stringify({
         apiKey: config.apiKey,
         businessId: config.businessId,
@@ -144,6 +177,29 @@ export async function createPaymentLink(
     brut = await reponse.json();
   } catch {
     return { ok: false, reason: 'reponse-illisible' };
+  }
+
+  /*
+    ⚠️ **UN HTTP 200 PEUT TRANSPORTER UN ÉCHEC — Tara signale la panne dans le
+    CORPS.** Observé en direct sur l'API réelle, sans clé :
+
+    ```
+    200 OK   {"status":"ERROR","message":"API_KEY_IS_NULL"}
+    ```
+
+    Sans ce contrôle, `reponseSchema` ne trouverait simplement aucun lien et
+    rendrait `reponse-inattendue` : le motif accuserait la FORME de la réponse
+    là où le problème est une clé manquante ou refusée. On distingue donc le
+    refus métier, qui se diagnostique, d'un schéma qui aurait changé.
+
+    ⚠️ La documentation annonce `FAILURE` ; l'API réelle a répondu `ERROR`. On
+    accepte les deux plutôt que de parier sur l'un — et surtout on ne traite
+    comme succès que ce qui n'est explicitement ni l'un ni l'autre.
+  */
+  const etat = (brut as { status?: unknown; message?: unknown } | null)?.status;
+  if (etat === 'FAILURE' || etat === 'ERROR') {
+    const message = (brut as { message?: unknown }).message;
+    return { ok: false, reason: `refus-${typeof message === 'string' ? message : String(etat)}` };
   }
 
   const parsed = reponseSchema.safeParse(brut);
