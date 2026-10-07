@@ -1329,6 +1329,98 @@ c'est ce qu'on peut faire sans la coopération du prestataire.
 **Variables d'environnement** : `TARA_API_KEY`, `TARA_BUSINESS_ID`, `TARA_WEBHOOK_SECRET`.
 Tant qu'elles sont vides, aucun appel n'est fait et le parcours manuel reste en place.
 
+⚠️ **LES TROIS SONT POSÉES EN LOCAL DEPUIS LE 7 oct. 2026 — ET SUR AUCUN AUTRE
+ENVIRONNEMENT.** `.env.local` ne sert qu'à la machine de développement : **la production ne
+les voit pas**, et le parcours y reste manuel tant qu'elles ne sont pas sur Vercel.
+
+⚠️ **`TARA_WEBHOOK_SECRET` EST EN `base64url`, ET CE N'EST PAS UN DÉTAIL.** Il voyage dans
+`?s=<secret>`. Le base64 ordinaire contient `+`, `/` et `=` : un `+` redevient une **espace**
+à la lecture, et le `memeSecret()` de l'Edge Function refuserait un secret pourtant juste —
+panne totale que **rien ne signalerait**, puisqu'on répond toujours 200 à Tara. Engendrer
+avec `randomBytes(32).toString('base64url')` : 43 caractères, aucun caractère à encoder.
+
+⚠️ **LA MÊME VALEUR DOIT ÊTRE POSÉE DANS L'ENVIRONNEMENT DE L'EDGE FUNCTION.** Deux valeurs
+différentes = toutes les notifications refusées, en silence.
+
+##### ⚠️ L'API TARA N'AUTHENTIFIE PAS LA CLÉ — mesuré le 7 oct. 2026
+
+**C'est la découverte la plus lourde de conséquences sur cette intégration.** Essayé avec
+l'accord explicite du titulaire du compte, en appelant le VRAI `createPaymentLink()` du dépôt :
+
+```
+cle VIDE    + vrai businessId   API_KEY_IS_NULL       refus
+vraie cle   + businessId FAUX   BUSINESS_NONEXISTENT  refus
+cle BIDON   + vrai businessId   SUCCES — lien de paiement REEL cree
+vraie cle   + vrai businessId   SUCCES — lien de paiement REEL cree
+```
+
+**Tara vérifie seulement que `apiKey` est NON VIDE.** Sa valeur n'est jamais contrôlée. Le
+seul verrou réel est le `businessId`.
+
+⚠️ **CONSÉQUENCE 1 — `TARA_BUSINESS_ID` EST LE SECRET, PAS `TARA_API_KEY`.** Il doit être posé
+en **Sensitive** sur Vercel au même titre que la clé, et ne jamais être traité comme un
+identifiant public, bien que Tara l'affiche en clair dans son tableau de bord.
+
+⚠️ **CONSÉQUENCE 2 — L'EDGE FUNCTION, TELLE QU'ÉCRITE, EST EXPLOITABLE. NE PAS LA DÉPLOYER EN
+L'ÉTAT.** Elle active la formule dès que `/transactions/status` répond `SUCCESS`, **sans
+jamais comparer le MONTANT**. L'attaque ne demande aucun compte volé :
+
+```
+1. commander Entreprise (15 000 FCFA) et noter sa reference XN-BUS-xxxxxx
+2. creer soi-meme un lien Tara avec productId = cette reference, prix 100 FCFA
+   (le businessId suffit : la cle n est pas verifiee)
+3. regler 100 FCFA
+4. /transactions/status repond SUCCESS -> la fonction active Entreprise
+```
+
+**Le correctif obligatoire est de comparer le montant encaissé à `priceFor(plan, period)` et
+de REFUSER l'activation en dessous.** Et comme la charge Mobile Money ne porte **aucun**
+`amount`, la règle sûre est : **pas de montant vérifié, pas d'activation** — on journalise
+pour traitement manuel. Mieux vaut un abonnement activé à la main qu'un abonnement offert.
+
+⚠️ **CELA ENTRE EN TENSION AVEC « le prix vit dans `lib/plans.ts`, source unique ».** Deno ne
+peut pas importer ce module, et `subscription_orders` ne porte aucun montant — délibérément,
+puisqu'un montant en paramètre de `start_subscription_order()` permettrait de se commander
+Pro à 1 FCFA. **Décision à prendre avec l'utilisateur**, non tranchée.
+
+⚠️ **DEUX LIENS DE PAIEMENT RÉELS ONT ÉTÉ CRÉÉS PENDANT CE CONTRÔLE**, à 100 FCFA, libellés
+« Contrôle technique » : `1678061799` (par la clé bidon) et `1767949921`
+(réf. `XN-CTRL-F7CBB0`). **Le premier n'était pas prévu** — je m'attendais à ce que la clé
+bidon soit refusée. Personne n'est tenu de les régler ; ils peuvent être supprimés côté Tara.
+
+##### Ce que la sonde `/transactions/status` peut prouver — et ce qu’elle ne peut PAS
+
+⚠️ **CETTE SONDE NE VALIDE PAS LA CLÉ D'API, et croire le contraire est le piège.** Mesuré le
+7 oct. 2026, avec un `productId` volontairement inexistant :
+
+```
+aucune cle                        API_KEY_IS_NULL
+cle bidon + businessId inconnu    BUSINESS_NONEXISTENT
+vraie cle, sans businessId        BUSINESSID_IS_NULL
+cle bidon  + VRAI businessId      TRANSACTION_NOT_FOUND   <-- !!
+vraie cle  + VRAI businessId      TRANSACTION_NOT_FOUND
+```
+
+**Les deux dernières lignes sont IDENTIQUES.** Tara valide le `businessId`, puis cherche la
+transaction — **sans jamais rejeter une clé fausse**. Cette sonde prouve donc deux choses et
+une seule de plus :
+
+- ✅ **le `businessId` est reconnu** (`BUSINESS_NONEXISTENT` a disparu) ;
+- ✅ **la requête traverse toute la pile** jusqu'à la recherche de transaction ;
+- ❌ **la validité de la clé reste INDÉTERMINÉE**, et aucune réponse de cet endpoint ne
+  pourra jamais la trancher.
+
+⚠️ **MON SCRIPT DE SONDE A RENDU UN VERDICT FAUX** en concluant « réponse identique à la clé
+bidon, donc la clé est refusée ». Le raisonnement supposait qu'une clé bidon serait rejetée ;
+elle ne l'est pas. **Un comparateur dont le témoin négatif ne se déclenche jamais ne
+discrimine rien** — c'est la famille de l'assertion qui ne peut pas échouer du §9, sous une
+autre forme. Lire les messages, pas le verdict.
+
+**Le seul endpoint qui authentifie réellement est `POST /paymentlinks`** : c'est lui qui a
+rendu `API_KEY_IS_NULL` le 6 oct. Mais il **crée un lien de paiement** sur le compte marchand
+— un effet de bord sur un service tiers. **Ne pas l'appeler sans l'accord explicite du
+titulaire du compte.**
+
 ⚠️ `siteOrigin()` a quitté `lib/actions/auth.ts` pour `lib/site-origin.ts` : deux copies en
 auraient divergé. Elle privilégie `NEXT_PUBLIC_SITE_URL` parce que les en-têtes viennent du
 client — un `Host` falsifié détournerait l'adresse du webhook vers un serveur choisi par
@@ -1925,8 +2017,14 @@ publique, elle s'adresse au relecteur.
 
 ⚠️ **`contact@xn-facture.cm` — mauvais domaine, corrigé en `.com`.** L'adresse était fausse aux
 trois endroits où elle apparaissait, dont le pied de page commun aux trois documents. **La boîte
-`contact@xn-facture.com` reste à créer et à relever** : une adresse de contact citée dans des
-mentions légales et qui ne répond pas est pire que pas d'adresse du tout.
+~~`contact@xn-facture.com` reste à créer et à relever~~ — **CRÉÉE ET FONCTIONNELLE, déclarée
+par l'utilisateur le 7 oct. 2026.** Une adresse de contact citée dans des mentions légales et
+qui ne répond pas est pire que pas d'adresse du tout : ce n'est plus le cas.
+
+⚠️ **NON VÉRIFIÉE PAR MOI** — relever une boîte demande ses identifiants, que je n'ai pas et
+ne dois pas avoir. C'est une déclaration de l'utilisateur, pas une mesure. **Si un doute
+surgit un jour, le contrôle qui tranche est d'y envoyer un message et de constater sa
+réception**, pas de relire cette ligne.
 
 ⚠️ **Réserves assumées, à lever avant l'ouverture :**
 - Chaque page porte un encart « document de travail, non validé juridiquement ». Il reste tant
@@ -2720,12 +2818,70 @@ migration.** Le fichier disait vrai sur son intention et faux sur son effet pend
 
 | Avis restant | Pourquoi il reste |
 |---|---|
-| `auth_users_exposed` + `security_definer_view` (les 2 ERROR) | La vue `admin_actors` porte sa garde dans sa clause `where` (`is_platform_admin()`), et `anon` en est révoqué. **Mesuré : `permission denied for view`.** Le lint ne sait pas lire une clause `where` — faux positifs |
+| `auth_users_exposed` (ERROR) | ⚠️ **CE N'ÉTAIT PAS UN FAUX POSITIF — corrigé par 0018 le 7 oct. 2026.** Voir ci-dessous |
+| `security_definer_view` (ERROR) | Faux positif, et il doit le rester : passer la vue en `security_invoker` la casserait (voir 0018) |
 | `set_marketing_preference` ouverte à `anon` | **Voulu, et à ne pas « corriger ».** Le désabonnement se clique depuis une boîte mail, sans session ; son autorisation vient du jeton d'URL (0012). La fermer supprimerait la page pour tout le monde |
 | `rls_auto_enable` ouverte à `anon` | Fonction de Supabase, pas la nôtre. Elle rend `event_trigger` : PostgREST ne l'expose pas |
 | 13 fonctions ouvertes à `authenticated` | C'est le produit. Un membre connecté DOIT pouvoir créer son entreprise, numéroter ses factures, commander une formule. Chacune porte sa garde interne |
 | `extension_in_public` (`pg_net`) | Géré par Supabase |
 | `auth_leaked_password_protection` | **Bloqué : `PATCH /config/auth` répond `402 Payment Required`** — réglage réservé à un plan Supabase payant. Décision de l'utilisateur, non prise |
+
+#### `admin_actors` était MODIFIABLE — migration 0018 (7 oct. 2026)
+
+⚠️ **J'AVAIS CLASSÉ CET AVIS SANS SUITE LE 26 sept., ET J'AVAIS TORT.** Le tableau ci-dessus
+disait « le lint ne sait pas lire une clause `where` — faux positifs ». C'était exact sur la
+LECTURE, et **mon analyse n'avait regardé que la lecture**. L'utilisateur a reposé la question
+le 7 oct. ; en remesurant au lieu de reciter le document, voici ce qui est sorti :
+
+```
+administrateur de plateforme, une seule requete REST
+  DELETE /rest/v1/admin_actors?id=eq.<uuid>   ->  HTTP 200, ligne rendue
+  le compte auth.users cible N EXISTAIT PLUS
+```
+
+**Trois faits se combinaient**, et aucun n’était suffisant seul :
+
+1. la vue est **`security definer`** (`security_invoker` non posé), donc elle atteint
+   `auth.users` ;
+2. elle est **auto-modifiable** — un seul `from`, pas de `group by` ni de `distinct` —, donc
+   PostgreSQL y propage `delete` et `update` ;
+3. `authenticated` détenait **INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER** dessus.
+
+La clause `where is_platform_admin()` filtrait bien : un compte ordinaire touchait **zéro
+ligne**. Ce n'était donc pas une fuite externe, mais une **élévation à l'intérieur de l'espace
+d'administration**, qui est en LECTURE SEULE par décision explicite (§8).
+
+⚠️ **L'ORIGINE EST LE MÊME RÉGLAGE PAR DÉFAUT QUE 0015** : `alter default privileges … grant
+all on tables to anon, authenticated`. **Toute vue créée ici naît modifiable.** Une vue
+`security definer` sur une table système doit systématiquement se faire retirer ses droits
+d'écriture, dans la migration qui la crée.
+
+⚠️ **ON NE PASSE PAS LA VUE EN `security_invoker` — ce serait la casser en silence.** Un
+compte `authenticated`, même administrateur, n'a aucun droit sur `auth.users` : la vue ne
+rendrait plus rien et `/admin` afficherait une liste vide **sans la moindre erreur**. Le
+`security definer` lui permet de lire, la garde `where` l’y autorise : les deux se tiennent.
+L'avis `security_definer_view` restera donc affiché, et celui-là est bien un faux positif.
+
+⚠️ **UNE SEULE AUTRE VUE EXISTE** (`subscription_reminders_status`) et elle n'avait **aucun**
+droit d'écriture — vérifié dans le même passage, pas supposé.
+
+**Vérifié en rejouant la MÊME sonde avant et après (7 contrôles), avec deux comptes
+jetables dont la cible du `delete`** :
+
+```
+AVANT   administrateur  DELETE -> HTTP 200, le compte cible a DISPARU
+APRES   compte ordinaire  lecture 0 ligne · DELETE 403
+        administrateur    lecture 10 lignes (son role, intact)
+                          DELETE 403 permission denied for view admin_actors
+                          PATCH  403 — adresse intacte
+                          LE COMPTE CIBLE EXISTE TOUJOURS
+menage  8 comptes, 8 entreprises, un seul administrateur — le vrai
+```
+
+⚠️ **PIÈGE DE TEST PAYÉ : mon contrôle du `PATCH` ne prouvait rien au premier passage.** Il
+s'exécutait APRÈS le `delete` réussi, donc sur une ligne déjà supprimée : « 0 ligne modifiée »
+était vrai pour la mauvaise raison. **Un contrôle qui suit une opération destructrice doit
+être rejoué sur une cible vivante**, sinon il mesure l'absence, pas la protection.
 
 #### `pg_net` — SSRF latent, pas atteignable
 
@@ -3103,6 +3259,11 @@ supabase/
                                 landing. SEULE table du projet ouverte en
                                 ÉCRITURE aux administrateurs. Ne pas en faire
                                 un précédent
+  migrations/0018_admin_actors_lecture_seule.sql APPLIQUÉE le 7 oct. 2026.
+                                Retire INSERT/UPDATE/DELETE/TRUNCATE à
+                                `authenticated` sur la vue `admin_actors`.
+                                Un administrateur pouvait supprimer de VRAIS
+                                comptes auth.users en une requête REST
   migrations/0017_papier_en_tete.sql ⚠️ **NON APPLIQUÉE** (jeton de gestion
                                 révoqué le 5 oct. 2026). Réglages d'en-tête sur
                                 `companies` + image dans `company_letterheads`.

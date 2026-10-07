@@ -24,6 +24,26 @@
  *      `subscription_payments`. Tara ne garantit aucune unicité et ne rejoue
  *      rien automatiquement : un même message peut arriver deux fois.
  *
+ * ⚠️⚠️ **NE PAS DÉPLOYER EN L’ÉTAT — FAILLE CONNUE, 7 oct. 2026.** Cette
+ * fonction active la formule dès que `/transactions/status` répond
+ * `SUCCESS`, **sans jamais comparer le MONTANT encaissé au prix de la
+ * formule**. Or il est mesuré que **l’API Tara ne valide pas la clé** : elle
+ * vérifie seulement qu’elle est non vide, et le `businessId` est le seul
+ * verrou réel. N’importe qui le connaissant peut donc créer un lien de
+ * paiement portant NOTRE référence de commande, au prix qu’il veut :
+ *
+ *     1. commander Entreprise (15 000 FCFA), noter la reference
+ *     2. creer un lien Tara : productId = cette reference, prix 100 FCFA
+ *     3. regler 100 FCFA
+ *     4. -> /transactions/status dit SUCCESS -> Entreprise est activee
+ *
+ * **Correctif obligatoire avant tout déploiement** : exiger un montant
+ * vérifié supérieur ou égal au prix de la formule, et REFUSER l’activation
+ * sinon. La charge Mobile Money ne portant aucun `amount`, la règle sûre est
+ * « pas de montant vérifié, pas d’activation » — on journalise pour
+ * traitement manuel. Mieux vaut un abonnement activé à la main qu’un
+ * abonnement offert.
+ *
  * ⚠️ **DÉPLOIEMENT — `verify_jwt` DOIT ÊTRE DÉSACTIVÉ.** Par défaut Supabase
  * exige un JWT sur une Edge Function : Tara n'en a aucun, et toutes les
  * notifications seraient refusées en 401 **sans que rien ne le signale** chez
