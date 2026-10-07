@@ -61,9 +61,17 @@
  * ⚠️ **DÉPLOIEMENT — `verify_jwt` DOIT ÊTRE DÉSACTIVÉ.** Par défaut Supabase
  * exige un JWT sur une Edge Function : Tara n'en a aucun, et toutes les
  * notifications seraient refusées en 401 **sans que rien ne le signale** chez
- * nous. C'est le piège principal de cette fonction :
+ * nous. C'est le piège principal de cette fonction.
  *
- *     supabase functions deploy tara-webhook --no-verify-jwt
+ * **Le réglage vit dans `supabase/config.toml`**, pas dans un drapeau :
+ *
+ *     [functions.tara-webhook]
+ *     verify_jwt = false
+ *
+ * ⚠️ **ET CE N'EST PAS ÉQUIVALENT À `--no-verify-jwt`.** Le drapeau doit être
+ * retapé à CHAQUE déploiement : un seul `supabase functions deploy` lancé sans
+ * lui remet la vérification, et la panne est silencieuse. Le fichier est
+ * versionné, donc le réglage survit à qui déploie et depuis où.
  *
  * Variables attendues dans l'environnement de la fonction :
  * `TARA_API_KEY`, `TARA_BUSINESS_ID`, `TARA_WEBHOOK_SECRET`.

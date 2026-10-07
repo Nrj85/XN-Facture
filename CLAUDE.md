@@ -1756,15 +1756,43 @@ vérifié.
 `<projet>.supabase.co/functions/v1/tara-webhook?s=<secret>`. Le paramètre `origin` est conservé
 mais inutilisé — `returnUrl`, lui, ramène toujours chez nous.
 
-⚠️ **`verify_jwt` DOIT ÊTRE DÉSACTIVÉ AU DÉPLOIEMENT**, et c'est le piège principal :
+⚠️ **`verify_jwt` DOIT ÊTRE DÉSACTIVÉ**, et c'est le piège principal. Par défaut Supabase
+exige un JWT sur une Edge Function. Tara n'en a aucun : **toutes les notifications seraient
+refusées en 401 sans que rien ne le signale chez nous** — la formule resterait fermée après
+un paiement encaissé.
 
-```bash
-supabase functions deploy tara-webhook --no-verify-jwt
+**Le réglage vit dans `supabase/config.toml`**, créé le 7 oct. 2026 :
+
+```toml
+project_id = "tpzmmgcfpnsysaghdqrx"
+
+[functions.tara-webhook]
+verify_jwt = false
 ```
 
-Par défaut Supabase exige un JWT sur une Edge Function. Tara n'en a aucun : **toutes les
-notifications seraient refusées en 401 sans que rien ne le signale chez nous** — la formule
-resterait fermée après un paiement encaissé.
+⚠️ **CE N'EST PAS ÉQUIVALENT À `--no-verify-jwt`, et le choix est délibéré.** Le drapeau doit
+être retapé à **chaque** déploiement : un seul `supabase functions deploy` lancé sans lui
+remet la vérification, et la panne est **silencieuse**. Le fichier, lui, est versionné — le
+réglage survit à qui déploie et depuis où. La documentation Supabase le dit dans ces termes :
+« This ensures your function configurations are consistent across all environments and
+deployments. »
+
+⚠️ **CE `config.toml` EST VOLONTAIREMENT MINIMAL, et NE DOIT PAS être régénéré par
+`supabase init`.** Ce projet n'utilise pas la CLI pour sa base : les dix-huit migrations ont
+été appliquées en SQL direct et `supabase_migrations.schema_migrations` n'existe pas. Un
+fichier complet déclarerait une pile locale que personne ne fait tourner, et inviterait à des
+commandes `supabase db` qui se compareraient à un registre inexistant.
+
+⚠️ **LE JETON DE GESTION A BESOIN DE DEUX PERMISSIONS, pas une** — mesuré le 7 oct. 2026 :
+
+```
+POST /v1/projects/<ref>/functions   403  Missing permission: edge_functions_write
+POST /v1/projects/<ref>/secrets     403  Missing permission: edge_functions_secrets_write
+GET  /v1/projects/<ref>/secrets     200  []   (la LECTURE passe deja)
+```
+
+La seconde est facile à oublier : sans elle, la fonction se déploie mais n'a **aucune**
+variable d’environnement, donc elle refuse tout en silence.
 
 ⚠️ **`supabase/functions` est EXCLU de `tsconfig.json`.** Le fichier tourne sur **Deno**, avec
 des globales qui n'existent pas dans l'application ; sans cette exclusion, `**/*.ts` le ferait
@@ -3292,6 +3320,11 @@ utilisateur réel.
 middleware.ts                   Session + protection des routes
 
 supabase/
+  config.toml                   MINIMAL, et à garder tel quel : uniquement
+                                `project_id` et `[functions.tara-webhook]
+                                verify_jwt = false`. NE PAS lancer
+                                `supabase init` — ce projet applique ses
+                                migrations en SQL direct, sans registre
   migrations/0001_schema.sql    Tables, contraintes, index
   migrations/0002_functions.sql is_company_member, current_company_id,
                                 next_document_number, create_company_for_current_user

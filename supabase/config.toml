@@ -1,0 +1,35 @@
+# Configuration Supabase — volontairement MINIMALE.
+#
+# ⚠️ **CE FICHIER N'A PAS ÉTÉ PRODUIT PAR `supabase init`, et il ne doit pas
+# l'être.** Ce projet n'utilise pas la CLI pour sa base : les dix-huit
+# migrations ont toutes été appliquées en SQL direct, et
+# `supabase_migrations.schema_migrations` n'existe pas. Un `config.toml`
+# complet déclarerait une pile locale (db, studio, realtime, storage, auth)
+# que personne ne fait tourner, et inviterait à des commandes `supabase db`
+# qui se compareraient à un registre de migrations inexistant.
+#
+# Il ne sert donc qu'à UNE chose : la configuration des Edge Functions.
+
+project_id = "tpzmmgcfpnsysaghdqrx"
+
+# ⚠️ **`verify_jwt = false` EST OBLIGATOIRE, ET C'EST LE PIÈGE PRINCIPAL DE
+# CETTE FONCTION.** Par défaut, Supabase exige un JWT valide sur toute Edge
+# Function. Tara n'en a aucun : **toutes les notifications de paiement
+# seraient refusées en 401 sans que rien ne le signale chez nous** — un
+# abonnement encaissé, une formule qui reste fermée, et aucune trace.
+#
+# ⚠️ **ICI PLUTÔT QUE PAR `--no-verify-jwt`, et ce n'est pas équivalent.** Le
+# drapeau doit être retapé à CHAQUE déploiement : un seul
+# `supabase functions deploy` lancé sans lui remet la vérification, et la
+# panne est silencieuse. Ce fichier est versionné, donc le réglage survit à
+# qui déploie et depuis où. C'est aussi ce que recommande la documentation :
+# « This ensures your function configurations are consistent across all
+# environments and deployments. »
+#
+# ⚠️ **CELA NE REND PAS LA FONCTION PUBLIQUE SANS GARDE.** Elle porte les
+# siennes, dans cet ordre : un segment secret de 43 caractères dans l'URL,
+# comparé en temps constant ; un rappel de `POST /transactions/status` qui
+# refuse de croire la notification ; le statut de la commande ; le montant ;
+# et l'idempotence portée par `unique (provider, provider_reference)`.
+[functions.tara-webhook]
+verify_jwt = false
