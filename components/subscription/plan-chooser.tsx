@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowUp, Check, Loader2 } from 'lucide-react';
+import { ArrowUp, Check, Clock, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { startOrderAction } from '@/lib/actions/subscription';
 import {
@@ -184,6 +184,39 @@ export function PlanChooser({
                   </li>
                 ))}
               </ul>
+
+              {/* ⚠️ **CE QUI N’EST PAS ENCORE LIVRÉ EST DIT ICI AUSSI.** C’est
+                  l’écran où l’on commande : taire une fonction absente y
+                  reviendrait à la faire payer. La coche verte est réservée aux
+                  fonctions réelles, et l’horloge plus le mot « à venir » portent
+                  la distinction sans dépendre de la couleur (§6.2, règle 5).
+
+                  ⚠️ **`ink-2` et non `ink-3`, contrairement à la grille
+                  publique.** Cette carte passe en `bg-brand-soft` quand c’est la
+                  formule courante, et `ink-3` n’y mesure que 4,30:1 — sous le
+                  plancher AA. L’écart avec `pricing.module.css` est voulu. */}
+              {plan.upcoming.length > 0 && (
+                <ul className="mt-2 space-y-1.5 border-t border-dashed border-line pt-2">
+                  {plan.upcoming.map((feature) => (
+                    <li
+                      key={feature}
+                      className="flex items-start gap-2 text-[12.5px] text-ink-2"
+                    >
+                      <Clock
+                        className="mt-0.5 h-3.5 w-3.5 shrink-0 text-ink-3"
+                        strokeWidth={2.6}
+                        aria-hidden
+                      />
+                      <span>
+                        {feature}{' '}
+                        <span className="label-caps ml-0.5 rounded-full bg-sand px-1.5 py-0.5 text-ink-2">
+                          à venir
+                        </span>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
 
               {/* Le bouton vit en bas de carte : `mt-auto` aligne les trois
                   quel que soit le nombre d'avantages listés. */}

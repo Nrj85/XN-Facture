@@ -136,14 +136,19 @@ puis `startsWith(path + '/')` — soit `'//'`, qui ne correspond à aucun chemin
 `/dashboard`, `/factures`, `/devis`, `/clients`, `/parametres`, `/paiements` redirigent
 toujours vers `/connexion?suite=`.
 
-**La page est STATIQUE**, **1,81 ko de JS** — seuls l'en-tête et le retour en haut sont des
+**La page est STATIQUE**, **1,86 ko de JS** — seuls l'en-tête et le retour en haut sont des
 composants clients. C'est délibéré : la première page que voit un prospect sur un réseau lent
 ne doit rien attendre.
 
-⚠️ **Ce chiffre était 1,42 ko avant le 19 sept. 2026** : le bouton de retour en haut a coûté
-**410 octets**. Toute addition future doit être pesée de la même façon — `npm run build` donne
-la taille route par route, et **c'est le seul juge**. Un composant client de plus sur cette
-page n'est pas gratuit.
+⚠️ **Ce chiffre bouge, et chaque mouvement est pesé.** 1,42 ko à l'origine · **1,81 ko** le
+19 sept. 2026, le bouton de retour en haut ayant coûté **410 octets** · **1,86 ko** le
+7 oct. 2026, la liste « à venir » de la grille tarifaire ayant coûté **50 octets**. Toute
+addition future se pèse de la même façon — `npm run build` donne la taille route par route,
+et **c'est le seul juge**. Un composant client de plus sur cette page n'est pas gratuit.
+
+⚠️ **Les relevés DATÉS plus bas (26 et 28 sept.) citent encore 1,81 ko : c'est volontaire.**
+Un relevé dit ce qui a été mesuré CE JOUR-LÀ ; le réécrire en ferait un faux témoignage.
+Seules les trois phrases qui décrivent l'état courant ont été mises à jour.
 
 **Elle n'utilise pas Tailwind mais des modules CSS.** C'est le seul endroit du projet dans ce
 cas, et c'était une demande explicite. La landing a des compositions longues, des dégradés et
@@ -165,11 +170,110 @@ aux deux endroits.** C'est le coût de la séparation, et il est borné à cette
 - Les chiffres de la maquette d'aperçu sont ceux du **contrôle chiffré de référence**
   (2 110 000 · 406 175 · 2 516 175). Inventer des montants aurait affiché une TVA fausse sur
   la page qui vend justement le calcul de la TVA.
-- ⚠️ ~~**Les trois témoignages sont des exemples de mise en page, pas de vrais clients.**~~
-  **RETIRÉS DE LA PAGE LE 1er oct. 2026.** Ils viennent désormais de la base et sont **non
-  publiés** : la section n'apparaît plus du tout. Voir « Témoignages modifiables » ci-dessous.
-  Les textes sont conservés comme gabarit — rien n'a été perdu, et plus rien d'inventé n'est
-  en ligne.
+- ⚠️ **LES TROIS TÉMOIGNAGES GABARIT SONT PUBLIÉS EN LIGNE — état constaté le
+  7 oct. 2026, et MAINTENU par décision explicite de l'utilisateur.** Ils ont quitté le dur
+  (`testimonials.tsx`) le 1er oct. pour venir de la base, et ils y ont été **publiés le
+  1er oct. à 08h26**, à trois secondes d'intervalle. Ce ne sont pas de vrais clients : les
+  citations sont les miennes, et les trois sont signées **« Prénom Nom »**.
+
+  **Mesuré sur le HTML réellement servi par la production**, et non supposé :
+
+  ```
+  GET https://www.xn-facture.com/   ->  6 occurrences de « Prénom Nom »
+                                        lien « Témoignages » présent dans l'en-tête
+  base : 3 lignes, published = true, updated_at = 2026-10-01T08:26
+  ```
+
+  ⚠️ **Ce paragraphe affirmait le contraire** (« non publiés », « plus rien d'inventé n'est
+  en ligne ») : c'était vrai à l'écriture, et faux depuis le 1er oct. **Mon ménage de test
+  annonçait « 0 publié » — il portait sur le témoignage AJOUTÉ par le test, pas sur les
+  trois d'origine.** C'est le même défaut que l'assertion qui ne peut pas échouer du §9 :
+  un contrôle qui ne regarde pas la bonne ligne laisse écrire « vérifié ».
+
+  ⚠️ **NE PAS LES DÉPUBLIER DE SA PROPRE INITIATIVE.** La question a été posée le
+  7 oct. 2026 avec le retrait en recommandation, et l'utilisateur a choisi de les laisser
+  en ligne. C'est sa page et son arbitrage commercial. Les textes restent disponibles comme
+  gabarit le jour où de vraies citations les remplaceront.
+
+#### La grille tarifaire dit ce qui EXISTE — 7 oct. 2026
+
+⚠️ **TROIS ARGUMENTS DE VENTE ÉTAIENT SERVIS EN PRODUCTION SANS AUCUNE IMPLÉMENTATION**, et
+un quatrième passait pour exclusif alors qu'il est ouvert à tous. Trouvé en voulant appliquer
+`maxMembers`, puis mesuré sur le HTML réellement servi par `www.xn-facture.com` :
+
+| Carte | Argument | État réel |
+|---|---|---|
+| **Pro** 5 000/mois *(mise en avant)* | « Relances par email » | **N'existe pas** — phase 5. Les seules relances du projet sont NOS avis d'échéance d'abonnement (0011), qui partent à nos abonnés ; rien ne relance les clients de l'utilisateur |
+| **Entreprise** 15 000/mois | « Jusqu'à 5 utilisateurs » | **N'existe pas** — `company_members` n'a aucune politique d'écriture |
+| **Entreprise** 15 000/mois | « Export comptable » | **N'existe pas** — le seul export du dépôt est le CSV d'administration, réservé aux admins de plateforme |
+| **Entreprise** 15 000/mois | « Tableau de bord et encours par ancienneté » | Existe, mais ouvert à **toutes** les formules, Découverte comprise |
+
+⚠️ **C'EST LE CONTRÔLE MORT DU §6.1 PORTÉ AU NIVEAU COMMERCIAL** — la pire variante, puisqu'on
+en demande le prix. Et les CGU ne disent rien de l'abonnement, donc l'écart n'avait aucun
+filet contractuel.
+
+⚠️ **PRO ET ENTREPRISE SONT FONCTIONNELLEMENT IDENTIQUES AUJOURD'HUI.**
+`enforce_invoice_quota()` (0007) ne distingue que `discovery` du reste : `if v_plan <>
+'discovery' then return`. **Rien, dans tout le dépôt, ne sépare les deux formules payantes.**
+Il ne reste donc à Entreprise qu'une seule ligne réelle et exclusive — « Support prioritaire »
+— et elle ne tient pas au code, c'est une promesse humaine. À savoir avant d'en défendre
+l'écart de prix.
+
+⚠️ **`upcoming` EST UN CHAMP SÉPARÉ DE `features`, ET NON UN DRAPEAU DEDANS.** C'est le point
+de conception : **un rendu qui ignore `upcoming` n'affiche QUE ce qui existe**, donc le défaut
+est honnête et un nouvel écran ne peut pas promettre par accident. C'est exactement pourquoi
+`plan-limit.tsx` — la fenêtre qui sert à convaincre quelqu'un qui vient d'être refusé — n'a
+eu **aucune modification** : on ne persuade pas avec du vide. Les deux écrans qui le rendent
+sont ceux où l'on DÉCIDE d'acheter : la grille publique et `/abonnement`.
+
+⚠️ **LA DISTINCTION NE REPOSE PAS SUR LA COULEUR** (§6.2, règle 5) : coche contre **horloge**,
+et le mot **« à venir »**. Les deux survivent au noir et blanc et au daltonisme.
+
+⚠️ **PIÈGE DE CONTRASTE MESURÉ, ET ÉVITÉ DE JUSTESSE.** Le tableau du §6.2 donne `ink-3` à
+4,58:1 — **sur `paper`**. Mesuré sur les fonds réels :
+
+```
+ink-3 / surface      4,85:1   OK     -> la grille publique (carte blanche)
+ink-3 / sand         4,24:1   REFUSE
+ink-3 / brand-soft   4,30:1   REFUSE -> la carte « formule courante » de /abonnement
+ink-2 / sand         6,50:1   OK     -> le badge « à venir »
+ink-2 / brand-soft   6,59:1   OK     -> le texte sur /abonnement
+```
+
+**D'où une asymétrie VOULUE** : `pricing.module.css` emploie `ink-3`, `plan-chooser.tsx`
+emploie `ink-2`. **Harmoniser les deux vers `ink-3` produirait une infraction silencieuse.**
+Le contrôle qui tranche porte sa propre contre-épreuve : le script retrouve d'abord le 4,58:1
+documenté avant de livrer le moindre autre chiffre — une formule fausse donnerait sinon des
+chiffres faux avec aplomb (`scratchpad/contrastes.mjs`).
+
+**Coût mesuré : la landing passe de 1,81 à 1,86 ko et reste `○ /`.** 50 octets pour cesser de
+vendre trois fonctions absentes.
+
+**Vérifié à l’écran, aux deux largeurs, et de bout en bout sur `/abonnement` (15 contrôles)** :
+
+```
+grille publique   « Relances par email » a DISPARU du HTML servi
+                  3 entrees « a venir », 3 badges, 2 listes
+                  les 2 formules payantes annoncent leur cumul
+                  1440 px et 500 px : aucun debordement
+/abonnement       compte jetable -> connexion -> entreprise -> ecran reel
+                  3 mentions « a venir », les 3 bonnes entrees
+                  aucun debordement a 1440 ni a 500 px
+menage            8 entreprises, 8 comptes, 0 orpheline, 0 journal orphelin,
+                  un seul administrateur — le vrai
+```
+
+⚠️ **DEUX PIÈGES DE TEST PAYÉS ICI, DONT L'ASSERTION QUI NE PEUT PAS ÉCHOUER — ENCORE.**
+
+1. **Attendre « autre chose que `/connexion` » ne suffit pas.** La connexion renvoie d'abord
+   vers `?suite=`, donc `/dashboard`, et c'est `requireSession()` qui rebondit ensuite vers
+   `/bienvenue` faute d'entreprise. Ma boucle sortait sur l'étape intermédiaire, la suite du
+   script travaillait sur la mauvaise page. **Attendre la DESTINATION, nommée.**
+2. **Conséquence directe : deux assertions sont passées au vert sur une page sans grille** —
+   dont « l'ancien libellé a disparu », qui est évidemment vraie sur une page qui n'affiche
+   aucun tarif. C'est le §9 repayé le jour même où je le citais. **Le correctif est
+   d'affirmer d'abord `location.pathname`**, et de lever si ce n'est pas la bonne page : une
+   mesure ne vaut rien tant que la page mesurée n’est pas prouvée.
 
 #### Témoignages modifiables sans développeur — migration 0016 (1er oct. 2026)
 
@@ -179,14 +283,14 @@ Les textes vivaient en dur dans `components/marketing/testimonials.tsx` : seul u
 pouvait les changer. Ils viennent maintenant de `site_testimonials` et s'éditent depuis
 **`/admin/temoignages`**.
 
-⚠️ **LA LANDING RESTE STATIQUE À 1,81 ko, et c'est le point technique central.** Lire en base
+⚠️ **LA LANDING RESTE STATIQUE À 1,86 ko, et c'est le point technique central.** Lire en base
 aurait dû la rendre dynamique — ce qui aurait coûté le rendu serveur par visiteur sur la
 première page que voit un prospect, décision documentée plus haut. Ce n'est pas arrivé, parce
 que **ce n'est pas l'attente de données qui force le rendu à la requête, c'est `cookies()`**.
 La lecture publique passe donc par `createIsolatedClient()`, qui ne touche aucun cookie, et
 Next continue de prérendre la page.
 
-**Le contrôle qui tranche est la sortie de `npm run build` : `○ /` et 1,81 ko** — pas `ƒ /`.
+**Le contrôle qui tranche est la sortie de `npm run build` : `○ /` et 1,86 ko** — pas `ƒ /`.
 C'est la ligne à regarder après toute modification de `app/(marketing)/page.tsx` ou de sa
 coquille.
 
@@ -255,8 +359,14 @@ ajout             enregistre NON publie · absent de la landing
 publication       la base dit publie · LA SECTION REVIENT · le texte saisi est
                   REELLEMENT sur la landing · le lien d en-tete revient
 retrait           disparait de nouveau, section comprise
-menage            3 temoignages, 0 publie, 7 entreprises, 7 comptes,
+menage            3 temoignages, 7 entreprises, 7 comptes,
                   un seul administrateur — le vrai
+
+⚠️ **LA LIGNE « 0 publie » A ETE RETIREE DE CE RELEVE : elle etait FAUSSE.**
+Constate le 7 oct. 2026 — les trois temoignages d origine etaient publies depuis
+le 1er oct. a 08h26 et le sont toujours. Mon controle ne regardait que le
+temoignage ajoute par le test, pas l etat de la table. **Un decompte de menage
+doit porter sur TOUTES les lignes, pas sur celles que le test a creees.**
 ```
 
 ⚠️ **TROIS PIÈGES DE TEST PAYÉS ICI, DONT DEUX DÉJÀ CONSIGNÉS PLUS BAS.**
@@ -1244,8 +1354,41 @@ honnête sinon, annulation qui rend le bouton « Choisir ».
 
 #### ⚠️ Ce qui n'existe PAS encore — ne pas le croire
 
-- **`maxMembers` n'est pas appliqué.** Rien n'empêche une sixième personne de rejoindre une
-  entreprise. À faire avant de vendre la formule Entreprise sur cet argument.
+- ⚠️ **LE MULTI-UTILISATEUR N'EXISTE PAS DU TOUT — et ce paragraphe affirmait l'inverse.**
+  Il disait « `maxMembers` n'est pas appliqué, rien n'empêche une sixième personne de
+  rejoindre une entreprise ». **Le risque est exactement retourné : rien ne permet à une
+  DEUXIÈME personne de rejoindre une entreprise.** Constaté le 7 oct. 2026 en relisant
+  chaque accès, puis mesuré contre la base réelle :
+
+  ```
+  politiques sur company_members   company_members_select        SELECT
+                                   company_members_admin_select  SELECT
+                                   -- AUCUNE en INSERT, UPDATE ni DELETE
+  seul insert du projet entier     create_company_for_current_user (0002:139)
+                                   -> le createur, en role owner
+  base reelle                      8 entreprises · 8 appartenances
+                                   0 entreprise a plusieurs membres · maximum 1
+  ```
+
+  Il n'y a **ni invitation, ni Server Action, ni RPC, ni écran** : `company_members` est
+  écrite une seule fois dans la vie d'une entreprise, par la fonction qui la crée. Une
+  entreprise = son créateur, définitivement. `maxMembers` n'est lu **nulle part** dans le
+  dépôt — pas même pour s'afficher.
+
+  ⚠️ **ET LA GRILLE TARIFAIRE VEND POURTANT CET ARGUMENT, EN PRODUCTION.** Relevé sur le
+  HTML réellement servi par `www.xn-facture.com` : **« Jusqu'à 5 utilisateurs », 3
+  occurrences**, sur la carte Entreprise à **15 000 FCFA/mois**. C'est le contrôle mort du
+  §6.1 porté au niveau commercial — la pire variante, puisqu'on en demande le prix.
+
+  ⚠️ **Conséquence à connaître avant de toucher aux rôles :** `company_members.role` existe
+  en base et `0011` / `0013` s'en servent pour trouver le `owner` à relancer, mais aucun
+  rôle autre que `owner` n'a jamais été écrit. **Un code qui distinguerait `owner` de
+  `member` ne serait éprouvé par aucune donnée réelle.**
+
+  **Deux sorties, et c'est une décision produit, pas un correctif :** construire le
+  parcours d'invitation (migration, politiques d'écriture, écran, et ALORS le plafond),
+  ou retirer la promesse de la grille jusqu'à ce que la fonction existe. **Ne pas
+  trancher à la place de l'utilisateur.**
 - **Aucun débit automatique.** Pas d'agrégateur, pas de webhook : l'activation est manuelle.
 - ~~Aucune relance avant échéance~~ — **FAIT le 17 sept. 2026**, migration 0011. Voir
   « Relance avant échéance » ci-dessous.
@@ -2613,11 +2756,18 @@ un mot de passe de trente caractères. La personne le rallonge, se fait refuser 
 ne le lui explique. Le cas dédié est **écrit, déployé et placé AVANT le fourre-tout** ; il
 n'attend que le réglage, et ne nuit pas en attendant.
 
-⚠️ **`password_min_length` vaut 6 côté Supabase, alors que l'application exige 8** —
-`lib/actions/auth.ts:158` et `:310`, `lib/actions/account.ts:62`. Tous les formulaires passent
-donc par 8 ; le 6 n'est le plancher que pour un appel direct à `/auth/v1/signup` avec la clé
-`anon`. L'aligner sur 8 était dans le même `PATCH` que HIBP, donc refusé avec lui (`402`) : à
-reprendre **séparément**, celui-là n'a aucune raison d'être payant.
+⚠️ ~~**`password_min_length` vaut 6 côté Supabase**~~ — **IL VAUT 8, relevé le
+7 oct. 2026.** Ce paragraphe annonçait un `PATCH` à reprendre séparément de HIBP : **il n'y a
+plus rien à reprendre.** Supabase et l'application exigent tous deux 8 caractères
+(`lib/actions/auth.ts:158` et `:310`, `lib/actions/account.ts:62`), donc l'écart qui ne
+valait que pour un appel direct à `/auth/v1/signup` avec la clé `anon` a disparu.
+
+```
+GET /v1/projects/<ref>/config/auth
+  password_min_length        8
+  password_hibp_enabled      false   (toujours bloqué, 402 — plan payant)
+  security_captcha_enabled   false
+```
 
 #### Vérifié après migration, et non supposé
 

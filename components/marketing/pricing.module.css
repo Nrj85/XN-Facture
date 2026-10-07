@@ -129,6 +129,57 @@
   color: var(--brand);
 }
 
+/* --- Ce qui est annoncé mais pas encore livré ---------------------------- */
+
+.upcoming {
+  list-style: none;
+  margin: -14px 0 26px;
+  padding: 12px 0 0;
+  border-top: 1px dashed var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+}
+
+.soon {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  font-size: 14px;
+  line-height: 1.5;
+  /* ⚠️ `ink-3` et non `ink-2` : la carte a un fond `surface`, où il MESURE
+     4,85:1 — au-dessus du plancher de 4,5:1. Il y est donc conforme, et le
+     retrait visuel sert : les fonctions réelles doivent dominer la carte.
+
+     ⚠️ **NE PAS RECOPIER CE JETON SUR UN AUTRE FOND.** Mesuré le même jour :
+     `ink-3` ne donne que 4,24:1 sur `sand` et 4,30:1 sur `brand-soft` — il y
+     échoue. C’est pourquoi `plan-chooser.tsx`, dont la carte peut être en
+     `brand-soft`, emploie `ink-2`. L’asymétrie entre les deux écrans est
+     VOULUE : harmoniser vers `ink-3` produirait une infraction silencieuse. */
+  color: var(--ink-3);
+}
+
+.clock {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--ink-3);
+}
+
+.badge {
+  display: inline-block;
+  white-space: nowrap;
+  border-radius: var(--r-full);
+  background: var(--sand);
+  /* `ink-2` sur `sand` : 6,50:1, mesuré. */
+  color: var(--ink-2);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 1px 7px;
+  vertical-align: 1px;
+}
+
 .note {
   margin: 28px 0 0;
   text-align: center;

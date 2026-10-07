@@ -1,4 +1,4 @@
-import { Check } from 'lucide-react';
+import { Check, Clock } from 'lucide-react';
 import { CtaButton } from './cta-button';
 import { PLANS, planSignupHref } from '@/lib/plans';
 import { formatAmount } from '@/lib/money';
@@ -49,6 +49,25 @@ export function Pricing() {
                 </li>
               ))}
             </ul>
+
+            {/* ⚠️ **CE QUI N’EST PAS ENCORE LIVRÉ EST DIT, PAS CACHÉ — et surtout
+                pas coché.** Trois arguments étaient annoncés ici avec la même
+                coche verte que les fonctions réelles, sans aucune
+                implémentation derrière. La distinction ne repose PAS sur la
+                couleur (§6.2, règle 5) : elle tient à l’icône d’horloge et au
+                mot « à venir », qui survivent au noir et blanc. */}
+            {plan.upcoming.length > 0 && (
+              <ul className={styles.upcoming}>
+                {plan.upcoming.map((feature) => (
+                  <li key={feature} className={styles.soon}>
+                    <Clock className={styles.clock} size={16} strokeWidth={2.6} aria-hidden />
+                    <span>
+                      {feature} <span className={styles.badge}>à venir</span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
 
             <CtaButton
               href={planSignupHref(plan.code)}
