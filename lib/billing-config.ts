@@ -77,8 +77,29 @@ export function webhookSecret(): string | null {
   return secret.length >= 24 ? secret : null;
 }
 
-/** L'adresse à donner au prestataire, ou `null` si le secret n'est pas posé. */
-export function webhookUrl(origin: string): string | null {
+/**
+ * L'adresse à donner au prestataire, ou `null` si le secret n'est pas posé.
+ *
+ * ⚠️ **ELLE POINTE SUR SUPABASE, PAS SUR NOTRE DOMAINE — corrigé le
+ * 6 oct. 2026.** Elle annonçait `<site>/api/paiements/tara/<secret>` depuis la
+ * migration 0010, **et cette route n'a jamais existé** : une notification
+ * serait tombée sur un 404. Le repli silencieux vers le règlement manuel
+ * l'aurait rendue indétectable.
+ *
+ * Elle ne pouvait pas vivre là de toute façon : une notification n'a **aucune
+ * session** et doit écrire `subscriptions`, qui n'a aucune politique
+ * d'écriture. Il faut `service_role`, et « Déploiement » interdit de le poser
+ * sur Vercel. Le traitement est donc une **Edge Function Supabase**
+ * (`supabase/functions/tara-webhook/`), qui détient la clé dans son propre
+ * environnement.
+ *
+ * ⚠️ **Le paramètre `origin` n'est plus utilisé** : il est conservé pour ne pas
+ * toucher l'appelant, et parce que l'origine publique reste la bonne source
+ * pour `returnUrl`, qui, lui, ramène bien chez nous.
+ */
+export function webhookUrl(_origin: string): string | null {
   const secret = webhookSecret();
-  return secret ? `${origin.replace(/\/+$/, '')}/api/paiements/tara/${secret}` : null;
+  const supabase = clean(process.env.NEXT_PUBLIC_SUPABASE_URL);
+  if (!secret || !supabase) return null;
+  return `${supabase.replace(/\/+$/, '')}/functions/v1/tara-webhook?s=${encodeURIComponent(secret)}`;
 }

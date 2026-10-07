@@ -1470,6 +1470,44 @@ est une **Edge Function Supabase**, qui détient `service_role` dans son propre 
 → `[]`, aucune fonction n'existe). Il faut donc **`edge_functions_write` sur le jeton**, ou un
 `supabase functions deploy` par le titulaire du compte.
 
+**La fonction est ÉCRITE — `supabase/functions/tara-webhook/index.ts` — mais NON DÉPLOYÉE**,
+donc **jamais exécutée, jamais éprouvée**. À lire comme une proposition, pas comme du code
+vérifié.
+
+⚠️ **`webhookUrl()` POINTE DÉSORMAIS SUR SUPABASE**, plus sur notre domaine :
+`<projet>.supabase.co/functions/v1/tara-webhook?s=<secret>`. Le paramètre `origin` est conservé
+mais inutilisé — `returnUrl`, lui, ramène toujours chez nous.
+
+⚠️ **`verify_jwt` DOIT ÊTRE DÉSACTIVÉ AU DÉPLOIEMENT**, et c'est le piège principal :
+
+```bash
+supabase functions deploy tara-webhook --no-verify-jwt
+```
+
+Par défaut Supabase exige un JWT sur une Edge Function. Tara n'en a aucun : **toutes les
+notifications seraient refusées en 401 sans que rien ne le signale chez nous** — la formule
+resterait fermée après un paiement encaissé.
+
+⚠️ **`supabase/functions` est EXCLU de `tsconfig.json`.** Le fichier tourne sur **Deno**, avec
+des globales qui n'existent pas dans l'application ; sans cette exclusion, `**/*.ts` le ferait
+échouer à la compilation de Next.
+
+⚠️ **LE DÉCODEUR EST DUPLIQUÉ, et c'est subi.** Deno ne peut pas importer
+`lib/payments/tara-webhook.ts`. **Toute correction à l'un doit être reportée à l'autre** — la
+version Next est celle qui porte les 28 contrôles.
+
+⚠️ **L'ORDRE DES ÉCRITURES N'EST PAS INDIFFÉRENT.** Le paiement est journalisé **avant**
+l'activation : si l'insertion est refusée par `unique (provider, provider_reference)`, le
+message a déjà été traité et on s'arrête. L'ordre inverse prolongerait l'abonnement une fois
+par renvoi — et Tara autorise les renvois manuels.
+
+⚠️ **L'échéance est prolongée depuis L'ÉCHÉANCE EN COURS, pas depuis aujourd'hui.** Renouveler
+une semaine avant le terme ferait sinon perdre cette semaine : on paierait pour se faire retirer
+du temps.
+
+⚠️ **On répond 200 à Tara même sur refus.** Ils ne retentent jamais : un 4xx ne provoquerait
+aucun renvoi, il perdrait seulement l'événement. Le motif reste dans le journal de la fonction.
+
 ⚠️ **L'idempotence tient sur `unique (provider, provider_reference)`**, dans
 `subscription_payments` — pas dans le code applicatif. Un webhook est rejoué.
 
