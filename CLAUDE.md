@@ -1437,10 +1437,38 @@ comportement normal de PostgREST, et non une suppression réussie. Pour trancher
 
 #### Le mur qui vient : le webhook
 
-Un webhook de paiement n'a **pas de session** et doit pourtant écrire. Or `service_role` ne
-doit pas aller sur Vercel (voir « Déploiement »). La sortie est une **Edge Function Supabase**,
-qui détient la clé dans son propre environnement. Elle vérifiera la signature du prestataire,
-puis écrira `subscriptions.plan` et `expires_at`.
+⚠️ **LA ROUTE DU WEBHOOK N'EXISTE PAS — constaté le 6 oct. 2026.** `webhookUrl()`
+(`lib/billing-config.ts`) annonce `/api/paiements/tara/<secret>` à Tara depuis la migration
+0010, et **`app/api/paiements/` n'a jamais été créé** : une notification serait tombée sur un
+404. Avec le domaine faux corrigé le même jour, cela fait **deux** maillons morts sur la même
+chaîne, chacun masqué par le repli silencieux vers le mobile money manuel.
+
+**Décodage et vérification sont écrits et éprouvés** — `lib/payments/tara-webhook.ts` :
+
+- `lireNotification()` absorbe les **trois** formes de charge (28 contrôles contre les exemples
+  réels de la documentation) ;
+- `verifierPaiement()` interroge `POST /transactions/status`. **Vérifié en direct contre l'API
+  réelle** : sans clé comme avec une clé bidon, elle rend `{ok:false, reason:'refus-ERROR'}` —
+  un refus n'est jamais pris pour un succès.
+
+⚠️ **LE PIÈGE DE LA FORME C.** La charge Mobile Money ne porte **ni `productId` ni `amount`**,
+or `productId` EST notre référence de commande. Sur ce canal — le plus courant au Cameroun —
+**la notification seule ne permet de rapprocher aucune commande**. Le décodeur rend donc `null`
+plutôt qu'un `0` ou une chaîne vide, pour que l'appelant soit obligé d'en tenir compte.
+
+⚠️ **La déduplication se fait sur `paymentId`, pas sur `productId`** — c'est le seul champ
+présent dans les trois formes. `subscription_payments` porte déjà
+`unique (provider, provider_reference)`.
+
+⚠️ **CE QUI MANQUE EST L'ÉCRITURE, et c'est un choix d'architecture, pas du code.** Un webhook
+n'a pas de session, et `subscriptions` n'a **aucune politique d'écriture**. La sortie documentée
+est une **Edge Function Supabase**, qui détient `service_role` dans son propre environnement —
+`service_role` ne doit pas aller sur Vercel (voir « Déploiement »).
+
+⚠️ **Le jeton de gestion ne peut PAS la déployer** : mesuré le 6 oct. 2026, la création répond
+`403 Missing required permission(s): edge_functions_write`. La lecture passe (`GET /functions`
+→ `[]`, aucune fonction n'existe). Il faut donc **`edge_functions_write` sur le jeton**, ou un
+`supabase functions deploy` par le titulaire du compte.
 
 ⚠️ **L'idempotence tient sur `unique (provider, provider_reference)`**, dans
 `subscription_payments` — pas dans le code applicatif. Un webhook est rejoué.
