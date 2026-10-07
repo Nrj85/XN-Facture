@@ -24,25 +24,39 @@
  *      `subscription_payments`. Tara ne garantit aucune unicité et ne rejoue
  *      rien automatiquement : un même message peut arriver deux fois.
  *
- * ⚠️⚠️ **NE PAS DÉPLOYER EN L’ÉTAT — FAILLE CONNUE, 7 oct. 2026.** Cette
- * fonction active la formule dès que `/transactions/status` répond
- * `SUCCESS`, **sans jamais comparer le MONTANT encaissé au prix de la
- * formule**. Or il est mesuré que **l’API Tara ne valide pas la clé** : elle
- * vérifie seulement qu’elle est non vide, et le `businessId` est le seul
- * verrou réel. N’importe qui le connaissant peut donc créer un lien de
- * paiement portant NOTRE référence de commande, au prix qu’il veut :
+ * ⚠️ **L’API TARA NE VALIDE PAS LA CLÉ — mesuré le 7 oct. 2026.** Elle
+ * vérifie seulement que `apiKey` est NON VIDE ; le `businessId` est le seul
+ * verrou réel. **C’est donc LUI le secret**, et il se pose en « Sensitive »
+ * au même titre que la clé.
  *
- *     1. commander Entreprise (15 000 FCFA), noter la reference
- *     2. creer un lien Tara : productId = cette reference, prix 100 FCFA
- *     3. regler 100 FCFA
- *     4. -> /transactions/status dit SUCCESS -> Entreprise est activee
+ * ⚠️ **CORRECTION D’UNE ALERTE SURÉVALUÉE, le même jour.** Ce commentaire a
+ * d’abord annoncé une faille exploitable : créer un lien à 100 FCFA portant
+ * notre référence de commande, le régler, et voir Entreprise s’activer.
+ * **Ce chemin ne fonctionne pas**, et la raison tient en une ligne de la
+ * documentation : **`webHookUrl` est fourni à l’INITIATION du paiement,
+ * transaction par transaction.** Le lien d’un tiers porte donc SON adresse de
+ * notification, pas la nôtre : nous ne sommes jamais prévenus, et rien ne
+ * s’active. Atteindre cette fonction exige le secret de 43 caractères de
+ * l’URL, que personne d’autre n’a.
  *
- * **Correctif obligatoire avant tout déploiement** : exiger un montant
- * vérifié supérieur ou égal au prix de la formule, et REFUSER l’activation
- * sinon. La charge Mobile Money ne portant aucun `amount`, la règle sûre est
- * « pas de montant vérifié, pas d’activation » — on journalise pour
- * traitement manuel. Mieux vaut un abonnement activé à la main qu’un
- * abonnement offert.
+ * **Ce qui reste vrai, et que les deux gardes ci-dessous traitent :**
+ *
+ *   - le montant n’était comparé à RIEN. Nos propres liens sont tarifés par
+ *     `priceFor()` côté serveur, donc cohérents — mais une activation qui ne
+ *     regarde pas ce qui a été encaissé n’a aucun filet le jour où le secret
+ *     fuite, où Tara change de comportement, ou sur un règlement partiel ;
+ *   - **le STATUT de la commande n’était pas regardé** : le lien d’une
+ *     commande ANNULÉE reste payable, et sa notification activait la formule.
+ *     Celui-là était un vrai défaut, sans aucune condition préalable.
+ *
+ * ⚠️ **`/transactions/status` NE REND AUCUN MONTANT** — vérifié dans la
+ * référence de l’API : `{ productId, status, message }`, rien d’autre. Le seul
+ * montant disponible est celui de la notification, et **la charge Mobile Money
+ * n’en porte aucun**. D’où la règle retenue : un montant présent et INFÉRIEUR
+ * au prix fait REFUSER ; un montant absent laisse passer, parce que la
+ * notification est arrivée sur notre URL secrète, donc sur un lien que NOUS
+ * avons tarifé. Refuser le canal Mobile Money — le plus courant au Cameroun —
+ * rendrait l’activation automatique inutile là où elle sert le plus.
  *
  * ⚠️ **DÉPLOIEMENT — `verify_jwt` DOIT ÊTRE DÉSACTIVÉ.** Par défaut Supabase
  * exige un JWT sur une Edge Function : Tara n'en a aucun, et toutes les
@@ -57,6 +71,31 @@
  */
 
 const TARA_BASE = 'https://www.dklo.co/api/tara';
+
+/**
+ * Prix attendus — ⚠️ **DUPLICATION SUBIE DE `lib/plans.ts`, comme le
+ * décodeur.** Deno ne peut pas importer le module de l’application, et
+ * `subscription_orders` ne porte **aucun montant** : délibérément, puisque
+ * `start_subscription_order()` est appelable par tout client authentifié et
+ * qu'un montant en paramètre permettrait de se commander Pro à 1 FCFA.
+ *
+ * ⚠️ **TOUT CHANGEMENT DE TARIF DOIT ÊTRE REPORTÉ ICI.** La source reste
+ * `lib/plans.ts` ; cette table n’est qu’un garde-fou. Si elle diverge vers le
+ * BAS, on accepte un paiement insuffisant ; vers le HAUT, on refuse un
+ * paiement légitime — et le second cas se voit (le client se plaint), pas le
+ * premier.
+ */
+const PRIX: Record<string, { monthly: number; yearly: number }> = {
+  pro: { monthly: 5000, yearly: 50000 },
+  business: { monthly: 15000, yearly: 150000 },
+};
+
+/** Le prix attendu, ou `null` pour une formule sans tarif connu. */
+function prixAttendu(plan: string, periode: string): number | null {
+  const tarif = PRIX[plan];
+  if (!tarif) return null;
+  return periode === 'yearly' ? tarif.yearly : tarif.monthly;
+}
 
 const env = (nom: string): string => (globalThis as never as { Deno: { env: { get(k: string): string | undefined } } }).Deno.env.get(nom) ?? '';
 
@@ -241,6 +280,36 @@ export default async function handler(requete: Request): Promise<Response> {
   if (!commande) {
     console.warn(`tara-webhook : aucune commande pour ${note.productId}`);
     return ok('commande-introuvable');
+  }
+
+  // --- La commande doit être EN ATTENTE --------------------------------------
+  // ⚠️ Le lien de paiement d’une commande ANNULÉE reste payable chez Tara :
+  // rien, de leur côté, ne le désactive. Sans ce contrôle, régler un vieux lien
+  // activait la formule de la commande abandonnée. Une commande déjà « paid »
+  // est écartée ici aussi — le doublon serait de toute façon arrêté par
+  // l’unicité ci-dessous, mais autant le dire au bon endroit.
+  if (commande.status !== 'pending') {
+    console.warn(
+      `tara-webhook : commande ${note.productId} en etat ${commande.status} — ignoree`,
+    );
+    return ok(`commande-${commande.status}`);
+  }
+
+  // --- Le montant encaissé ---------------------------------------------------
+  // ⚠️ **ON NE REFUSE QUE CE QU’ON PEUT PROUVER INSUFFISANT.** La charge Mobile
+  // Money ne porte aucun `amount`, et `/transactions/status` n’en rend aucun :
+  // exiger un montant vérifié fermerait le canal le plus courant au Cameroun.
+  // Un montant ABSENT passe donc — la notification est arrivée sur notre URL
+  // secrète, donc sur un lien que nous avons nous-mêmes tarifé. Un montant
+  // PRÉSENT et inférieur au prix est en revanche un désaccord qu’on ne doit pas
+  // avaler en silence.
+  const montantAttendu = prixAttendu(commande.plan, commande.period);
+  if (montantAttendu !== null && note.amount !== null && note.amount < montantAttendu) {
+    console.error(
+      `tara-webhook : ${note.productId} encaisse ${note.amount} pour ${commande.plan}/${commande.period}` +
+        ` qui vaut ${montantAttendu} — ACTIVATION REFUSEE, a traiter a la main`,
+    );
+    return ok('montant-insuffisant');
   }
 
   // --- Garde 3 : l'idempotence, portée par la BASE ---------------------------

@@ -1246,9 +1246,18 @@ d'échec (`injoignable`, `http-404`, `refus-…`) doit être journalisé, sans q
 saura jamais que l'appel ne part nulle part.
 
 ⚠️ **Ces trois corrections viennent de la skill `tara-api-developer`** (installée le
-6 oct. 2026), pas d'une documentation retrouvée. ⚠️ **Son dossier `reference/` n'a PAS été
-synchronisé** : seul `SKILL.md` est présent, donc les schémas détaillés des webhooks et des
-endpoints restent indisponibles.
+6 oct. 2026), pas d'une documentation retrouvée.
+
+⚠️ **SON DOSSIER `reference/` N'EST TOUJOURS PAS SYNCHRONISÉ** — revérifié le 7 oct. 2026 :
+le dossier installé ne contient que `SKILL.md`. **Les quatre fichiers existent pourtant dans
+l'archive d'origine** (`https://taramoney.com/skills/skills.zip`), et c'est la SYNCHRONISATION
+qui les perd, pas le paquet. Je m'étais trompé en accusant le paquet.
+
+**Ils sont versionnés dans `docs/tara-api/`** — le bloc-notes est propre à une session et les
+aurait perdus. Ce sont eux qui ont permis,
+le 7 oct., de découvrir que `/transactions/status` ne rend aucun montant et que `webHookUrl`
+est porté par la transaction — deux faits qui ont changé la conception de l'Edge Function et
+**corrigé une alerte que j'avais surévaluée**. **Les relire avant de toucher à Tara.**
 
 `POST https://www.dklo.co/api/tara/paymentlinks` rend **six liens** pour un même règlement :
 général, carte, WhatsApp, SMS, Telegram, Dikalo. Au Cameroun cette variété compte autant que le
@@ -1361,27 +1370,61 @@ seul verrou réel est le `businessId`.
 en **Sensitive** sur Vercel au même titre que la clé, et ne jamais être traité comme un
 identifiant public, bien que Tara l'affiche en clair dans son tableau de bord.
 
-⚠️ **CONSÉQUENCE 2 — L'EDGE FUNCTION, TELLE QU'ÉCRITE, EST EXPLOITABLE. NE PAS LA DÉPLOYER EN
-L'ÉTAT.** Elle active la formule dès que `/transactions/status` répond `SUCCESS`, **sans
-jamais comparer le MONTANT**. L'attaque ne demande aucun compte volé :
+⚠️ **CONSÉQUENCE 2 — `TARA_BUSINESS_ID` DOIT ÊTRE TRAITÉ COMME UN SECRET**, en « Sensitive »
+sur Vercel au même titre que la clé. Quiconque le connaît peut créer des liens de paiement
+sur le compte marchand.
+
+##### ⚠️ J'AI SURÉVALUÉ LA SUITE, ET JE REVIENS DESSUS — même jour, quelques heures après
+
+**Ce paragraphe annonçait une faille exploitable** : commander Entreprise, créer soi-même un
+lien Tara à 100 FCFA portant notre référence de commande, le régler, et voir la formule
+s'activer. **Ce chemin ne fonctionne pas**, et la raison tient en une ligne de
+`reference/webhooks.md` que je n’avais pas encore lue :
+
+> Tara envoie un `POST` sur le `webHookUrl` que tu fournis **au moment de l’initiation du
+> paiement** (chaque endpoint d’encaissement prend ce champ).
+
+**L'adresse de notification est portée par la TRANSACTION, pas par le compte.** Le lien d'un
+tiers porte donc SON `webHookUrl` : nous ne sommes jamais prévenus, et rien ne s'active.
+Atteindre la fonction exige le secret de 43 caractères de l'URL, que personne d'autre n'a.
+
+⚠️ **J'avais écrit « EXPLOITABLE, NE PAS DÉPLOYER » dans CLAUDE.md, dans le message du commit
+`8cc7f1d` et en tête de la fonction, sans avoir vérifié par où la notification arrive.**
+C'est l'erreur symétrique de l'assertion qui ne peut pas échouer du §9 : **une alarme qu'on
+ne peut pas déclencher ne vaut pas mieux qu'un contrôle qui ne peut pas échouer.** Les deux
+viennent de ne pas avoir cherché ce qui rendrait l’affirmation fausse.
+
+##### Ce qui restait VRAI, et que la fonction traite désormais
+
+⚠️ **LE STATUT DE LA COMMANDE N'ÉTAIT PAS REGARDÉ — vrai défaut, sans aucune condition
+préalable.** Le lien de paiement d'une commande **annulée** reste payable chez Tara : rien,
+de leur côté, ne le désactive. Régler un vieux lien activait donc la formule d'une commande
+abandonnée. La fonction exige maintenant `status = 'pending'`.
+
+**Le montant n'était comparé à rien.** Nos propres liens sont tarifés par `priceFor()` côté
+serveur, donc cohérents — mais une activation qui ne regarde pas ce qui a été encaissé n'a
+aucun filet le jour où le secret fuite, où Tara change de comportement, ou sur un règlement
+partiel. C’est de la défense en profondeur, pas un correctif de faille.
+
+⚠️ **`/transactions/status` NE REND AUCUN MONTANT** — lu dans `reference/endpoints.md` :
+`{ productId, status, message }`, rien d'autre. Le seul montant disponible est celui de la
+notification, et **la charge Mobile Money n'en porte aucun**. D'où la règle retenue :
 
 ```
-1. commander Entreprise (15 000 FCFA) et noter sa reference XN-BUS-xxxxxx
-2. creer soi-meme un lien Tara avec productId = cette reference, prix 100 FCFA
-   (le businessId suffit : la cle n est pas verifiee)
-3. regler 100 FCFA
-4. /transactions/status repond SUCCESS -> la fonction active Entreprise
+montant PRESENT et inferieur au prix   -> REFUS, journalise en error
+montant ABSENT (Mobile Money)          -> on passe
 ```
 
-**Le correctif obligatoire est de comparer le montant encaissé à `priceFor(plan, period)` et
-de REFUSER l'activation en dessous.** Et comme la charge Mobile Money ne porte **aucun**
-`amount`, la règle sûre est : **pas de montant vérifié, pas d'activation** — on journalise
-pour traitement manuel. Mieux vaut un abonnement activé à la main qu'un abonnement offert.
+Refuser le canal Mobile Money — le plus courant au Cameroun — rendrait l'activation
+automatique inutile là où elle sert le plus. Et un montant absent reste acceptable : la
+notification est arrivée sur notre URL secrète, donc sur un lien que NOUS avons tarifé.
 
-⚠️ **CELA ENTRE EN TENSION AVEC « le prix vit dans `lib/plans.ts`, source unique ».** Deno ne
-peut pas importer ce module, et `subscription_orders` ne porte aucun montant — délibérément,
-puisqu'un montant en paramètre de `start_subscription_order()` permettrait de se commander
-Pro à 1 FCFA. **Décision à prendre avec l'utilisateur**, non tranchée.
+⚠️ **LA TABLE DES PRIX EST DUPLIQUÉE CÔTÉ DENO**, comme le décodeur, et pour la même raison :
+Deno ne peut pas importer `lib/plans.ts`, et `subscription_orders` ne porte aucun montant —
+délibérément, puisqu'un montant en paramètre de `start_subscription_order()` permettrait de
+se commander Pro à 1 FCFA. **Tout changement de tarif doit être reporté dans la fonction.**
+Une divergence vers le BAS accepte un paiement insuffisant ; vers le HAUT elle refuse un
+paiement légitime — **et seul le second cas se voit**, parce que le client se plaint.
 
 ⚠️ **DEUX LIENS DE PAIEMENT RÉELS ONT ÉTÉ CRÉÉS PENDANT CE CONTRÔLE**, à 100 FCFA, libellés
 « Contrôle technique » : `1678061799` (par la clé bidon) et `1767949921`
@@ -1726,6 +1769,22 @@ resterait fermée après un paiement encaissé.
 ⚠️ **`supabase/functions` est EXCLU de `tsconfig.json`.** Le fichier tourne sur **Deno**, avec
 des globales qui n'existent pas dans l'application ; sans cette exclusion, `**/*.ts` le ferait
 échouer à la compilation de Next.
+
+⚠️ **CONSÉQUENCE : `npx tsc --noEmit` NE VOIT PAS CE FICHIER**, et la chaîne de vérification
+habituelle le laisse donc passer quoi qu'il contienne. **Le contrôler à part**, ce qui a
+attrapé un vrai bug le 7 oct. 2026 :
+
+```bash
+npx tsc --noEmit --skipLibCheck --target es2022 --module esnext \
+  --moduleResolution bundler --lib es2022,dom \
+  supabase/functions/tara-webhook/index.ts
+```
+
+**Ce qu'il a trouvé :** ma garde sur le montant déclarait `const attendu`, **nom déjà pris
+dans le handler par le secret du webhook**. La comparaison portait donc sur une chaîne
+(`TS2365: Operator '<' cannot be applied to types 'number' and 'string'`). Déployée telle
+quelle, elle aurait refusé ou accepté au hasard. **À rejouer après toute modification de
+cette fonction** — c'est le seul filet qu'elle ait.
 
 ⚠️ **LE DÉCODEUR EST DUPLIQUÉ, et c'est subi.** Deno ne peut pas importer
 `lib/payments/tara-webhook.ts`. **Toute correction à l'un doit être reportée à l'autre** — la
