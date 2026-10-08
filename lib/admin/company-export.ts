@@ -7,7 +7,8 @@ import { siteOrigin } from '@/lib/site-origin';
  * ⚠️ **Lecture transversale, mais SANS `service_role`.** Comme tout l'espace
  * d'administration, cette lecture passe par le client ordinaire, porteur de la
  * session. C'est la base qui décide, grâce aux politiques `*_admin_select` de
- * la migration 0004 et à la clause `where` de la vue `admin_actors`. Un compte
+ * la migration 0004 et à la clause `where` de la FONCTION `admin_actors()` —
+ * une vue jusqu'au 8 oct. 2026, remplacée par 0019 et 0020. Un compte
  * non administrateur qui atteindrait cette route n'obtiendrait qu'un fichier
  * vide — jamais celui des autres.
  *
@@ -44,6 +45,28 @@ export interface CompanyExport {
   rows: CompanyExportRow[];
   /** Titulaires ayant refusé la prospection, donc absents de `rows`. */
   excluded: number;
+  /**
+   * ⚠️ **RENSEIGNÉ QUAND UNE LECTURE A ÉCHOUÉ — L'EXPORT DOIT ALORS ÊTRE
+   * REFUSÉ, pas livré amputé.** C'est le défaut le plus coûteux de ce fichier
+   * jusqu'au 8 oct. 2026 : aucune des huit lectures ne regardait son `error`,
+   * et chaque échec se traduisait par un **200 avec un fichier d'apparence
+   * normale**. Le détail de ce que chacune emporte en tombant :
+   *
+   * - `admin_actors()` → **« Email du titulaire » vide sur TOUTES les lignes**,
+   *   c'est-à-dire la seule colonne exploitable d'un fichier de prospection ;
+   * - `marketing_recipients()` → **aucun lien de désabonnement**, et
+   *   **les désabonnés redeviennent démarchables** : le refus enregistré ne
+   *   s'applique plus, puisque `prefs` est vide. Ce n'est plus un défaut
+   *   d'affichage, c'est le mécanisme légal qui cesse de fonctionner ;
+   * - `company_members` → plus de titulaire, donc ni email ni jeton : les deux
+   *   effets ci-dessus en même temps ;
+   * - les comptages → des chiffres faux dans un fichier qui sert à cibler.
+   *
+   * **Un fichier partiel est pire qu'une absence de fichier** : celui qui le
+   * télécharge n'a aucun moyen de voir ce qui manque, et il part en campagne
+   * avec. D'où le tout-ou-rien.
+   */
+  failure: string | null;
 }
 
 const LIBELLES_FORMULE: Record<string, string> = {
@@ -93,9 +116,34 @@ function tally(rows: { company_id: string }[] | null): Map<string, number> {
 export async function getCompanyExport(): Promise<CompanyExport> {
   const supabase = createClient();
 
+  /** Note l'échec d'une lecture, et le laisse dans le journal du serveur. */
+  const echecs: string[] = [];
+  const verifier = (nom: string, erreur: { code?: string; message: string } | null) => {
+    if (!erreur) return;
+    // Le motif ne doit pas sortir vers le client — il arriverait en anglais,
+    // avec son SQLSTATE. Il n'est utile qu'ici.
+    console.error(`[export] ${nom} : ${erreur.code ?? ''} ${erreur.message}`);
+    echecs.push(nom);
+  };
+
+  /** L'export est tout-ou-rien : voir `CompanyExport.failure`. */
+  const refus = (): CompanyExport => ({
+    rows: [],
+    excluded: 0,
+    failure: `Lectures en échec : ${echecs.join(', ')}.`,
+  });
+
   // Crée les lignes manquantes et rend le jeton de chacun. Réservée aux
   // administrateurs : la garde est DANS la fonction, qui est `security definer`.
-  const { data: preferences } = await supabase.rpc('marketing_recipients');
+  //
+  // ⚠️ **CONTRÔLÉE AVANT TOUT LE RESTE, parce que c'est elle qui porte le
+  // désabonnement.** Sans elle, personne n'est exclu et aucun lien n'est
+  // produit : on sort immédiatement plutôt que de composer un fichier qu'on
+  // jettera.
+  const { data: preferences, error: errPrefs } = await supabase.rpc('marketing_recipients');
+  verifier('préférences d’envoi', errPrefs);
+  if (echecs.length > 0) return refus();
+
   const prefs = new Map(
     ((preferences ?? []) as { user_id: string; token: string; marketing: boolean }[]).map((p) => [
       p.user_id,
@@ -118,6 +166,18 @@ export async function getCompanyExport(): Promise<CompanyExport> {
     supabase.from('invoices').select('company_id'),
     supabase.from('quotes').select('company_id'),
   ]);
+
+  // ⚠️ **LES SEPT SONT CONTRÔLÉES, PAS SEULEMENT `admin_actors`.** Les noms
+  // sont ceux que l'exploitant lira dans le journal du serveur ; aucun ne sort
+  // vers le navigateur.
+  verifier('entreprises', companies.error);
+  verifier('appartenances', members.error);
+  verifier('comptes (admin_actors)', actors.error);
+  verifier('abonnements', subscriptions.error);
+  verifier('clients', clients.error);
+  verifier('factures', invoices.error);
+  verifier('devis', quotes.error);
+  if (echecs.length > 0) return refus();
 
   const parCompte = new Map(
     ((actors.data ?? []) as Array<Record<string, unknown>>).map((a) => [
@@ -180,7 +240,7 @@ export async function getCompanyExport(): Promise<CompanyExport> {
     }];
   });
 
-  return { rows, excluded };
+  return { rows, excluded, failure: null };
 }
 
 const COLONNES: { titre: string; lire: (r: CompanyExportRow) => string | number }[] = [

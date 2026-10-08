@@ -25,6 +25,12 @@ export default async function AdminPage() {
 
   // Les quatre lectures sont indépendantes : les lancer en parallèle évite
   // d'additionner quatre allers-retours vers Dublin.
+  //
+  // ⚠️ **ET AUCUNE NE LÈVE, c'est pourquoi `accounts` et `activity` portent
+  // désormais leur propre échec** (`AdminRead`). Une exception ici emporterait
+  // les trois autres lectures par le `Promise.all`, donc la liste des
+  // entreprises et le journal, qui n'ont rien. Chaque carte dit ce qu'elle n'a
+  // pas pu lire — et surtout, elle ne dit plus « 0 » quand elle ne sait pas.
   const [overview, accounts, activity, desabonnes] = await Promise.all([
     getAdminOverview(),
     getAdminAccounts(),

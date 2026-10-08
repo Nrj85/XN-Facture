@@ -56,6 +56,49 @@ export interface AdminActivityRow {
   details: Record<string, unknown> | null;
 }
 
+export interface AdminAccountRow {
+  id: string;
+  email: string;
+  /**
+   * ⚠️ **PEUT ÊTRE ABSENTE, et ce n'est pas une précaution théorique.**
+   * `auth.users.created_at` est `is_nullable = YES` — mesuré sur le projet, et
+   * non déduit. Un `createdAt.localeCompare()` sur `null` lève une `TypeError`
+   * qui, dans un composant serveur, emporte **toute** la page `/admin`. Aucune
+   * des 8 lignes actuelles n'est dans ce cas : le défaut est **latent, pas
+   * constaté** — mais il ne coûte rien de le rendre impossible.
+   */
+  createdAt: string | null;
+  lastSignInAt: string | null;
+  confirmed: boolean;
+}
+
+/**
+ * Résultat d'une lecture de l'espace administrateur.
+ *
+ * ⚠️ **UN `rows` VIDE ET UN `failure` SONT DEUX CHOSES DIFFÉRENTES, et c'est
+ * tout l'objet de ce type.** Jusqu'au 8 oct. 2026 ces lectures ignoraient leur
+ * `error` : une RPC en échec rend `data = null`, donc un tableau vide, donc un
+ * écran qui annonçait « 0 compte » **sans la moindre alerte**. Un décompte faux
+ * est pire qu'une absence de décompte — celui qui le lit en tire des
+ * conclusions. Pour que l'écran puisse dire « je n'ai pas pu lire », il faut
+ * d'abord qu'il le sache.
+ *
+ * ⚠️ **On ne LÈVE pas, et c'est délibéré.** `/admin` fait quatre lectures
+ * indépendantes en `Promise.all` : une exception emporterait les trois autres,
+ * donc la liste des entreprises et le journal, qui n'ont rien. Chaque carte
+ * porte son propre échec.
+ */
+export interface AdminRead<T> {
+  rows: T[];
+  /** Phrase française si la LECTURE a échoué. `null` quand tout va bien. */
+  failure: string | null;
+}
+
+/** Une chaîne non vide, ou `null`. Les cinq colonnes de la RPC sont nullables. */
+function texte(valeur: unknown): string | null {
+  return typeof valeur === 'string' && valeur !== '' ? valeur : null;
+}
+
 /**
  * Garde de l'espace administrateur.
  *
@@ -211,15 +254,28 @@ export async function getAdminOverview(): Promise<{
   };
 }
 
-/** Comptes du projet, avec leur dernière connexion. */
-export async function getAdminAccounts(): Promise<
-  { id: string; email: string; createdAt: string; lastSignInAt: string | null; confirmed: boolean }[]
-> {
+/**
+ * Comptes du projet, avec leur dernière connexion.
+ *
+ * ⚠️ **L'ÉCHEC EST RAPPORTÉ, PLUS AVALÉ.** `tsc` ne peut rien ici : le client
+ * Supabase n'est pas typé (§4), donc `.rpc('nom_inexistant')` compile. Le seul
+ * filet est de regarder `error` — sans quoi une RPC révoquée, renommée ou
+ * absente produit un écran qui affiche sereinement « 0 compte ».
+ */
+export async function getAdminAccounts(): Promise<AdminRead<AdminAccountRow>> {
   const supabase = createClient();
   // ⚠️ **`admin_actors` EST UNE FONCTION, PLUS UNE VUE** (migration 0019).
   // Elle rend les cinq colonnes d'un bloc : une signature `returns table`
   // est fixe, on ne choisit pas un sous-ensemble.
-  const { data } = await supabase.rpc('admin_actors');
+  const { data, error } = await supabase.rpc('admin_actors');
+
+  if (error) {
+    // Le journal du serveur est le seul endroit où le MOTIF survit : l'écran
+    // n'en dira rien à l'administrateur, et il ne doit rien en dire — un
+    // message de Postgres y arriverait en anglais, avec son SQLSTATE.
+    console.error('[admin] lecture des comptes impossible :', error.code, error.message);
+    return { rows: [], failure: 'La liste des comptes n’a pas pu être lue.' };
+  }
 
   const lignes = (data ?? []) as Array<Record<string, unknown>>;
 
@@ -227,15 +283,21 @@ export async function getAdminAccounts(): Promise<
   // d'ordonner le résultat d'une fonction, mais la vue le faisait en SQL et
   // je ne veux pas que le classement de cet écran dépende de ce détail de
   // comportement : neuf lignes se trient en mémoire pour rien du tout.
-  return lignes
+  //
+  // ⚠️ **ET IL DOIT SURVIVRE À UNE DATE ABSENTE.** `created_at` est nullable
+  // (voir `AdminAccountRow`) : le repli sur `''` range les comptes sans date
+  // en FIN de liste, là où `null` faisait lever le comparateur.
+  const rows = lignes
     .map((row) => ({
-      id: row.id as string,
-      email: (row.email as string) ?? '',
-      createdAt: row.created_at as string,
-      lastSignInAt: (row.last_sign_in_at as string) ?? null,
+      id: texte(row.id) ?? '',
+      email: texte(row.email) ?? '',
+      createdAt: texte(row.created_at),
+      lastSignInAt: texte(row.last_sign_in_at),
       confirmed: Boolean(row.email_confirme),
     }))
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    .sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''));
+
+  return { rows, failure: null };
 }
 
 /**
@@ -246,7 +308,7 @@ export async function getAdminAccounts(): Promise<
  * délibéré, pour que l'historique survive à la suppression de ce qu'il
  * journalise — et PostgREST ne sait pas joindre sans relation déclarée.
  */
-export async function getAdminActivity(limit = 60): Promise<AdminActivityRow[]> {
+export async function getAdminActivity(limit = 60): Promise<AdminRead<AdminActivityRow>> {
   const supabase = createClient();
 
   const [journal, companies, comptes] = await Promise.all([
@@ -260,15 +322,36 @@ export async function getAdminActivity(limit = 60): Promise<AdminActivityRow[]> 
     supabase.rpc('admin_actors'),
   ]);
 
+  // ⚠️ **SEUL L'ÉCHEC DU JOURNAL LUI-MÊME EST UN ÉCHEC D'ÉCRAN.** Sans ses
+  // lignes, la carte annoncerait « Journal vide » — une affirmation, et fausse.
+  if (journal.error) {
+    console.error('[admin] lecture du journal impossible :', journal.error.code, journal.error.message);
+    return { rows: [], failure: 'Le journal d’activité n’a pas pu être lu.' };
+  }
+
+  // ⚠️ **LES DEUX AUTRES NE FONT QUE RÉSOUDRE DES NOMS : elles se dégradent,
+  // elles ne mentent pas.** Une ligne sans nom d'entreprise ni email d'acteur
+  // reste vraie sur ce qu'elle rapporte — l'entité, l'action, l'instant — et
+  // l'écran affiche déjà « entreprise supprimée » pour les lignes orphelines.
+  // Échouer ici priverait l'exploitant d'un journal entièrement lisible.
+  // **Mais le motif part au journal du serveur** : un repli muet masque la
+  // panne qu'il amortit, c'est la leçon payée sur Tara le 6 oct.
+  if (companies.error) {
+    console.error('[admin] noms d’entreprise non résolus :', companies.error.message);
+  }
+  if (comptes.error) {
+    console.error('[admin] emails d’acteur non résolus :', comptes.error.code, comptes.error.message);
+  }
+
   const nomEntreprise = new Map((companies.data ?? []).map((c) => [c.id, c.name]));
   const emailActeur = new Map(
     ((comptes.data ?? []) as Array<Record<string, unknown>>).map((u) => [
-      u.id as string,
-      (u.email as string) ?? '',
+      texte(u.id) ?? '',
+      texte(u.email) ?? '',
     ]),
   );
 
-  return (journal.data ?? []).map((row) => ({
+  const rows = (journal.data ?? []).map((row) => ({
     id: row.id as number,
     occurredAt: row.occurred_at as string,
     companyId: (row.company_id as string) ?? null,
@@ -278,6 +361,8 @@ export async function getAdminActivity(limit = 60): Promise<AdminActivityRow[]> 
     action: row.action as string,
     details: (row.details as Record<string, unknown> | null) ?? null,
   }));
+
+  return { rows, failure: null };
 }
 
 /**

@@ -18,8 +18,9 @@ export const dynamic = 'force-dynamic';
  *
  * ⚠️ **Le contrôle est DOUBLÉ.** `isPlatformAdmin()` écarte l'appelant ici,
  * mais même si cette garde sautait, la lecture passe par le client porteur de
- * la session : les politiques `*_admin_select` et la clause `where` de la vue
- * `admin_actors` ne rendraient rien. Le pire cas est un fichier vide.
+ * la session : les politiques `*_admin_select` et la clause `where` de la
+ * FONCTION `admin_actors()` — une vue jusqu'au 8 oct. 2026 — ne rendraient
+ * rien. Le pire cas est un fichier vide.
  */
 export async function GET() {
   const supabase = createClient();
@@ -32,7 +33,27 @@ export async function GET() {
     return NextResponse.json({ error: 'Cet export est réservé aux administrateurs.' }, { status: 403 });
   }
 
-  const { rows, excluded } = await getCompanyExport();
+  const { rows, excluded, failure } = await getCompanyExport();
+
+  // ⚠️ **UNE LECTURE EN ÉCHEC REFUSE L'EXPORT, elle ne le rend pas amputé.**
+  // Avant le 8 oct. 2026, un échec de `admin_actors()` produisait un **200**
+  // avec un fichier complet d'apparence et la colonne « Email du titulaire »
+  // vide partout ; un échec de `marketing_recipients()` rendait un fichier
+  // sans aucun lien de désabonnement, **les désabonnés compris**. Dans les
+  // deux cas l'administrateur téléchargeait, ne voyait rien d'anormal, et
+  // partait en campagne avec. Un fichier qu'on ne peut pas savoir faux est
+  // pire qu'un refus.
+  //
+  // **503 et non 500** : rien n'est cassé chez nous, une lecture n'a pas
+  // abouti. Le motif technique est déjà dans le journal du serveur — il ne
+  // sort pas ici, il arriverait en anglais avec son SQLSTATE.
+  if (failure) {
+    return NextResponse.json(
+      { error: 'L’export n’a pas pu être composé en entier. Réessayez dans un instant.' },
+      { status: 503 },
+    );
+  }
+
   if (rows.length === 0) {
     return NextResponse.json(
       {

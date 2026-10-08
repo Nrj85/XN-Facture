@@ -8,6 +8,7 @@ import {
   MessageSquareQuote,
   Receipt,
   ShieldCheck,
+  TriangleAlert,
   UserRound,
   Users,
   Wallet,
@@ -19,8 +20,10 @@ import { StatCard } from '@/components/dashboard/stat-card';
 import { ExportCompaniesButton } from '@/components/admin/export-companies-button';
 import { formatAmount, formatMoney } from '@/lib/money';
 import type {
+  AdminAccountRow,
   AdminActivityRow,
   AdminCompanyRow,
+  AdminRead,
   AdminSummary,
 } from '@/lib/db/admin-queries';
 
@@ -121,8 +124,14 @@ export function AdminView({
 }: {
   summary: AdminSummary;
   companies: AdminCompanyRow[];
-  accounts: { id: string; email: string; createdAt: string; lastSignInAt: string | null; confirmed: boolean }[];
-  activity: AdminActivityRow[];
+  /**
+   * ⚠️ **CES DEUX-LÀ PORTENT LEUR ÉCHEC DE LECTURE, et c'est pour cela qu'ils
+   * ne sont pas de simples tableaux.** Un tableau vide est ambigu : il dit « il
+   * n'y en a pas » et « je n'ai pas pu lire » avec la même forme. L'écran
+   * annonçait donc « 0 compte » sur une RPC en échec, sans aucune alerte.
+   */
+  accounts: AdminRead<AdminAccountRow>;
+  activity: AdminRead<AdminActivityRow>;
   /** Titulaires ayant refusé la prospection : ils sont retirés de l’export. */
   optedOut: number;
   adminEmail: string;
@@ -306,13 +315,32 @@ export function AdminView({
         <CardHeader>
           <div>
             <CardTitle>Comptes</CardTitle>
+            {/*
+              ⚠️ **AUCUN DÉCOMPTE QUAND LA LECTURE A ÉCHOUÉ.** « 0 compte » est
+              une affirmation, et elle serait fausse : la base en a huit. Le
+              reste de l'écran est intact, seule cette carte ne sait rien.
+            */}
             <p className="mt-0.5 text-[12.5px] text-ink-3">
-              {accounts.length} compte{accounts.length > 1 ? 's' : ''}, du plus récent au plus
-              ancien
+              {accounts.failure
+                ? 'Lecture indisponible'
+                : `${accounts.rows.length} compte${accounts.rows.length > 1 ? 's' : ''}, du plus récent au plus ancien`}
             </p>
           </div>
         </CardHeader>
 
+        {accounts.failure ? (
+          <EmptyState
+            icon={TriangleAlert}
+            title={accounts.failure}
+            description="Ce n’est pas une liste vide : la base n’a pas répondu. Rechargez la page — si cela persiste, le motif exact est dans le journal du serveur."
+          />
+        ) : accounts.rows.length === 0 ? (
+          <EmptyState
+            icon={UserRound}
+            title="Aucun compte"
+            description="Personne ne s’est encore inscrit sur la plateforme."
+          />
+        ) : (
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-[13.5px]">
             <caption className="sr-only">Comptes du projet</caption>
@@ -325,7 +353,7 @@ export function AdminView({
               </tr>
             </thead>
             <tbody>
-              {accounts.map((a) => (
+              {accounts.rows.map((a) => (
                 <tr key={a.id} className="border-b border-line last:border-0 hover:bg-paper">
                   <td className="px-5 py-3.5">
                     <span className="flex items-center gap-2">
@@ -333,8 +361,16 @@ export function AdminView({
                       <span className="font-medium text-ink">{a.email}</span>
                     </span>
                   </td>
+                  {/*
+                    ⚠️ **`jour()` NE SUPPORTE PAS UNE DATE ABSENTE, et il ne
+                    doit pas avoir à le faire.** `auth.users.created_at` est
+                    nullable (mesuré) : `new Date(null)` donne « 01/01/1970 »,
+                    et une chaîne vide fait LEVER `Intl.DateTimeFormat` en
+                    `RangeError: Invalid time value` — ce qui, dans cette page,
+                    emporte tout l'écran. Le repli est donc ici, à l'affichage.
+                  */}
                   <td className="tabular whitespace-nowrap px-5 py-3.5 text-ink-2">
-                    {jour(a.createdAt)}
+                    {a.createdAt ? jour(a.createdAt) : '—'}
                   </td>
                   <td className="tabular whitespace-nowrap px-5 py-3.5 text-ink-2">
                     {a.lastSignInAt ? instant(a.lastSignInAt) : 'Jamais'}
@@ -353,6 +389,7 @@ export function AdminView({
             </tbody>
           </table>
         </div>
+        )}
       </Card>
 
       {/* --- Journal --- */}
@@ -367,7 +404,19 @@ export function AdminView({
           </div>
         </CardHeader>
 
-        {activity.length === 0 ? (
+        {/*
+          ⚠️ **« Journal vide » EST UNE AFFIRMATION : elle ne doit pas servir de
+          repli à une lecture ratée.** C'est précisément la phrase qu'affichait
+          l'écran quand la requête échouait — on en concluait qu'il ne s'était
+          rien passé, alors que rien n'avait été lu.
+        */}
+        {activity.failure ? (
+          <EmptyState
+            icon={TriangleAlert}
+            title={activity.failure}
+            description="Ce n’est pas un journal vide : la base n’a pas répondu. Rechargez la page — si cela persiste, le motif exact est dans le journal du serveur."
+          />
+        ) : activity.rows.length === 0 ? (
           <EmptyState
             icon={Users}
             title="Journal vide"
@@ -375,7 +424,7 @@ export function AdminView({
           />
         ) : (
           <ul className="divide-y divide-line">
-            {activity.map((row) => (
+            {activity.rows.map((row) => (
               <li key={row.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-5 py-3">
                 <span className="tabular shrink-0 text-[11.5px] text-ink-3">
                   {instant(row.occurredAt)}

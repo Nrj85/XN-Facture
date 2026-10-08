@@ -809,9 +809,10 @@ Il faut **Database → Read-write** à la création ; le reste peut rester en le
 jeton révoqué.
 
 ⚠️ **CE PROJET N'A AUCUN REGISTRE DE MIGRATIONS** — `supabase_migrations.schema_migrations`
-n'existe pas, les **dix-sept** migrations ont toutes été appliquées en SQL direct. Ne pas créer
-ce registre à l'occasion d'une migration : il n'inscrirait que celle-là et laisserait croire
-que les seize autres n'ont jamais été jouées.
+n'existe pas : **les dix-neuf migrations appliquées l'ont toutes été en SQL direct** (0017 est
+la seule du dossier à ne pas être appliquée ; il y a vingt fichiers au 8 oct. 2026). Ne pas
+créer ce registre à l'occasion d'une migration : il n'inscrirait que celle-là et laisserait
+croire que les dix-huit autres n'ont jamais été jouées.
 
 Retour client : *« beaucoup d'entreprises ont leur propre papier à en-tête »*. Deux situations
 réelles, un seul mécanisme : **le document s'efface pour ne pas imprimer par-dessus ce que le
@@ -1778,7 +1779,7 @@ réglage survit à qui déploie et depuis où. La documentation Supabase le dit 
 deployments. »
 
 ⚠️ **CE `config.toml` EST VOLONTAIREMENT MINIMAL, et NE DOIT PAS être régénéré par
-`supabase init`.** Ce projet n'utilise pas la CLI pour sa base : les dix-huit migrations ont
+`supabase init`.** Ce projet n'utilise pas la CLI pour sa base : les dix-neuf migrations ont
 été appliquées en SQL direct et `supabase_migrations.schema_migrations` n'existe pas. Un
 fichier complet déclarerait une pile locale que personne ne fait tourner, et inviterait à des
 commandes `supabase db` qui se compareraient à un registre inexistant.
@@ -1870,6 +1871,124 @@ client, une facture et trois lignes ; il ne voit pas la liste des administrateur
 écritures croisées touchent zéro ligne ; l'écriture dans le journal et l'auto-promotion sont
 refusées en 403.
 
+#### Une lecture ratée ne dit plus « 0 » — 8 oct. 2026
+
+⚠️ **LES TROIS LECTURES DE L'ESPACE ADMIN IGNORAIENT LEUR `error`**, et c'est le contrôle mort
+du §6.1 sous sa forme la plus traître : non pas un bouton qui ne fait rien, mais **un chiffre
+faux présenté comme un constat.** Trouvé par les deux revues de code du même jour, puis mesuré
+avec le vrai client contre le vrai projet :
+
+```
+anon sur admin_actors          error 42501    data null   -> (data ?? []) = []
+fonction au nom inexistant     error PGRST202 data null   -> (data ?? []) = []
+contre-epreuve, appel autorise error null                 -> la branche ne mord pas a tort
+```
+
+**Ce que chaque échec produisait, sans la moindre alerte :** l'écran `/admin` annonçait
+« 0 compte » au-dessus d’un tableau vide ; le journal affichait « Journal vide » ; et **la
+route d'export rendait un 200 avec un CSV d'apparence normale dont la colonne « Email du
+titulaire » était vide partout** — la seule exploitable dans un fichier de prospection.
+
+⚠️ **`tsc` NE POUVAIT RIEN**, et c’est la raison pour laquelle le défaut a vécu : le client
+Supabase n'est pas typé (§4), donc `.rpc('nom_inexistant')` compile. Une RPC révoquée, renommée
+ou non déployée se lisait comme une base vide.
+
+##### `AdminRead<T>` : un tableau vide et un échec ne sont plus la même chose
+
+⚠️ **C’EST TOUT L’OBJET DU TYPE.** Un `T[]` dit « il n’y en a pas » et « je n’ai pas pu lire »
+avec la même forme, donc l’écran ne pouvait pas les distinguer. `{ rows, failure }` le lui
+permet : quand `failure` est renseigné, la carte affiche le motif **et ne porte plus aucun
+décompte** — « Lecture indisponible » remplace « 0 compte ».
+
+⚠️ **ON NE LÈVE PAS, et c’est délibéré.** `/admin` fait quatre lectures indépendantes en
+`Promise.all` : une exception emporterait les trois autres, donc la liste des entreprises et
+le journal, qui n’ont rien. **Chaque carte porte son propre échec.**
+
+⚠️ **LE MOTIF TECHNIQUE NE SORT JAMAIS VERS L’ÉCRAN** — il arriverait en anglais, avec son
+SQLSTATE. Il part au journal du serveur (`console.error`), et l’écran dit une phrase française
+qui désigne la panne. Même discipline que `translateAuthError`.
+
+⚠️ **LES DEUX LECTURES SECONDAIRES DU JOURNAL SE DÉGRADENT, elles n’échouent pas.**
+`companies` et `admin_actors` n’y servent qu’à résoudre des noms : une ligne sans nom
+d'entreprise ni email d'acteur reste vraie sur ce qu'elle rapporte, et l'écran affiche déjà
+« entreprise supprimée » pour les orphelines. Les faire échouer priverait l’exploitant d’un
+journal entièrement lisible. **Mais le motif est journalisé** : un repli muet masque la panne
+qu'il amortit — la leçon payée sur Tara le 6 oct. Seul l'échec du journal LUI-MÊME est un
+échec d’écran, parce que « Journal vide » est une affirmation.
+
+##### L’export est TOUT-OU-RIEN, et répond 503
+
+⚠️ **UN FICHIER PARTIEL EST PIRE QU’UNE ABSENCE DE FICHIER** : celui qui le télécharge n’a
+aucun moyen de voir ce qui manque, et il part en campagne avec. Les **huit** lectures de
+`getCompanyExport()` sont donc contrôlées, pas seulement `admin_actors` :
+
+| Lecture en échec | Ce que le fichier devenait |
+|---|---|
+| `admin_actors()` | « Email du titulaire » vide sur toutes les lignes — la seule colonne exploitable |
+| `marketing_recipients()` | **aucun lien de désabonnement, et les désabonnés redevenus démarchables** : `prefs` vide, donc plus personne n’est exclu |
+| `company_members` | plus de titulaire : ni email ni jeton, les deux effets ci-dessus à la fois |
+| comptages (`clients`, `invoices`, `quotes`) | des chiffres faux dans un fichier qui sert à cibler |
+
+⚠️ **LA SECONDE LIGNE N’EST PAS UN DÉFAUT D’AFFICHAGE : c’est le mécanisme légal qui cesse de
+fonctionner.** Le désabonnement de 0012 existe précisément pour qu'une campagne offre une
+issue ; un fichier qui le perd en silence le réduit à un décor. `marketing_recipients()` est
+donc contrôlée **avant tout le reste**, et on sort immédiatement.
+
+⚠️ **503 ET NON 500** : rien n’est cassé chez nous, une lecture n’a pas abouti. Et **en JSON** —
+la règle du projet pour `/api/` : refuser, jamais rediriger. `usePdfDownload` lit déjà ce
+corps et affiche la phrase.
+
+##### `auth.users.created_at` EST NULLABLE — mesuré, pas supposé
+
+```
+information_schema : created_at, last_sign_in_at, email, email_confirmed_at
+                     ->  tous is_nullable = YES
+les 8 lignes reelles : 0 sans date, 0 sans email
+                     ->  defaut LATENT, pas constate
+```
+
+⚠️ **ET IL AURAIT EMPORTÉ TOUTE LA PAGE.** `b.createdAt.localeCompare(a.createdAt)` sur `null`
+lève une `TypeError` dans un composant serveur. Pire, le repli « évident » vers `''` ne sauve
+rien : le `jour()` de l'écran fait `Intl.DateTimeFormat().format(new Date(iso))`, qui rend
+**« 01/01/1970 » sur `null`** et **lève `RangeError: Invalid time value` sur une chaîne vide**.
+Le type porte donc `string | null`, le tri range les sans-date en fin de liste, et la cellule
+imprime `—`.
+
+**Vérifié en rendant le VRAI composant avec de vraies props, 19 contrôles — sans base ni
+navigateur, puisque ce qu’il fallait prouver est une fonction des props** :
+
+```
+cas normal     les 3 adresses · « 3 comptes » · 01/10/2026 · la date ABSENTE -> —
+               aucun bandeau · le journal affiche sa ligne
+lecture ratee  bandeau affiche · « ce n est pas une liste vide » · PLUS AUCUN
+               « 0 compte » · « Lecture indisponible » · aucun titre « Journal
+               vide » · LE RESTE DE L ECRAN SURVIT (entreprise, 2 516 175)
+vraiment vide  « Aucun compte » et « Journal vide » redeviennent legitimes
+la paire       « 0 compte » AFFICHE quand c est vrai, ABSENT quand c est rate
+contre-epreuve les trois rendus sont distincts deux a deux
+menage         8 comptes, 8 entreprises, 0 orpheline, 0 journal orphelin,
+               un seul administrateur — le vrai
+```
+
+⚠️ **PIÈGE DE TEST PAYÉ ICI, ET C’EST LE §9 SOUS UN NOUVEAU VISAGE : mon assertion attrapait MA
+PROPRE PHRASE D’EXPLICATION.** « Plus aucun Journal vide » cherchait la sous-chaîne, et la
+trouvait dans le texte du bandeau — « Ce n’est pas un **journal vide** : la base n’a pas
+répondu ». Le test annonçait un défaut sur un rendu parfaitement correct. **Viser le TITRE**
+(`>Journal vide<`, qu'`EmptyState` rend dans un `<p>`), pas la chaîne n'importe où. Corollaire :
+**ne jamais mettre dans le TEXTE DU PRODUIT un mot que les assertions cherchent à exclure** —
+la règle du §3 ne vaut pas que pour les données de test.
+
+⚠️ **ET MON TÉMOIN NÉGATIF A ÉCHOUÉ POUR UNE MAUVAISE RAISON.** Il appelait
+`set_marketing_preference` avec `p_marketing`, alors que le paramètre est **`p_accept`**
+(0012:51) : il recevait donc un `PGRST202`, c’est-à-dire un `error` renseigné — exactement ce
+que le témoin devait réfuter. **Lire le code de l’erreur avant de conclure**, sinon un appel
+mal écrit passe pour un comportement du produit.
+
+⚠️ **CE QUI N’A PAS ÉTÉ EXÉCUTÉ, et doit être dit** : le parcours `/admin` en production avec
+un administrateur réel, et la route d’export rendant son 503. Les deux branches sont prouvées
+au niveau du composant et de la prémisse (`error` renseigné), **pas de bout en bout**. Le
+contrôle qui trancherait est de regarder `/admin` avec un administrateur réel — §9.
+
 #### L'aller-retour entre l'espace admin et son entreprise (25 sept. 2026)
 
 ⚠️ **LE RETOUR N'EXISTAIT PAS SUR TÉLÉPHONE.** Le lien « Mon entreprise » de l'en-tête
@@ -1914,6 +2033,11 @@ prospection. Route `GET /api/admin/entreprises/export`, composition dans
 
 ⚠️ **C'est une LECTURE — l'espace reste en lecture seule.** Le bouton n'écrit rien, et la base
 ne le lui permettrait pas.
+
+⚠️ **ET DEPUIS LE 8 oct. 2026, UNE LECTURE RATÉE REFUSE L'EXPORT (503 JSON) au lieu de le
+livrer amputé** — voir « Une lecture ratée ne dit plus « 0 » » plus haut. C'est le point le
+plus lourd de cette route : un échec de `marketing_recipients()` produisait un fichier **sans
+aucun lien de désabonnement et incluant les désabonnés**.
 
 ⚠️ **La route REFUSE, elle ne redirige jamais** (401 sans session, 403 sans droit
 d'administrateur, en JSON). Une redirection 307 serait suivie par `fetch`, et le navigateur
