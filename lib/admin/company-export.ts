@@ -111,7 +111,8 @@ export async function getCompanyExport(): Promise<CompanyExport> {
       .select('id,name,legal_name,email,phone,city,country,created_at')
       .order('created_at', { ascending: false }),
     supabase.from('company_members').select('company_id,user_id,role'),
-    supabase.from('admin_actors').select('id,email,last_sign_in_at'),
+    // Fonction depuis 0019 — voir `supabase/migrations/0019_admin_actors_fonction.sql`.
+    supabase.rpc('admin_actors'),
     supabase.from('subscriptions').select('company_id,plan,expires_at'),
     supabase.from('clients').select('company_id'),
     supabase.from('invoices').select('company_id'),
@@ -119,7 +120,7 @@ export async function getCompanyExport(): Promise<CompanyExport> {
   ]);
 
   const parCompte = new Map(
-    (actors.data ?? []).map((a) => [
+    ((actors.data ?? []) as Array<Record<string, unknown>>).map((a) => [
       a.id as string,
       { email: (a.email as string) ?? '', lastSignIn: (a.last_sign_in_at as string) ?? null },
     ]),

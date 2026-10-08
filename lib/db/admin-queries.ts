@@ -216,18 +216,26 @@ export async function getAdminAccounts(): Promise<
   { id: string; email: string; createdAt: string; lastSignInAt: string | null; confirmed: boolean }[]
 > {
   const supabase = createClient();
-  const { data } = await supabase
-    .from('admin_actors')
-    .select('id,email,created_at,last_sign_in_at,email_confirme')
-    .order('created_at', { ascending: false });
+  // ⚠️ **`admin_actors` EST UNE FONCTION, PLUS UNE VUE** (migration 0019).
+  // Elle rend les cinq colonnes d'un bloc : une signature `returns table`
+  // est fixe, on ne choisit pas un sous-ensemble.
+  const { data } = await supabase.rpc('admin_actors');
 
-  return (data ?? []).map((row) => ({
-    id: row.id as string,
-    email: (row.email as string) ?? '',
-    createdAt: row.created_at as string,
-    lastSignInAt: (row.last_sign_in_at as string) ?? null,
-    confirmed: Boolean(row.email_confirme),
-  }));
+  const lignes = (data ?? []) as Array<Record<string, unknown>>;
+
+  // ⚠️ **LE TRI EST FAIT ICI, et non par `.order()`.** PostgREST accepte
+  // d'ordonner le résultat d'une fonction, mais la vue le faisait en SQL et
+  // je ne veux pas que le classement de cet écran dépende de ce détail de
+  // comportement : neuf lignes se trient en mémoire pour rien du tout.
+  return lignes
+    .map((row) => ({
+      id: row.id as string,
+      email: (row.email as string) ?? '',
+      createdAt: row.created_at as string,
+      lastSignInAt: (row.last_sign_in_at as string) ?? null,
+      confirmed: Boolean(row.email_confirme),
+    }))
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
 /**
@@ -248,12 +256,16 @@ export async function getAdminActivity(limit = 60): Promise<AdminActivityRow[]> 
       .order('occurred_at', { ascending: false })
       .limit(limit),
     supabase.from('companies').select('id,name'),
-    supabase.from('admin_actors').select('id,email'),
+    // Fonction depuis 0019 : `.rpc()` et non `.from()`.
+    supabase.rpc('admin_actors'),
   ]);
 
   const nomEntreprise = new Map((companies.data ?? []).map((c) => [c.id, c.name]));
   const emailActeur = new Map(
-    (comptes.data ?? []).map((u) => [u.id as string, (u.email as string) ?? '']),
+    ((comptes.data ?? []) as Array<Record<string, unknown>>).map((u) => [
+      u.id as string,
+      (u.email as string) ?? '',
+    ]),
   );
 
   return (journal.data ?? []).map((row) => ({
