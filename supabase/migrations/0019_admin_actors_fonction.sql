@@ -26,6 +26,14 @@
 -- refermé par des `revoke` ; **une future migration pourrait les rouvrir sans
 -- bruit**. Avec une fonction, le chemin n'existe plus du tout.
 
+-- ⚠️ **TRANSACTION OBLIGATOIRE, et 0005 en avait une que j'avais perdue.**
+-- Sans elle, le `create or replace` valide tout seul : si la session tombe ou
+-- si l'un des `revoke` échoue, la fonction reste en place **avec le droit
+-- d'exécution que Supabase accorde par défaut à `anon`**. La garde `where`
+-- renverrait toujours zéro ligne, donc rien ne se verrait — exactement le
+-- genre de régression silencieuse que 0015 a mis des semaines à révéler.
+begin;
+
 create or replace function public.admin_actors()
 returns table (
   id uuid,
@@ -75,6 +83,8 @@ revoke all on function public.admin_actors() from anon;
 -- ensuite s'ils voient quelque chose. Le refus vient donc de la couche de
 -- DROITS pour un visiteur anonyme, et du corps pour un client ordinaire.
 grant execute on function public.admin_actors() to authenticated;
+
+commit;
 
 -- ⚠️ **LE CONTRÔLE QUI TRANCHE N'EST PAS LA LECTURE DE CE FICHIER**, mais
 -- l'ACL brute — une entrée sans rôle à gauche désigne PUBLIC :

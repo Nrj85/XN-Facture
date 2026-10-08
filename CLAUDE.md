@@ -3058,6 +3058,87 @@ avec la vue, que la connexion ne touche pas. Vérifié aussitôt : `/auth/v1/tok
 200, aucune limite de débit. C'était une Server Action froide. **Lire à QUELLE étape un test
 échoue avant d'incriminer le changement qu'on vient de faire.**
 
+#### Revue de sécurité du 8 oct. 2026 — trois défauts dans mon travail de la veille
+
+Les trois portaient sur des **fichiers**, pas sur la base : l'état appliqué était correct
+(ACL mesurée). Ce qui était faux, c'est la **procédure écrite** — donc ce que quelqu'un
+referait en la suivant.
+
+⚠️ **1. MA MARCHE ARRIÈRE REMETTAIT LA FAILLE QUE 0018 AVAIT FERMÉE.** Le bloc « si jamais »
+de 0020 recopiait :
+
+```sql
+revoke all on public.admin_actors from public, anon;   -- 0020 ET 0005, ligne 37
+```
+
+**Mot pour mot les lignes 37-38 de 0005** — celles qui ont laissé la vue modifiable pendant
+des semaines. 0018 a eu besoin de **TROIS** révocations, et `authenticated` est **la seule
+qui comptait** : révoquer `public` et `anon` ne lui retire rien, puisqu'il détient un droit
+nominatif. Pire, mon avertissement disait « NE PAS LA RECRÉER SANS LES DEUX `revoke` » — il
+**validait** la forme cassée. Corrigé : trois révocations, la décisive signalée.
+
+⚠️ **2. 0020 POUVAIT S'APPLIQUER AVANT 0019.** L'en-tête disait « à n'appliquer qu'une fois
+0019 en ligne », et rien ne l'empêchait. Appliquée seule, elle retire la seule source de
+données de `/admin` — et comme les appels ne regardent pas leur erreur, l'écran afficherait
+« 0 compte » **sans la moindre alerte**. **Une consigne qu'on peut ignorer sans conséquence
+visible n'est pas une protection** : elle est devenue un bloc `do $ … raise exception $`.
+
+**Éprouvée AVEC sa contre-épreuve**, sans quoi elle ne prouverait rien :
+
+```
+0020 rejouee, la fonction presente   HTTP 201 — passe
+meme garde, nom INEXISTANT           P0001 « garde declenchee » — elle MORD
+```
+
+⚠️ **3. 0019 N'ÉTAIT PAS TRANSACTIONNELLE, alors que 0005 l'était.** Sans `begin;`/`commit;`,
+le `create or replace` valide seul : si la session tombe ou si un `revoke` échoue, la fonction
+reste en place **avec l'`execute` que Supabase accorde par défaut à `anon`**. La garde `where`
+renverrait toujours zéro ligne, donc **rien ne se verrait**. Corrigé.
+
+⚠️ **ET MA NOTE SUR 0005 CASSAIT LE REJEU** — le contrôle obligatoire du §9. Elle disait « ne
+pas le rejouer tel quel » ; or 0018 fait `revoke all on public.admin_actors` **sans
+`if exists`**, et `revoke` n’en accepte pas. Mesuré :
+
+```
+revoke all on public.admin_actors from public;
+  ERROR  42P01: relation "public.admin_actors" does not exist
+```
+
+Sauter 0005 arrêtait donc le rejeu avant 0019 et 0020. **Le rejouer est sans danger** : 0020
+supprime la vue à la fin.
+
+##### `npm audit` : 3 avis en production, AUCUN applicable — et le dire compte plus que le chiffre
+
+CLAUDE.md annonçait « found 0 vulnerabilities » depuis le 26 sept. C'était vrai ce jour-là ;
+de nouveaux avis ont paru depuis. Relevé le 8 oct. : **3 en production** (2 hautes,
+1 modérée), 12 avec les dépendances de développement. Comme le 26 sept., le compte ne suffit
+pas — il faut regarder si le chemin existe **ici** :
+
+| Avis | Origine | Applicable ? |
+|---|---|---|
+| `next` 15.0.0–15.5.26, empoisonnement de cache SSG/ISR (modéré) | dépendance directe | **NON, pour deux raisons indépendantes.** L'avis dit : « This vulnerability specifically affects self-hosted Next.js applications. The issue does not affect applications deployed on Vercel's managed platform. » Et il exige « a root-level catch-all page » — **le projet n'en a aucune** (vérifié : aucun `[...]` ni `[[...]]` sous `app/`). Corrigé en 15.5.27 |
+| `sharp` <0.35.5, CVE librsvg (haute) | transitive, via `next` | **NON.** `sharp` n'est tiré que par l'optimiseur d'images, et le projet n'utilise **ni `next/image` ni `next/script`** — vérifié par `grep`, zéro occurrence. Même raisonnement qu'au 26 sept. |
+| `source-map-js` 1.0.0–1.2.1, déni de service (haute) | transitive, via `postcss` | **NON.** `postcss` est un outil de **build** : rien de tout cela ne tourne en production |
+
+⚠️ **CELA NE VEUT PAS DIRE QU'IL NE FAUT RIEN FAIRE.** Les trois correctifs sont
+**non cassants** (`fixAvailable: true`, aucune version majeure), et la leçon du 26 sept. vaut
+toujours : « rester en 14 n'était pas un choix conservateur, c'était un choix de ne plus être
+corrigé ». **Mais une montée de `next`, même de `.26` à `.27`, oblige à rejouer le contrôle
+de la trace pdfkit (30 fichiers sur les deux routes PDF) et le parcours complet EN
+PRODUCTION** — c'est la règle du §3. À faire comme une tâche à part entière, pas en passant.
+
+##### Ce que la revue a aussi contrôlé, et qui est sain
+
+```
+secrets en dur            aucun (motifs sk- / re_ / eyJ / service_role)
+.env* versionnes          seul .env.example, vide par construction
+dangerouslySetInnerHTML   AUCUN — seulement 2 mentions en COMMENTAIRE, qui
+  et innerHTML            expliquent pourquoi il n y en a pas. Le raisonnement
+                          de la CSP (§3) tient toujours
+ACL de admin_actors()     {postgres, authenticated, service_role} — aucune
+                          entree nue, donc PUBLIC n a rien
+```
+
 #### `pg_net` — SSRF latent, pas atteignable
 
 `net.http_post`, `http_get`, `http_delete` et `http_collect_response` étaient exécutables par
@@ -3420,8 +3501,10 @@ supabase/
   migrations/0004_admin.sql     platform_admins, is_platform_admin, journal, déclencheurs
   migrations/0005_admin_actors.sql  Vue des comptes, réservée aux administrateurs
                                 ⚠️ **LA VUE N’EXISTE PLUS** — remplacée par une
-                                fonction en 0019/0020. Ce fichier reste pour
-                                l'historique ; ne pas le rejouer tel quel
+                                fonction en 0019/0020. **Le fichier se REJOUE
+                                quand même** : 0018 révoque sur cette vue sans
+                                `if exists`, donc le sauter fait échouer le
+                                rejeu en `42P01`. 0020 la supprime à la fin
   migrations/0006_abonnements.sql   subscriptions + subscription_payments, request_plan
   migrations/0007_quota_factures.sql invoices_quota — plafond Découverte, par déclencheur
   migrations/0008_quota_hint.sql    hint = 'plan-limit' : refus reconnaissable par le code
