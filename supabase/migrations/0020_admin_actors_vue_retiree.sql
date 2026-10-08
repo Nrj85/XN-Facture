@@ -1,0 +1,34 @@
+-- 0020 — la vue `admin_actors` est retirée. Étape 2 sur 2.
+--
+-- ⚠️ **À N'APPLIQUER QU'UNE FOIS LE CODE DE 0019 EN LIGNE.** L'application lit
+-- désormais `rpc('admin_actors')` (commit 86f5750), mais tant que le
+-- déploiement Vercel n'est pas terminé, la version servie appelle encore
+-- `from('admin_actors')` : retirer la vue avant casserait `/admin` dans
+-- l'intervalle.
+--
+-- **Marche arrière, si jamais :** recréer la vue telle qu'elle était suffit,
+-- l'ancienne et la nouvelle lecture peuvent coexister.
+--
+--   create view public.admin_actors as
+--     select id, email, created_at, last_sign_in_at,
+--            email_confirmed_at is not null as email_confirme
+--     from auth.users u
+--     where public.is_platform_admin();
+--   revoke all on public.admin_actors from public, anon;
+--   grant select on public.admin_actors to authenticated;
+--
+-- ⚠️ **NE PAS LA RECRÉER SANS LES DEUX `revoke`** — c'est exactement le défaut
+-- de 0018 : Supabase pose `alter default privileges … grant all on tables to
+-- anon, authenticated`, donc toute vue créée ici naît MODIFIABLE, et une vue à
+-- un seul `from` propage `delete` jusqu'à `auth.users`.
+--
+-- **Ce que ce retrait obtient :**
+--
+--   1. les deux avis CRITICAL de Supabase disparaissent — `auth_users_exposed`
+--      et `security_definer_view` ne détectent que les vues et vues
+--      matérialisées ;
+--   2. et surtout, **le chemin d'écriture n'existe plus du tout.** 0018 l'avait
+--      refermé par des `revoke` ; une migration future pouvait les rouvrir sans
+--      bruit. Une fonction n'est pas auto-modifiable : il n'y a plus rien à
+--      refermer.
+drop view if exists public.admin_actors;

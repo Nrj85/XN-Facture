@@ -2905,8 +2905,8 @@ migration.** Le fichier disait vrai sur son intention et faux sur son effet pend
 
 | Avis restant | Pourquoi il reste |
 |---|---|
-| `auth_users_exposed` (ERROR) | ⚠️ **CE N'ÉTAIT PAS UN FAUX POSITIF — corrigé par 0018 le 7 oct. 2026.** Voir ci-dessous |
-| `security_definer_view` (ERROR) | Faux positif, et il doit le rester : passer la vue en `security_invoker` la casserait (voir 0018) |
+| ~~`auth_users_exposed`~~ (ERROR) | **DISPARU le 8 oct. 2026** — `admin_actors` n'est plus une vue mais une fonction (0019 + 0020) |
+| ~~`security_definer_view`~~ (ERROR) | **DISPARU le 8 oct. 2026**, pour la même raison : le linter ne détecte que les vues |
 | `set_marketing_preference` ouverte à `anon` | **Voulu, et à ne pas « corriger ».** Le désabonnement se clique depuis une boîte mail, sans session ; son autorisation vient du jeton d'URL (0012). La fermer supprimerait la page pour tout le monde |
 | `rls_auto_enable` ouverte à `anon` | Fonction de Supabase, pas la nôtre. Elle rend `event_trigger` : PostgREST ne l'expose pas |
 | 13 fonctions ouvertes à `authenticated` | C'est le produit. Un membre connecté DOIT pouvoir créer son entreprise, numéroter ses factures, commander une formule. Chacune porte sa garde interne |
@@ -2969,6 +2969,94 @@ menage  8 comptes, 8 entreprises, un seul administrateur — le vrai
 s'exécutait APRÈS le `delete` réussi, donc sur une ligne déjà supprimée : « 0 ligne modifiée »
 était vrai pour la mauvaise raison. **Un contrôle qui suit une opération destructrice doit
 être rejoué sur une cible vivante**, sinon il mesure l'absence, pas la protection.
+
+#### `admin_actors` devient une FONCTION — migrations 0019 + 0020 (8 oct. 2026)
+
+⚠️ **IL N'Y A PLUS AUCUN AVIS `ERROR` SUR CE PROJET.** Mesuré avant et après :
+
+```
+AVANT   total 19   ERROR 2   WARN 17
+APRES   total 18   ERROR 0   WARN 18
+```
+
+⚠️ **UN WARN DE PLUS, ET C'EST NORMAL** :
+`authenticated_security_definer_function_executable` passe de 13 à 14 — la nouvelle fonction
+en est une. C'est la catégorie déjà décrite plus haut comme « c'est le produit ».
+
+**Pourquoi 0018 ne suffisait pas.** Elle a fermé l'ÉCRITURE ; le linter ne la regarde pas.
+Sa définition ne vise que la forme :
+
+> Detects if `auth.users` is exposed to anon or authenticated roles **via a view or
+> materialized view** in schemas exposed to PostgREST.
+
+Tant qu'`admin_actors` était une vue dans `public` avec un `select` pour `authenticated` — ce
+qui fait vivre l'écran `/admin` — il signalait. Et `security_definer_view` disait une chose
+simplement vraie.
+
+⚠️ **MAIS FAIRE TAIRE UN LINTER SERAIT UN MAUVAIS MOTIF À LUI SEUL.** La vraie raison est
+ailleurs : **une fonction ne peut pas être auto-modifiable.** Le défaut de 0018 tenait à ce
+qu'une vue à un seul `from`, sans `group by` ni `distinct`, propage `delete` et `update`
+jusqu'à `auth.users`. 0018 l'a refermé par des `revoke` — **qu'une migration future pouvait
+rouvrir sans bruit.** Avec une fonction, le chemin n'existe plus : il n'y a plus rien à
+refermer.
+
+⚠️ **DEUX MIGRATIONS, ET L'ORDRE EST LE POINT.** 0019 crée la fonction en **laissant la vue
+en place** ; le code passe à `.rpc()`, on déploie, on vérifie ; **puis** 0020 retire la vue.
+Dans l'autre ordre, `/admin` serait cassé entre la migration et la fin du déploiement Vercel.
+Les deux coexistent sans conflit — PostgreSQL range relations et routines dans des espaces de
+noms distincts, et PostgREST les sert à deux adresses (`/admin_actors` contre
+`/rpc/admin_actors`).
+
+⚠️ **LE PIÈGE DE 0015 SE REPRODUIT À L'IDENTIQUE SUR LES FONCTIONS.** Supabase accorde
+`execute` à `anon` par défaut : il faut révoquer `public` **et** `anon`, aucune des deux
+formes ne remplaçant l'autre. Le juge est l'ACL brute, pas le fichier :
+
+```
+select proacl from pg_proc where proname = 'admin_actors';
+  {postgres=X/postgres, authenticated=X/postgres, service_role=X/postgres}
+  -- aucune entree nue « =X/postgres » ⇒ PUBLIC n a rien
+```
+
+⚠️ **`search_path = ''` OBLIGE À TOUT QUALIFIER** — `auth.users` comme
+`public.is_platform_admin()`. L'oublier ne casse pas la création, seulement l'exécution.
+Et `auth.users.email` est un `character varying` : sans le cast `::text`, le type de retour
+déclaré ne correspond pas et la fonction échoue **à l'exécution**.
+
+⚠️ **LE TRI EST PASSÉ EN TYPESCRIPT.** La vue ordonnait en SQL via `.order()`. PostgREST sait
+ordonner le résultat d'une fonction, mais je ne veux pas que le classement de cet écran
+dépende de ce détail de comportement : neuf lignes se trient en mémoire pour rien.
+
+⚠️ **`tsc` NE PEUT PAS ATTRAPER UNE RPC FAUSSE.** Le client Supabase n'est pas typé (§4) :
+`.rpc('nom_inexistant')` compile, et l'écran afficherait une liste **vide sans la moindre
+erreur**. Le seul contrôle qui tranche est de regarder `/admin` avec un administrateur réel.
+
+**Vérifié — 10 contrôles sur la fonction, 11 sur les écrans, EN PRODUCTION** :
+
+```
+anonyme             RPC refusee par les DROITS (401, 42501)
+authentifie simple  200 et ZERO ligne — un refus, pas une erreur
+administrateur      9 lignes · les 5 colonnes aux memes noms · email en texte
+                    · email_confirme en booleen · autant de lignes que de
+                      comptes reels
+contre-epreuve      DELETE sur la RPC -> 405, nombre de comptes INCHANGE
+/admin en prod      la page s ouvre · 37 adresses affichees · 17 lignes
+                    · le vrai administrateur ET le compte jetable
+export CSV          200, porte l adresse du titulaire
+menage              8 comptes, 8 entreprises, 0 orpheline,
+                    un seul administrateur — le vrai
+```
+
+⚠️ **LE CONTRÔLE DÉCISIF EST CELUI D'APRÈS 0020.** Tant que la vue existait, la production
+passait les tests **quelle que soit la version du code déployée** — l'ancien chemin
+fonctionnait encore. C'est le passage mené **une fois la vue supprimée** qui prouve que le
+code neuf est en ligne. Un test qui réussirait aussi bien avec l'ancien code ne mesure rien :
+même famille que l'assertion qui ne peut pas échouer du §9.
+
+⚠️ **UN ÉCHEC TRANSITOIRE A FAIT PEUR POUR RIEN, et il faut savoir le reconnaître.** Le
+premier passage après 0020 a échoué **à la connexion**, pas sur `/admin` — donc sans rapport
+avec la vue, que la connexion ne touche pas. Vérifié aussitôt : `/auth/v1/token` répondait
+200, aucune limite de débit. C'était une Server Action froide. **Lire à QUELLE étape un test
+échoue avant d'incriminer le changement qu'on vient de faire.**
 
 #### `pg_net` — SSRF latent, pas atteignable
 
@@ -3331,6 +3419,9 @@ supabase/
   migrations/0003_rls.sql       Politiques, toutes `to authenticated`
   migrations/0004_admin.sql     platform_admins, is_platform_admin, journal, déclencheurs
   migrations/0005_admin_actors.sql  Vue des comptes, réservée aux administrateurs
+                                ⚠️ **LA VUE N’EXISTE PLUS** — remplacée par une
+                                fonction en 0019/0020. Ce fichier reste pour
+                                l'historique ; ne pas le rejouer tel quel
   migrations/0006_abonnements.sql   subscriptions + subscription_payments, request_plan
   migrations/0007_quota_factures.sql invoices_quota — plafond Découverte, par déclencheur
   migrations/0008_quota_hint.sql    hint = 'plan-limit' : refus reconnaissable par le code
@@ -3351,6 +3442,13 @@ supabase/
                                 landing. SEULE table du projet ouverte en
                                 ÉCRITURE aux administrateurs. Ne pas en faire
                                 un précédent
+  migrations/0019_admin_actors_fonction.sql APPLIQUÉE le 8 oct. 2026.
+                                `admin_actors` devient une FONCTION. La vue
+                                reste en place : le code déployé la lit encore
+  migrations/0020_admin_actors_vue_retiree.sql APPLIQUÉE le 8 oct. 2026,
+                                APRÈS le déploiement. Retire la vue : les deux
+                                avis CRITICAL disparaissent, et le chemin
+                                d'écriture n'existe plus par construction
   migrations/0018_admin_actors_lecture_seule.sql APPLIQUÉE le 7 oct. 2026.
                                 Retire INSERT/UPDATE/DELETE/TRUNCATE à
                                 `authenticated` sur la vue `admin_actors`.
