@@ -2399,9 +2399,28 @@ réception**, pas de relire cette ligne.
 - Les champs d'identification de l'éditeur sont des **espaces réservés visibles**
   (`[à compléter]`). Un produit qui impose le NIU et le RCCM sur chaque facture ne peut pas en
   inventer pour lui-même — **ne jamais les remplir d'office.**
-- **Les CGU ne disent RIEN de l'abonnement** — ni prix, ni paiement, ni durée, ni
-  renouvellement, ni résiliation. Elles datent de l'époque où le service était gratuit. Le
-  chapitre est à écrire ; la note pour le juriste le signale en tête de sa section 2.5.
+- ~~**Les CGU ne disent RIEN de l'abonnement**~~ — **ÉCRIT le 9 oct. 2026**, article 6
+  « Abonnement, tarifs et paiement » : formules et prix, périmètre contractuel de chacune,
+  absence de renouvellement automatique, règlement et référence, ce qui se passe à l'échéance,
+  non-renouvellement, remboursement, changement de tarif.
+
+  ⚠️ **LES PRIX SONT LUS DANS `lib/plans.ts`, PAS RECOPIÉS — et c'est plus important dans un
+  contrat qu'ailleurs.** Un tarif écrit en dur deviendrait une seconde vérité, et les CGU
+  annonceraient un jour un prix que la caisse ne pratique plus.
+
+  ⚠️ **SEUL `features` EST RENDU, JAMAIS `upcoming`.** Promettre une fonction absente sur la
+  page qui vend est une faute ; **dans un contrat, on s'engagerait à la fournir.** Vérifié sur
+  le HTML prérendu : « Relances automatiques », « Jusqu'à 5 utilisateurs » et « Export
+  comptable » y ont **zéro occurrence**.
+
+  ⚠️ **L'ANCIEN §6 ÉTAIT FAUX SUR LE VOCABULAIRE** : il annonçait des formules « résiliables à
+  tout moment », alors que 0013 a établi qu'**on n'emploie jamais le mot « résilier »** — le
+  mobile money ne prélève pas, il n'y a aucun engagement à rompre. Le contrat dit désormais la
+  même chose que le produit.
+
+  **Reste au juriste** (note, §2.5) : le droit de rétractation, la mention HT/TTC et la TVA sur
+  nos propres abonnements. **La clause de remboursement est une PROPOSITION** — période entamée
+  non remboursée — à confirmer, c'est un arbitrage commercial autant que juridique.
 - Le contenu décrit l'infrastructure **réelle** (Supabase en Irlande, Vercel, Resend, LWS,
   isolation par RLS). Décrire un traitement qui n'existe pas serait pire que de ne rien écrire.
   ⚠️ **Conséquence : toute évolution d'infrastructure oblige à relire ces pages.** La mise en

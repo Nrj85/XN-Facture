@@ -1,5 +1,26 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { LegalPage, LegalSection } from '@/components/marketing/legal-page';
+import { PLANS, planMonthsFree, planPriceLabel, planYearlyLabel } from '@/lib/plans';
+
+/**
+ * ⚠️ **LES PRIX SONT LUS DANS `lib/plans.ts`, JAMAIS RECOPIÉS ICI.** C'est la
+ * règle de la source unique du §5, et elle compte davantage dans un contrat
+ * que partout ailleurs : un tarif écrit en dur deviendrait une **seconde
+ * vérité**, et le jour où la grille changerait, les conditions générales
+ * annonceraient un prix que la caisse ne pratique plus. Un document qui ment
+ * sur le prix est pire qu'un document absent.
+ *
+ * ⚠️ **ET ON NE REND QUE `features`, JAMAIS `upcoming`.** La séparation des
+ * deux champs a été conçue pour qu'un rendu qui ignore `upcoming` n'affiche
+ * que ce qui existe. Sur la page qui vend, promettre une fonction absente est
+ * une faute ; **dans un contrat, c'en est une autre** — on s'engagerait à
+ * fournir ce qu'on n'a pas.
+ *
+ * ⚠️ **La page doit rester STATIQUE (`○ /conditions` au build).** `lib/plans`
+ * ne contient que des constantes et des fonctions pures : aucun `cookies()`,
+ * donc rien qui force le rendu à la requête.
+ */
 
 export const metadata: Metadata = {
   title: 'Conditions d’utilisation',
@@ -11,7 +32,7 @@ export default function ConditionsPage() {
   return (
     <LegalPage
       title="Conditions d’utilisation"
-      updated="5 septembre 2026"
+      updated="9 octobre 2026"
       lead="Ce que XN-Facture s’engage à faire, ce qui reste de votre ressort, et ce qui se passe le jour où vous partez."
     >
       <LegalSection title="1. Objet">
@@ -77,13 +98,190 @@ export default function ConditionsPage() {
         </p>
       </LegalSection>
 
-      <LegalSection title="6. Tarifs">
+      <LegalSection id="abonnement" title="6. Abonnement, tarifs et paiement">
+        <p>
+          Ce chapitre décrit un fonctionnement inhabituel, et c’est voulu :{' '}
+          <strong>
+            nous ne prélevons rien sur votre compte, et aucun abonnement ne se renouvelle tout
+            seul.
+          </strong>{' '}
+          Le mobile money ne sait pas prélever. Chaque période est donc un paiement que{' '}
+          <em>vous</em> décidez de faire, ou de ne pas faire.
+        </p>
+
+        <p>
+          <strong>6.1 Les formules et leurs prix</strong>
+        </p>
+        <ul>
+          {PLANS.map((formule) => {
+            const annuel = planYearlyLabel(formule);
+            const offerts = planMonthsFree(formule);
+            return (
+              <li key={formule.code}>
+                <strong>{formule.name}</strong> — {planPriceLabel(formule)}
+                {annuel !== null && (
+                  <>
+                    , ou {annuel}
+                    {offerts > 0 && ` (soit ${offerts} mois offerts sur douze)`}
+                  </>
+                )}
+                .
+              </li>
+            );
+          })}
+        </ul>
+        <p>
+          Les montants sont exprimés en francs CFA, sans centimes. Ils sont ceux affichés sur la{' '}
+          <Link href="/#tarifs">grille tarifaire</Link> au jour de votre commande.
+        </p>
+
+        <p>
+          <strong>6.2 Ce que chaque formule ouvre</strong>
+        </p>
+        <p>
+          Les listes ci-dessous sont limitatives : <strong>elles ne comportent que des
+          fonctions déjà disponibles</strong>. Une fonction annoncée comme « à venir » sur nos
+          pages ne fait pas partie de ce contrat tant qu’elle n’y figure pas.
+        </p>
+        {PLANS.map((formule) => (
+          <div key={formule.code}>
+            <p>
+              <strong>{formule.name}</strong>
+            </p>
+            <ul>
+              {formule.features.map((ligne) => (
+                <li key={ligne}>{ligne}</li>
+              ))}
+            </ul>
+          </div>
+        ))}
+        <p>
+          Le <strong>support prioritaire</strong> de la formule Entreprise signifie que vos
+          demandes sont traitées avant les autres. Il ne s’accompagne pas d’un délai de réponse
+          chiffré, pour la même raison que le point 5 : nous ne nous engageons pas sur ce que
+          nous ne pouvons pas garantir.
+        </p>
+
+        <p>
+          <strong>6.3 Durée, et absence de renouvellement automatique</strong>
+        </p>
+        <ul>
+          <li>
+            Une période payée vous ouvre la formule <strong>jusqu’à une date précise</strong>,
+            affichée sur votre page Abonnement.
+          </li>
+          <li>
+            <strong>Il n’y a ni prélèvement, ni reconduction tacite.</strong> À l’échéance,
+            rien n’est débité et rien n’est prolongé : la formule redescend simplement en
+            Découverte.
+          </li>
+          <li>
+            Nous vous prévenons par email <strong>sept jours avant, la veille, et le jour même</strong>{' '}
+            de l’échéance, afin que l’échéance ne vous surprenne pas.
+          </li>
+        </ul>
+        <p>
+          C’est pourquoi vous ne trouverez nulle part de bouton « résilier » :{' '}
+          <strong>il n’y a aucun engagement à rompre</strong>. Ne pas renouveler suffit.
+        </p>
+
+        <p>
+          <strong>6.4 Comment le règlement s’effectue</strong>
+        </p>
+        <ul>
+          <li>
+            Vous choisissez une formule et une périodicité depuis votre page Abonnement. Vous
+            recevez alors une <strong>référence de commande</strong> (par exemple{' '}
+            <span className="tabular">XN-PRO-A3F91C</span>).
+          </li>
+          <li>
+            Vous réglez par les moyens indiqués sur cet écran — mobile money, ou le lien de
+            paiement qui vous est proposé. <strong>Rappelez toujours la référence</strong> : elle
+            est le seul lien entre votre versement et votre compte.
+          </li>
+          <li>
+            <strong>Une commande n’est pas un paiement.</strong> La formule s’ouvre lorsque le
+            règlement est constaté, ce qui peut demander un délai. Tant qu’il ne l’est pas, votre
+            compte reste sur sa formule précédente.
+          </li>
+          <li>
+            Un versement reçu sans référence identifiable ne peut pas être rattaché
+            automatiquement. Écrivez-nous à{' '}
+            <a href="mailto:contact@xn-facture.com">contact@xn-facture.com</a> avec la preuve du
+            paiement : nous le rattacherons.
+          </li>
+        </ul>
+
+        <p>
+          <strong>6.5 Ce qui se passe à l’échéance — rien ne ferme</strong>
+        </p>
+        <p>
+          C’est l’engagement le plus important de ce chapitre.{' '}
+          <strong>
+            Vos factures sont votre comptabilité : nous ne vous en coupons jamais l’accès.
+          </strong>{' '}
+          À l’expiration d’une formule payante :
+        </p>
+        <ul>
+          <li>
+            votre compte, vos clients, vos factures et vos devis{' '}
+            <strong>restent intacts et consultables</strong> ;
+          </li>
+          <li>
+            le <strong>téléchargement des PDF reste ouvert</strong>, y compris pour les
+            documents émis pendant la période payante ;
+          </li>
+          <li>les devis restent illimités ;</li>
+          <li>
+            seule <strong>l’émission de nouvelles factures</strong> retrouve le plafond de la
+            formule Découverte, et le réglage du papier à en-tête se verrouille — un en-tête déjà
+            enregistré continue toutefois d’être imprimé sur vos documents.
+          </li>
+        </ul>
+        <p>
+          Reprendre une formule payante lève ces limites immédiatement, sans rien vous faire
+          ressaisir.
+        </p>
+
+        <p>
+          <strong>6.6 Déclarer que vous ne renouvellerez pas</strong>
+        </p>
+        <p>
+          Vous pouvez le déclarer à tout moment depuis votre page Abonnement. Cela{' '}
+          <strong>n’avance pas votre échéance</strong> : ce que vous avez payé vous reste dû
+          jusqu’au terme. Les rappels d’échéance cessent, et la déclaration se défait d’un clic
+          si vous changez d’avis.
+        </p>
+
+        <p>
+          <strong>6.7 Remboursement</strong>
+        </p>
+        <p>
+          L’accès est ouvert dès le paiement constaté et s’exécute en continu.{' '}
+          <strong>Une période entamée n’est pas remboursée.</strong> Si une période a été réglée
+          par erreur et n’a pas commencé, écrivez-nous : nous la remboursons ou la reportons.
+        </p>
+        <p>
+          En cas d’interruption du service de notre fait, durable et imputable à nous seuls, nous
+          prolongeons votre échéance d’autant.
+        </p>
+
+        <p>
+          <strong>6.8 Changement de tarif</strong>
+        </p>
         <ul>
           <li>La formule Découverte est gratuite et le restera.</li>
-          <li>Les formules payantes sont sans engagement, résiliables à tout moment.</li>
           <li>
-            Une hausse de tarif est annoncée au moins 30 jours à l’avance ; elle ne s’applique
-            jamais à une période déjà réglée.
+            Une hausse de tarif est annoncée <strong>au moins 30 jours à l’avance</strong>.
+          </li>
+          <li>
+            Elle ne s’applique <strong>jamais</strong> à une période déjà réglée. Comme rien ne se
+            renouvelle automatiquement, un nouveau tarif ne peut vous être appliqué qu’au moment
+            où vous décidez vous-même de repayer.
+          </li>
+          <li>
+            Le tarif annuel est payé d’avance ; une hausse survenue en cours d’année ne le remet
+            pas en cause.
           </li>
         </ul>
       </LegalSection>

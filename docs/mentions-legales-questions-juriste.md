@@ -99,11 +99,32 @@ calcule la TVA au taux paramétré par l'entreprise (19,25 % par défaut).
 
 ### 2.5 Abonnement, paiement et rétractation
 
-⚠️ **Lacune connue, signalée d'emblée : les conditions générales d'utilisation ne comportent
-aujourd'hui AUCUNE clause sur l'abonnement** — ni sur le prix, ni sur le paiement, ni sur la
-durée, ni sur le renouvellement, ni sur la résiliation. Elles ont été écrites quand le service
-était entièrement gratuit. **Il faut donc rédiger ce chapitre**, et les questions ci-dessous
-sont celles auxquelles il devra répondre.
+⚠️ ~~Lacune connue : aucune clause sur l'abonnement~~ — **LE CHAPITRE A ÉTÉ RÉDIGÉ le
+9 oct. 2026** : conditions d'utilisation, **article 6 « Abonnement, tarifs et paiement »**,
+en huit points (formules et prix · périmètre contractuel de chaque formule · durée et absence
+de renouvellement automatique · règlement et référence · ce qui se passe à l'échéance ·
+non-renouvellement · remboursement · changement de tarif).
+
+**C'est un projet soumis à votre relecture, pas un texte arrêté.** Trois choix y ont été faits
+qui relèvent de vous, et le quatrième est signalé comme ouvert :
+
+1. **Le vocabulaire évite le mot « résilier ».** Le mobile money ne sait pas prélever : il n'y
+   a ni débit récurrent, ni reconduction tacite, donc **aucun engagement à rompre**. Le texte
+   dit « ne pas renouveler ». Est-ce tenable juridiquement, ou faut-il malgré tout une clause
+   de résiliation formelle ?
+2. **Le périmètre contractuel de chaque formule est limitatif**, et il est engendré depuis le
+   code : seules les fonctions réellement disponibles y figurent. Le texte précise qu'une
+   fonction annoncée « à venir » sur nos pages **ne fait pas partie du contrat**. Cette
+   formulation protège-t-elle suffisamment ?
+3. **Les prix affichés dans le contrat sont lus dans le code**, donc toujours ceux en vigueur.
+   Le texte précise qu'ils sont ceux du jour de la commande, et qu'une hausse ne s'applique
+   jamais à une période réglée. Faut-il en plus archiver le tarif accepté par chaque client ?
+4. ⚠️ **La clause de remboursement est une PROPOSITION, pas une décision** : « une période
+   entamée n'est pas remboursée », avec remboursement ou report d'une période payée par erreur
+   et non commencée, et prolongation de l'échéance en cas d'interruption durable de notre fait.
+   **À confirmer** — c'est un arbitrage commercial autant que juridique.
+
+Les questions ci-dessous restent ouvertes et **ne sont pas tranchées par le projet de texte**.
 
 - Le paiement est **manuel, par mobile money**, avec activation après constat. Faut-il une
   mention particulière sur les **délais d'activation** et sur le sort d'un paiement reçu sans
