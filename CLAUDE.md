@@ -959,6 +959,152 @@ spécificateur nu, et transpiler le seul fichier laisse ses imports `@/lib/…` 
 projet (voir la preuve du SSRF), un PNG de synthèse en base64 a produit « Incomplete or corrupt
 PNG file ». **Prendre une vraie image du dépôt** (`app/icon.png`).
 
+#### Le papier à en-tête est RÉSERVÉ AUX FORMULES PAYANTES — migration 0021 (9 oct. 2026)
+
+Demande de l’utilisateur : *« que l’option du papier en-tête personnalisé ne soit disponible
+qu’à partir de la formule Pro et non pas à la formule gratuite »*.
+
+⚠️ **CE N’EST PAS UNE RESTRICTION NOUVELLE, C’EST UN ALIGNEMENT — et c’est le 7 oct. DANS
+L’AUTRE SENS.** La grille tarifaire VENDAIT déjà cette fonction comme une ligne de la formule
+Pro — « Votre papier à en-tête sur chaque facture et chaque devis » (`lib/plans.ts`), servi en
+production — alors qu’elle était ouverte à Découverte. Le 7 oct. on vendait ce qui n’existait
+pas ; ici on donnait ce qu’on faisait payer. **Les deux sont le même défaut** : un écart entre
+la page qui vend et le code qui livre.
+
+⚠️ **LE VERROU EST EN BASE, PAS DANS LA SERVER ACTION — leçon de 0007.** `companies_update`
+(0003) autorise un membre à modifier **n’importe quelle colonne** de son entreprise, et
+`company_letterheads` porte sa propre politique d’écriture. Un contrôle applicatif se
+sauterait d’un `PATCH /rest/v1/companies?id=eq.<uuid>` avec `letterhead_mode=image`. **Deux
+déclencheurs**, donc : un sur `companies` (le réglage), un sur `company_letterheads` (l’image)
+— ce sont deux portes distinctes, et fermer l’une laisserait l’autre.
+
+##### ⚠️ ON FERME L’ÉCRITURE, PAS L’IMPRESSION — décision de l’utilisateur
+
+Un en-tête **déjà enregistré continue d’être dessiné sur les PDF**, même en Découverte. Trois
+raisons, et la première est une règle du projet :
+
+1. « À l’expiration, redescendre en Découverte, **jamais fermer** : lecture, export PDF et
+   devis restent ouverts. » Arrêter le dessin fermerait.
+2. **Un PDF est une pièce déjà remise à un client.** Le projet gèle `vat_rate` et `vat_exempt`
+   sur chaque document précisément pour qu’une réimpression ressemble à ce que le client a
+   reçu. Un en-tête qui disparaîtrait rétroactivement contredirait cette discipline.
+3. **Mesuré AVANT d’écrire, et c’est ce qui a tranché** : les 8 entreprises de la base sont
+   en Découverte, et **une seule utilise la fonction** — celle de l’utilisateur. Fermer
+   l’impression n’aurait eu qu’un seul effet observable : lui retirer son en-tête.
+
+Contrepartie commerciale assumée : **un mois de Pro suffit à poser un en-tête qui restera.**
+Mais il devient **figé** — changer de logo, d’adresse ou de marges demande une formule payante.
+
+⚠️ **`getLetterhead()` et `letterheadIfUsed()` NE REGARDENT DONC PAS LA FORMULE, et il ne faut
+pas « corriger » cela.** Y ajouter un contrôle changerait silencieusement l’apparence de
+factures déjà envoyées. Le commentaire du fichier le dit.
+
+##### Deux sorties restent ouvertes, sans quoi le verrou serait une PRISON
+
+⚠️ **REVENIR À « aucun » EST TOUJOURS PERMIS**, et supprimer son image aussi. On n’empêche
+jamais de RÉDUIRE son usage. Sans ces deux sorties, quelqu’un qui bascule sur « Aucun » par
+curiosité ne pourrait plus revenir — il aurait perdu son en-tête d’un clic — et quelqu’un qui
+ne veut plus de son papier resterait enfermé avec, ses factures continuant d’effacer leur bloc
+« Émetteur ». **L’écran avertit que le retrait est définitif en Découverte.**
+
+##### Le piège qui aurait tout cassé
+
+⚠️ **LE DÉCLENCHEUR NE REFUSE QUE SI L’UNE DES QUATRE COLONNES D’EN-TÊTE CHANGE RÉELLEMENT.**
+Un refus portant sur tout `update` d’une entreprise dont le mode vaut `image` aurait empêché
+cette entreprise **d’enregistrer le moindre réglage** : ni son nom, ni son adresse, ni son
+taux de TVA. Le formulaire d’entreprise ne nomme pas ces colonnes (`fromCompany` les exclut),
+donc elles arrivent inchangées — d’où le `is distinct from` sur le quadruplet.
+
+##### `plan_effectif()` — la règle d’expiration est maintenant en TROIS exemplaires
+
+⚠️ **ET IL FAUT LE DIRE.** Les trois : `effectivePlan()` (`lib/plans.ts`, affichage),
+`enforce_invoice_quota()` (0007/0008, qui l’inline) et `public.plan_effectif()` (0021).
+**Toute modification de la règle doit toucher les trois.**
+
+Pourquoi ne pas avoir unifié tout de suite : brancher 0007 dessus obligerait à **remplacer**
+`enforce_invoice_quota()` en entier — `create or replace` ne connaît pas la modification
+partielle — donc à réécrire le verrou principal du produit. Faisable et souhaitable, **avec
+son propre plan de contrôle** (5 acceptées / la 6ᵉ refusée / brouillons libres / `PATCH` sur
+une facture déjà émise accepté / plafond levé en Pro / retrouvé à l’expiration). **Tâche à
+part entière, pas en passant.**
+
+##### Ce que l’application fait, et ce qu’elle ne décide pas
+
+⚠️ **`customLetterhead` dans `lib/plans.ts` N’AUTORISE RIEN — il décrit.** À ne pas confondre
+avec `maxMembers`, son voisin, qui n’est lu nulle part : celui-ci est lu par `/parametres`
+pour **verrouiller la carte**, afin de ne pas livrer un formulaire que la base refusera (§6.1).
+La règle vit donc en deux exemplaires, comme l’expiration : ici l’affichage, en base
+l’application.
+
+⚠️ **LA CARTE RESTE, ELLE NE DISPARAÎT PAS.** §7.4 dit « les transitions impossibles sont
+ABSENTES, pas grisées » — d’où le retrait des champs. Mais faire disparaître la carte
+cacherait l’existence d’une fonction qu’on VEND, et « un refus qui n’ouvre aucun chemin est
+un cul-de-sac » : elle porte donc un lien vers `/abonnement`. L’aperçu de l’en-tête gelé y
+reste aussi — le cacher laisserait croire qu’il a disparu des factures.
+
+⚠️ **L’ACTION MASQUAIT LE REFUS, et c’était un vrai défaut.** `updateLetterheadAction` rendait
+« Les réglages n’ont pas pu être enregistrés. Réessayez. » sur toute erreur : un refus du
+déclencheur serait arrivé à l’écran en **invitation à refaire ce qui échouera toujours**, en
+cachant la seule information utile. Elle passe désormais par `failFromDb`, et `saveLetterhead`
+rend l’erreur au lieu d’un booléen qui la jetait.
+
+⚠️ **PAS de `hint = plan-limit` sur le `raise`**, contrairement à 0008 : ce `hint` ouvre la
+fenêtre `plan-limit.tsx`, dont tout le texte parle du plafond de cinq factures. Elle répondrait
+à côté. Sans `hint`, `failFromDb` retombe sur `fail(message)` et la phrase française de la base
+s’affiche sur la carte, là où le geste a été fait.
+
+**Vérifié en base, 12 sondes AVEC leur témoin négatif — toute écriture d’essai annulée** :
+
+```
+Decouverte  mode -> image            REFUSE P0001 + la phrase francaise
+            mode -> preprinted       REFUSE
+            insert image             REFUSE
+  deja equipee : changer une marge   REFUSE
+  deja equipee : remplacer l image   REFUSE
+ouvert      retour a « aucun »       ACCEPTE   <- pas de prison
+            autres reglages          ACCEPTE   <- nom, adresse, TVA saufs
+            retirer son image        ACCEPTE
+TEMOIN      en PRO : activer + televerser      ACCEPTE
+            Pro EXPIRE hier : activer          REFUSE
+etat reel   mode=image haut=45 images=1  — INTACT
+```
+
+⚠️ **SANS LE TÉMOIN EN PRO, LES CINQ REFUS NE PROUVERAIENT RIEN** : un déclencheur qui
+refuserait tout le monde rendrait exactement les mêmes verdicts.
+
+**Vérifié à l’écran, 22 contrôles, compte jetable, quatre états** :
+
+```
+Decouverte nue   « FORMULES PRO ET ENTREPRISE » · « Voir les formules »
+                 AUCUN champ · aucun apercu
+Pro              le formulaire REVIENT · les trois modes · plus de mention
+                 de verrou
+Pro + en-tete    image posee PAR LE CLIENT (201) · marges saisissables
+                 · avertissement NIU/RCCM
+Pro EXPIRE       verrouille · « reste imprime » · « plus etre modifie »
+                 · « Retirer l en-tete » offert · « retrait est definitif »
+                 · apercu rendu · le mode RESTE image, l image RESTE en base
+500 px           aucun debordement
+menage           8 comptes, 8 entreprises, 0 orpheline, 0 journal orphelin,
+                 un seul administrateur — le vrai, et l en-tete reel intact
+```
+
+⚠️ **TROIS PIÈGES PAYÉS ICI, ET LES TROIS SONT DANS MON SCRIPT, PAS DANS LE PRODUIT.**
+
+1. **UN COMPTE JETABLE A SURVÉCU AU PREMIER PASSAGE.** La RPC a répondu `PGRST202` (sa
+   signature est `(p_legal_name, p_name)`, je passais `p_city`), j’avais affecté l’objet
+   d’erreur à `companyId`, et le `finally` l’a interpolé en `[object Object]` : le ménage a
+   échoué en `22P02` et **le compte est resté, avec un mot de passe connu**. C’est le piège du
+   5 oct. sous une autre forme. **Valider le TYPE avant d’affecter**, et poser un filet de
+   rattrapage sur le motif d’adresse.
+2. **UNE ASSERTION QUI NE POUVAIT JAMAIS PASSER — le §9 à l’envers.** « Plus de bouton *Voir
+   les formules* » : ce texte existe AUSSI dans `plan-limit.tsx`, monté en permanence par
+   `app/(app)/layout.tsx`, donc présent dans le DOM de **toutes** les pages de l’application.
+3. **Je cherchais les marges là où elles ne doivent pas être.** « Blanc réservé en haut » vit
+   dans le bloc `{actif && …}` : absent tant que le mode vaut « Aucun », ce qui est l’état
+   d’une entreprise neuve. Le test annonçait un défaut sur un écran correct — pour la énième
+   fois. Les marges se vérifient à l’état où le mode EST actif.
+
 #### Facturer SANS TVA — migration 0014 (25 sept. 2026)
 
 Toutes les entreprises de la zone ne collectent pas la TVA : en dessous des seuils, un
@@ -3658,6 +3804,14 @@ supabase/
   migrations/0019_admin_actors_fonction.sql APPLIQUÉE le 8 oct. 2026.
                                 `admin_actors` devient une FONCTION. La vue
                                 reste en place : le code déployé la lit encore
+  migrations/0021_entete_formule_payante.sql APPLIQUÉE le 9 oct. 2026.
+                                Le papier à en-tête devient une fonction
+                                des formules PAYANTES. DEUX déclencheurs —
+                                le réglage sur `companies`, l’image sur
+                                `company_letterheads` — plus
+                                `plan_effectif()`, TROISIÈME exemplaire de
+                                la règle d’expiration. **Ferme
+                                l’ÉCRITURE, pas l’IMPRESSION**
   migrations/0020_admin_actors_vue_retiree.sql APPLIQUÉE le 8 oct. 2026,
                                 APRÈS le déploiement. Retire la vue : les deux
                                 avis CRITICAL disparaissent, et le chemin

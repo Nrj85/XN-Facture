@@ -3,10 +3,12 @@
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { createClient } from '@/lib/supabase/server';
-import { requireSession } from '@/lib/db/queries';
+import { getSubscription, requireSession } from '@/lib/db/queries';
 import { deleteLetterhead, saveLetterhead, LETTERHEAD_MAX_CARACTERES } from '@/lib/db/letterhead';
-import { fail, ok, type ActionResult } from '@/lib/actions/result';
+import { fail, failFromDb, ok, type ActionResult } from '@/lib/actions/result';
 import { firstIssue } from '@/lib/actions/schemas';
+import { effectivePlan, planAllowsLetterhead } from '@/lib/plans';
+import { today } from '@/lib/today';
 
 /**
  * Réglages du papier à en-tête.
@@ -83,6 +85,35 @@ export async function updateLetterheadAction(saisi: unknown): Promise<ActionResu
   if (!parsed.success) return fail(firstIssue(parsed.error));
   const v = parsed.data as ReglageEnTete;
 
+  /*
+    ⚠️ **CETTE GARDE N'EST PAS LE VERROU — le verrou est en base (0021).**
+    `companies_update` (0003) laisse un membre modifier n'importe quelle
+    colonne de son entreprise, et `company_letterheads` porte sa propre
+    politique d'écriture : un contrôle qui ne vivrait qu'ici se sauterait d'un
+    `PATCH /rest/v1/companies?id=eq.<uuid>`. Les deux déclencheurs de 0021
+    refusent sur **tous** les chemins.
+
+    Elle sert à deux choses, et les deux comptent :
+      1. **le message.** Le refus de la base est une phrase française, mais
+         elle arrive après un aller-retour et une tentative d'écriture ;
+      2. **ne pas écrire à moitié.** Sans elle, le réglage sur `companies`
+         serait refusé puis l'image tenterait quand même de s'enregistrer.
+
+    ⚠️ **ET ELLE PORTE SUR LA FORMULE EFFECTIVE**, jamais sur
+    `subscriptions.plan` brut : un abonnement payé mais expiré redescend en
+    Découverte, exactement comme le fait `plan_effectif()` côté base. Lire la
+    formule brute ici laisserait passer ce que la base refuserait ensuite.
+  */
+  if (v.mode !== 'none') {
+    const abonnement = await getSubscription(session.companyId);
+    const plan = effectivePlan(abonnement.plan, abonnement.expiresAt, today());
+    if (!planAllowsLetterhead(plan)) {
+      return fail(
+        'Le papier à en-tête personnalisé est réservé aux formules Pro et Entreprise. Rendez-vous sur la page Abonnement pour en changer.',
+      );
+    }
+  }
+
   const supabase = createClient();
 
   // ⚠️ `select()` après l'`update` pour COMPTER les lignes touchées. Une mise à
@@ -99,13 +130,23 @@ export async function updateLetterheadAction(saisi: unknown): Promise<ActionResu
     .eq('id', session.companyId)
     .select('id');
 
-  if (error) return fail('Les réglages n’ont pas pu être enregistrés. Réessayez.');
+  /*
+    ⚠️ **`failFromDb` ET NON UN MESSAGE GÉNÉRIQUE — c'était un vrai défaut.**
+    Cette ligne disait « Les réglages n'ont pas pu être enregistrés.
+    Réessayez. » : un refus du déclencheur de 0021 serait donc arrivé à l'écran
+    sous la forme d'une invitation à **refaire ce qui échouera toujours**, en
+    cachant la seule information utile — que la fonction est réservée aux
+    formules payantes. `describeDbError` a un cas `P0001` qui relaie le texte
+    français de la base tel quel ; c'est fait pour ça.
+  */
+  if (error) return failFromDb(error);
   if (!data || data.length === 0) return fail('Entreprise introuvable. Rechargez la page.');
 
   if (v.dataUrl) {
-    if (!(await saveLetterhead(session.companyId, v.dataUrl))) {
-      return fail('L’en-tête n’a pas pu être enregistré. Réessayez.');
-    }
+    // Même raison : `saveLetterhead` rend désormais l'erreur plutôt qu'un
+    // booléen, pour que le motif du refus atteigne l'écran.
+    const echec = await saveLetterhead(session.companyId, v.dataUrl);
+    if (echec) return failFromDb(echec);
   }
 
   // ⚠️ **ON NE SUPPRIME L'IMAGE QUE SUR DEMANDE EXPLICITE**, jamais parce que

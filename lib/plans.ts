@@ -76,6 +76,27 @@ export interface PlanDefinition {
   monthlyInvoices: number | null;
   /** `null` = illimité. */
   maxMembers: number | null;
+  /**
+   * La formule donne-t-elle accès au papier à en-tête personnalisé ?
+   *
+   * ⚠️ **APPLIQUÉ — ne pas le confondre avec `maxMembers` juste au-dessus, qui
+   * n'est lu nulle part.** Le verrou réel est en base, migration 0021 : deux
+   * déclencheurs refusent à une formule Découverte d'activer le mode ou de
+   * téléverser une image. Ce champ ne décide rien, **il dit la même chose à
+   * l'écran** pour que la carte de réglage se verrouille au lieu de laisser
+   * quelqu'un remplir un formulaire que la base refusera (§6.1).
+   *
+   * ⚠️ **La règle vit donc en DEUX exemplaires, comme l'expiration**, et pour
+   * la même raison : ici l'affichage, en base l'application. **Modifier l'une
+   * oblige à modifier l'autre**, sinon l'écran ouvre ce que la base ferme.
+   *
+   * ⚠️ **FERMER L'ÉCRITURE N'EST PAS FERMER L'IMPRESSION.** Un en-tête déjà
+   * enregistré continue d'être dessiné sur les PDF même en Découverte —
+   * décision explicite du 9 oct. 2026. Un PDF est une pièce déjà remise à un
+   * client, et la règle du projet est « à l'expiration, redescendre en
+   * Découverte, jamais fermer ».
+   */
+  customLetterhead: boolean;
 }
 
 export const PLANS: PlanDefinition[] = [
@@ -93,6 +114,10 @@ export const PLANS: PlanDefinition[] = [
     cta: 'Créer mon compte',
     monthlyInvoices: 5,
     maxMembers: 1,
+    // ⚠️ **FERMÉ DEPUIS LE 9 oct. 2026, par décision de l'utilisateur.** La
+    // fonction existait et était ouverte à tous, alors que la carte Pro la
+    // VENDAIT déjà. Le verrou est en base (0021).
+    customLetterhead: false,
   },
   {
     code: 'pro',
@@ -101,9 +126,15 @@ export const PLANS: PlanDefinition[] = [
     yearlyPrice: 50000,
     pitch: 'Pour l’indépendant ou l’artisan qui facture toutes les semaines.',
     // ⚠️ La PREMIÈRE ligne dit que la formule est cumulative. Sans elle, les
-    // lignes suivantes se lisent comme exclusives alors que la plupart sont
-    // ouvertes à Découverte aussi : le seul verrou du produit est le plafond
-    // de factures.
+    // lignes suivantes se lisent comme exclusives alors que plusieurs sont
+    // ouvertes à Découverte aussi.
+    //
+    // ⚠️ **CE COMMENTAIRE DISAIT « le seul verrou du produit est le plafond de
+    // factures ». C'EST FAUX DEPUIS LE 9 oct. 2026 : il y en a DEUX.** Le
+    // papier à en-tête de la dernière ligne ci-dessous est désormais réservé
+    // aux formules payantes, et le verrou est en base (migration 0021). C'est
+    // donc la seule ligne de cette carte, avec le plafond levé, qui soit à la
+    // fois réelle ET exclusive.
     features: [
       'Tout ce que contient Découverte',
       'Factures illimitées — le plafond de 5 par mois disparaît',
@@ -120,6 +151,7 @@ export const PLANS: PlanDefinition[] = [
     featured: true,
     monthlyInvoices: null,
     maxMembers: 1,
+    customLetterhead: true,
   },
   {
     code: 'business',
@@ -152,6 +184,8 @@ export const PLANS: PlanDefinition[] = [
     cta: 'Choisir Entreprise',
     monthlyInvoices: null,
     maxMembers: 5,
+    // Héritée de Pro, comme le dit la première ligne de `features`.
+    customLetterhead: true,
   },
 ];
 
@@ -220,6 +254,23 @@ export function effectivePlan(
   // lexicographiquement, comme partout ailleurs dans le projet.
   if (expiresAt !== null && expiresAt < today) return 'discovery';
   return plan;
+}
+
+/**
+ * La formule permet-elle de régler son papier à en-tête ?
+ *
+ * ⚠️ **PREND UNE FORMULE EFFECTIVE, jamais `subscriptions.plan` brut.**
+ * L'appelant doit avoir passé par `effectivePlan()` : un abonnement payé mais
+ * expiré redescend en Découverte, et c'est exactement ce que font les
+ * déclencheurs de 0021 côté base. Lui donner la formule brute ouvrirait
+ * l'écran sur un compte dont la base refuserait l'enregistrement — la
+ * divergence précise contre laquelle `effectivePlan()` met en garde.
+ *
+ * ⚠️ **Cette fonction n'autorise RIEN. Elle décrit.** Le refus vient de la
+ * base ; ici on évite seulement d'afficher un formulaire condamné.
+ */
+export function planAllowsLetterhead(plan: PlanCode): boolean {
+  return planByCode(plan).customLetterhead;
 }
 
 // --- Périodicité de facturation ---------------------------------------------

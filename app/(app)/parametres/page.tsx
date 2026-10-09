@@ -6,8 +6,10 @@ import { SecurityForm } from '@/components/settings/security-form';
 import { SettingsForm } from '@/components/settings/settings-form';
 import { createClient } from '@/lib/supabase/server';
 import { getLetterhead } from '@/lib/db/letterhead';
-import { requireSession } from '@/lib/db/queries';
+import { getSubscription, requireSession } from '@/lib/db/queries';
 import { getLocale } from '@/lib/i18n';
+import { effectivePlan, planAllowsLetterhead } from '@/lib/plans';
+import { today } from '@/lib/today';
 
 export const metadata: Metadata = { title: 'Paramètres' };
 
@@ -41,6 +43,23 @@ export default async function ParametresPage() {
   */
   const letterhead = await getLetterhead(session.companyId);
 
+  /*
+    ⚠️ **LA FORMULE EFFECTIVE, jamais `subscriptions.plan` brut.** Un
+    abonnement payé mais expiré redescend en Découverte, et c'est exactement ce
+    que fait `plan_effectif()` côté base (migration 0021). Passer la formule
+    brute ouvrirait le formulaire sur un compte dont la base refuserait
+    l'enregistrement — la divergence précise contre laquelle `effectivePlan()`
+    met en garde, et celle que la section « Abonnements » décrit comme « l'écran
+    annonce Pro pendant que la base refuse ».
+
+    ⚠️ **ON LIT L'IMAGE MÊME QUAND C'EST VERROUILLÉ, et c'est voulu** : le
+    verrou porte sur l'écriture, pas sur l'impression. La carte verrouillée
+    montre donc l'en-tête qui continue d'être dessiné sur les PDF — le cacher
+    laisserait croire qu'il a disparu des factures.
+  */
+  const abonnement = await getSubscription(session.companyId);
+  const plan = effectivePlan(abonnement.plan, abonnement.expiresAt, today());
+
   const { count } = await supabase
     .from('invoices')
     .select('id', { count: 'exact', head: true })
@@ -68,6 +87,7 @@ export default async function ParametresPage() {
         bottomMm={session.company.letterheadBottomMm}
         keepLegal={session.company.letterheadKeepLegal}
         imageActuelle={letterhead}
+        verrouille={!planAllowsLetterhead(plan)}
       />
       {/*
         Les préférences personnelles — nom et langue — sont posées APRÈS les

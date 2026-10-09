@@ -33,6 +33,30 @@ export const LETTERHEAD_ACCEPTE = /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-
 export const LETTERHEAD_MAX_CARACTERES = 2 * 1024 * 1024;
 
 /**
+ * ⚠️ **LA LECTURE NE REGARDE PAS LA FORMULE, ET C'EST UNE DÉCISION — 9 oct.
+ * 2026.** Le papier à en-tête est réservé aux formules payantes depuis la
+ * migration 0021, mais **le verrou porte sur l'ÉCRITURE, pas sur
+ * l'impression** : un en-tête déjà enregistré continue d'être dessiné, même
+ * quand l'entreprise est redescendue en Découverte.
+ *
+ * Trois raisons, et la première est une règle du projet :
+ *
+ *   1. « À l'expiration, redescendre en Découverte, JAMAIS fermer : lecture,
+ *      export PDF et devis restent ouverts. » Arrêter le dessin fermerait.
+ *   2. **Un PDF est une pièce déjà remise à un client.** Le projet gèle
+ *      `vat_rate` et `vat_exempt` sur chaque document précisément pour qu'une
+ *      réimpression ressemble à ce que le client a reçu ; un en-tête qui
+ *      disparaîtrait rétroactivement contredirait cette discipline.
+ *   3. Mesuré le 9 oct. avant d'écrire : les 8 entreprises de la base étaient
+ *      en Découverte et **une seule utilisait la fonction**. Fermer
+ *      l'impression n'aurait eu qu'un seul effet observable — retirer son
+ *      en-tête au seul utilisateur réel.
+ *
+ * **Ne pas « corriger » cela en ajoutant un contrôle de formule ici.** Ce
+ * serait changer silencieusement l'apparence de factures déjà envoyées.
+ */
+
+/**
  * L'image de l'entreprise, ou `null`.
  *
  * ⚠️ **Un échec ne fait pas tomber le document.** Si la table est injoignable
@@ -74,12 +98,26 @@ export async function letterheadIfUsed(
   return mode === 'image' ? getLetterhead(companyId) : null;
 }
 
-/** Pose ou remplace l'image. Un seul en-tête par entreprise (clé primaire). */
-export async function saveLetterhead(companyId: string, dataUrl: string): Promise<boolean> {
+/**
+ * Pose ou remplace l'image. Un seul en-tête par entreprise (clé primaire).
+ *
+ * ⚠️ **ELLE RENDAIT UN BOOLÉEN, ET CELA PERDAIT LE MOTIF DU REFUS.** Depuis
+ * 0021, un échec ici n'est plus seulement une panne : c'est aussi le
+ * déclencheur `company_letterheads_plan` qui refuse en `P0001` avec une
+ * **phrase française destinée à l'écran**. Un `boolean` la jetait, et
+ * l'appelant affichait « Réessayez » — un message qui invite à refaire ce qui
+ * échouera toujours. On rend donc l'erreur, que `failFromDb` sait traduire.
+ *
+ * `null` = tout s'est bien passé.
+ */
+export async function saveLetterhead(
+  companyId: string,
+  dataUrl: string,
+): Promise<{ code?: string; message: string; hint?: string | null } | null> {
   const { error } = await createClient()
     .from('company_letterheads')
     .upsert({ company_id: companyId, data_url: dataUrl }, { onConflict: 'company_id' });
-  return !error;
+  return error ?? null;
 }
 
 export async function deleteLetterhead(companyId: string): Promise<boolean> {

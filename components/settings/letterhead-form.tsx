@@ -1,8 +1,9 @@
 'use client';
 
 import { useRef, useState, useTransition } from 'react';
-import { AlertCircle, Check, FileText, Loader2, Upload } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import Link from 'next/link';
+import { AlertCircle, Check, FileText, Loader2, Lock, Upload } from 'lucide-react';
+import { Button, buttonClasses } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
@@ -106,11 +107,26 @@ export function LetterheadForm({
   bottomMm: bottomInitial,
   keepLegal: legalInitial,
   imageActuelle,
+  verrouille,
 }: {
   mode: LetterheadMode;
   topMm: number;
   bottomMm: number;
   keepLegal: boolean;
+  /**
+   * La formule effective n'ouvre pas cette fonction (Découverte).
+   *
+   * ⚠️ **ELLE NE PROTÈGE RIEN — le verrou est en base, migration 0021.** Deux
+   * déclencheurs refusent l'écriture sur tous les chemins, y compris un
+   * `PATCH` REST direct. Cette prop sert à ne pas afficher un formulaire
+   * condamné : livrer des champs qui seront refusés à l'enregistrement est le
+   * contrôle mort du §6.1, et « mieux vaut l'absence que le mensonge ».
+   *
+   * ⚠️ **Elle doit venir d'`effectivePlan()`**, jamais de `subscriptions.plan`
+   * brut : un abonnement expiré redescend en Découverte, et l'écran doit dire
+   * la même chose que la base.
+   */
+  verrouille: boolean;
   /**
    * L'en-tête déjà enregistré, ou `null`.
    *
@@ -205,6 +221,113 @@ export function LetterheadForm({
       setMode('none');
       setSucces('En-tête retiré.');
     });
+  }
+
+  /*
+    ⚠️ **CARTE VERROUILLÉE : ON N'AFFICHE PAS UN FORMULAIRE CONDAMNÉ.**
+    §6.1 — « pas de contrôle mort, mieux vaut l'absence que le mensonge ».
+    Laisser les champs visibles et grisés aurait aussi été une option ; la
+    §7.4 du projet tranche dans l'autre sens : « les transitions impossibles
+    sont ABSENTES, pas grisées ».
+
+    ⚠️ **MAIS LA CARTE RESTE, et elle ouvre un chemin.** La faire disparaître
+    serait cacher l'existence d'une fonction qu'on vend — et « un refus qui
+    n'ouvre aucun chemin est un cul-de-sac » (la leçon de `plan-limit.tsx`).
+    D'où le lien vers /abonnement.
+
+    ⚠️ **ET DEUX CHOSES SURVIVENT AU VERROU, délibérément :**
+      1. **l'aperçu**, parce qu'un en-tête déjà posé continue d'être imprimé —
+         le cacher laisserait croire qu'il a disparu des factures ;
+      2. **« Retirer l'en-tête »**, parce que cesser d'utiliser une fonction
+         n'est jamais ce qu'on verrouille. Sans ce bouton, quelqu'un qui ne
+         veut plus de son papier resterait enfermé avec, et ses factures
+         continueraient d'effacer leur bloc « Émetteur ».
+  */
+  if (verrouille) {
+    return (
+      <Card>
+        <CardHeader>
+          <div>
+            <CardTitle>Papier à en-tête</CardTitle>
+            <p className="label-caps mt-0.5 flex items-center gap-1.5 text-ink-3">
+              {/* Icône ET mot : l'information ne passe jamais par la seule
+                  couleur (§6.2, règle 5). */}
+              <Lock className="h-3 w-3" aria-hidden />
+              Formules Pro et Entreprise
+            </p>
+          </div>
+        </CardHeader>
+
+        <div className="space-y-4 p-4 sm:p-5">
+          <p className="text-[12.5px] leading-relaxed text-ink-2">
+            Imprimer votre propre papier à en-tête sur chaque facture et chaque devis fait partie
+            des formules payantes. La formule Découverte imprime l’en-tête du modèle, avec vos
+            mentions légales.
+          </p>
+
+          {actif && visuel && (
+            <div className="space-y-3 rounded-[10px] border border-line bg-paper p-3.5">
+              <p className="text-[12.5px] font-medium leading-relaxed text-ink">
+                Votre en-tête reste imprimé sur vos documents.
+              </p>
+              <figure className="m-0">
+                {/* ⚠️ `<img>` et non `next/image` — idiome du projet, comme
+                    `logo-uploader.tsx` et l'aperçu ci-dessous. L'optimiseur
+                    d'images de Next n'est utilisé NULLE PART ici (c'est aussi
+                    ce qui met le projet hors d'atteinte du CVE de `sharp`), et
+                    il ne saurait de toute façon rien faire d'une `data:` URL. */}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={visuel}
+                  alt="Votre papier à en-tête, tel qu’il est enregistré"
+                  className="block w-full max-w-[220px] rounded-[6px] border border-line"
+                />
+                <figcaption className="mt-1.5 max-w-[220px] text-[11.5px] leading-relaxed text-ink-3">
+                  Il ne peut plus être modifié ni remplacé tant que la formule est Découverte.
+                </figcaption>
+              </figure>
+              {aImage && (
+                <>
+                  <Button type="button" variant="ghost" disabled={enCours} onClick={retirer}>
+                    Retirer l’en-tête
+                  </Button>
+                  {/* ⚠️ **AVERTISSEMENT NÉCESSAIRE : le retrait est SANS RETOUR
+                      en Découverte.** Le reposer exige une formule payante.
+                      Sans cette phrase, le bouton serait un piège — on clique
+                      pour « voir », et on ne peut plus revenir. */}
+                  <p className="text-[11.5px] leading-relaxed text-ink-3">
+                    Attention : en formule Découverte, le retrait est définitif — le reposer
+                    demandera une formule payante.
+                  </p>
+                </>
+              )}
+            </div>
+          )}
+
+          {erreur && (
+            <p
+              role="alert"
+              className="flex items-start gap-2 rounded-[10px] border border-status-overdue-dot bg-status-overdue-bg px-4 py-2.5 text-[13px] font-medium text-status-overdue"
+            >
+              <AlertCircle className="mt-px h-4 w-4 shrink-0" aria-hidden />
+              {erreur}
+            </p>
+          )}
+          {succes && (
+            <p className="flex items-center gap-1.5 text-[12.5px] font-medium text-status-paid">
+              <Check className="h-4 w-4" aria-hidden />
+              {succes}
+            </p>
+          )}
+
+          <div className="border-t border-line pt-4">
+            <Link href="/abonnement" className={buttonClasses({ variant: 'secondary' })}>
+              Voir les formules
+            </Link>
+          </div>
+        </div>
+      </Card>
+    );
   }
 
   return (
