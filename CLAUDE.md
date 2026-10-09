@@ -780,6 +780,12 @@ sert. La vignette repère en plus les deux zones réservées, sinon on ne peut p
 l'option que cherchait l'utilisateur, et la seule qui tienne quand la facture part par email ou
 WhatsApp — le cas courant ici.
 
+⚠️ **CE RELEVÉ EST LOCAL, et il l'est resté trois jours.** La fonction n'a été regardée **en
+production** que le 9 oct. 2026 — voir « Le papier à en-tête est RÉSERVÉ AUX FORMULES
+PAYANTES », où le PDF servi par `www.xn-facture.com` porte bien l'en-tête sur 595,28 × 841,89
+points. **Une réparation vérifiée en local seulement n'est pas une réparation vérifiée** : les
+deux pannes de PDF de ce projet (5 et 26 sept.) étaient invisibles en développement.
+
 **Vérifié après correction, local, PDF mesurés et écrans regardés (19 + 8 contrôles)** :
 
 ```
@@ -1088,6 +1094,63 @@ Pro EXPIRE       verrouille · « reste imprime » · « plus etre modifie »
 menage           8 comptes, 8 entreprises, 0 orpheline, 0 journal orphelin,
                  un seul administrateur — le vrai, et l en-tete reel intact
 ```
+
+##### ⚠️ ET LE TOUT A ÉTÉ REJOUÉ **EN PRODUCTION** le 9 oct. 2026 — 39 contrôles, 0 échec
+
+Le §3 le dit : **un `build` vert et un serveur local qui répond ne prouvent rien sur Vercel.**
+Le papier à en-tête n’avait jamais été regardé en ligne depuis sa réparation du 6 oct., et la
+promesse « gelé mais toujours imprimé » n’était prouvée qu’au composant et en base.
+
+**Parcours complet contre `www.xn-facture.com`, PDF réellement produits et mesurés (22) :**
+
+```
+deploiement      marqueur public : l article 6 des CGU est servi -> le code du
+                 jour est bien en ligne (sans quoi on mesurerait l ancien)
+aucun en-tete    adresse de l emetteur · RCCM · Page 1/1 · 4 607 octets
+pre-imprime      emetteur DISPARU · ligne legale conservee
+                 contre-epreuve : AUCUNE image dessinee
+en-tete televerse  pose par un MEMBRE (201) · emetteur absent
+                 L EN-TETE EST DESSINE SUR LA PAGE ENTIERE  595,28 x 841,89 pt
+marges           120 + 80 mm -> le document DEBORDE (Page 1/2)
+RLS              le membre ne voit QUE son en-tete
+VERROU 0021      retombe en Decouverte : l en-tete S IMPRIME TOUJOURS
+                 changer une marge -> REFUSE P0001, meme par l API de gestion
+                 TEMOIN : la meme marge passe une fois en Pro
+```
+
+**Écrans servis par la production, lus en HTTP avec le cookie de session (17) :**
+
+```
+/parametres Pro        le formulaire est OUVERT · aucune mention de verrou
+/parametres Decouverte VERROUILLEE · « reste imprime » · « Retirer l en-tete »
+                       offert · « retrait definitif » · AUCUN champ · apercu rendu
+/admin                 carte Comptes rendue · le compte jetable y figure
+                       aucun bandeau d echec · le journal porte des lignes
+export CSV             200, avec l adresse du titulaire
+menage                 8/8/8, 0 orpheline, 0 journal orphelin,
+                       un seul administrateur — le vrai
+```
+
+⚠️ **LE PREMIER CONTRÔLE EST LE MARQUEUR DE DÉPLOIEMENT, et il n’est pas décoratif.** Sans
+preuve que Vercel sert bien le code du jour, tout le reste mesurerait l’ancien et conclurait
+faux — c’est la leçon de 0020. Le marqueur doit être **public** (aucune session) et **neuf du
+jour** : ici l’article 6 des conditions d’utilisation.
+
+⚠️ **AUCUN NAVIGATEUR POUR LES ÉCRANS, et c’est suffisant** : `/parametres` et `/admin` sont
+des composants **serveur**, donc leur contenu est dans le HTML servi. Le cookie se fabrique
+depuis la réponse du `grant_type=password` —
+`sb-<projet>-auth-token=base64-<session en base64>`. Beaucoup plus rapide que CDP, et cela
+évite l’interception d’IDM sur les PDF.
+
+⚠️ **UN COMPTE JETABLE A ÉTÉ PROMU ADMINISTRATEUR** pour le contrôle de `/admin`. Révocation
+**en premier** dans le `finally`, puis relecture de `platform_admins` : il ne reste que
+l’adresse réelle. Un compte d’essai qui survit avec ce droit n’est pas un résidu, c’est un
+accès.
+
+⚠️ **COÛT ASSUMÉ DE CE CONTRÔLE :** chaque inscription jetable déclenche un email de
+confirmation vers une adresse Gmail inexistante, donc **un rebond** qui pèse un peu sur la
+réputation du domaine d’envoi. Deux comptes ici. C’est le prix d’un parcours réel ; en
+multiplier les passages ne serait pas gratuit.
 
 ⚠️ **TROIS PIÈGES PAYÉS ICI, ET LES TROIS SONT DANS MON SCRIPT, PAS DANS LE PRODUIT.**
 
@@ -2140,10 +2203,20 @@ la règle du §3 ne vaut pas que pour les données de test.
 que le témoin devait réfuter. **Lire le code de l’erreur avant de conclure**, sinon un appel
 mal écrit passe pour un comportement du produit.
 
-⚠️ **CE QUI N’A PAS ÉTÉ EXÉCUTÉ, et doit être dit** : le parcours `/admin` en production avec
-un administrateur réel, et la route d’export rendant son 503. Les deux branches sont prouvées
-au niveau du composant et de la prémisse (`error` renseigné), **pas de bout en bout**. Le
-contrôle qui trancherait est de regarder `/admin` avec un administrateur réel — §9.
+⚠️ ~~CE QUI N’A PAS ÉTÉ EXÉCUTÉ~~ — **FAIT EN PRODUCTION le 9 oct. 2026**, avec un
+administrateur jetable promu puis révoqué :
+
+```
+/admin en prod   la carte Comptes est rendue · le compte jetable y figure
+                 AUCUN bandeau « Lecture indisponible » · aucun « Journal vide »
+export CSV       200, et il porte l adresse du titulaire
+```
+
+⚠️ **LA BRANCHE D’ÉCHEC, ELLE, N’EST TOUJOURS PAS EXERCÉE EN PRODUCTION** : le bandeau de
+lecture ratée et le 503 de l’export ne se déclenchent que si une lecture échoue, ce qu’on ne
+peut pas provoquer en ligne sans casser quelque chose pour de vrai. Ils restent prouvés au
+niveau du composant (19 contrôles) et de la prémisse (`error` renseigné). **Ne pas écrire
+qu’ils sont vérifiés de bout en bout.**
 
 #### L'aller-retour entre l'espace admin et son entreprise (25 sept. 2026)
 
