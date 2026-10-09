@@ -72,15 +72,30 @@ const reponseSchema = z.object({
   dikaloLink: z.unknown().optional(),
 });
 
-/** Les liens retenus, dans l'ordre où ils seront proposés à l'écran. */
-export interface PaymentLinks {
+/**
+ * Les liens retenus, dans l'ordre où ils seront proposés à l'écran.
+ *
+ * ⚠️ **ALIAS DE TYPE, ET NON `interface` — ce n'est pas une préférence de
+ * style.** Cet objet part en paramètre `p_links` de la RPC
+ * `attach_payment_links`, dont le type généré est `Json`, c'est-à-dire
+ * `{ [key: string]: Json | undefined }` entre autres. **TypeScript ne donne
+ * d'index signature implicite qu'aux alias de type, jamais aux interfaces** :
+ * en `interface`, l'affectation échoue en `TS2322 Index signature for type
+ * 'string' is missing`.
+ *
+ * C'est resté invisible tant que le client Supabase n'était pas typé. Le
+ * générique `<Database>` posé le 9 oct. 2026 l'a fait apparaître — **la seule
+ * erreur réelle qu'il ait révélée**, et elle se corrige par un mot-clé, sans
+ * `as unknown as` : les six champs restent nommés et vérifiés partout.
+ */
+export type PaymentLinks = {
   general: string | null;
   card: string | null;
   whatsapp: string | null;
   sms: string | null;
   telegram: string | null;
   dikalo: string | null;
-}
+};
 
 export function hasAnyLink(links: PaymentLinks | null): boolean {
   return links !== null && Object.values(links).some((lien) => lien !== null);

@@ -1,22 +1,3 @@
-/**
- * Types de la base — GÉNÉRÉ, ne pas modifier à la main.
- *
- * Régénérer après toute migration :
- *   npx supabase gen types typescript --project-id tpzmmgcfpnsysaghdqrx \
- *     --schema public > lib/db/database.types.ts
- *
- * ⚠️ **CE FICHIER NE PROTÈGE PAS AUTANT QU'IL EN A L'AIR — constaté le
- * 5 oct. 2026.** `createServerClient` est appelé **sans le générique
- * `<Database>`** (`lib/supabase/server.ts`) : le client n'est donc pas typé,
- * `from('table_inexistante')` compile, et les lignes reviennent en `any`.
- * Preuve : `site_testimonials` a manqué de ce fichier du 1er au 5 octobre
- * pendant que SIX appels l'utilisaient, sans qu'une seule compilation échoue.
- *
- * Ce qui est réellement vérifié, ce sont les endroits qui nomment un alias de
- * `lib/db/types.ts` — par exemple `.single<CompanyRow>()` dans `queries.ts`.
- * Ailleurs, ce fichier est de la documentation, pas un garde-fou.
- */
-
 export type Json =
   | string
   | number
@@ -253,13 +234,6 @@ export type Database = {
             referencedRelation: "companies"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "company_members_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "admin_actors"
-            referencedColumns: ["id"]
-          },
         ]
       }
       document_counters: {
@@ -310,15 +284,7 @@ export type Database = {
           updated_at?: string
           user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "email_preferences_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: true
-            referencedRelation: "admin_actors"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       invoice_items: {
         Row: {
@@ -437,15 +403,7 @@ export type Database = {
           note?: string | null
           user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "platform_admins_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: true
-            referencedRelation: "admin_actors"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       quote_items: {
         Row: {
@@ -766,30 +724,6 @@ export type Database = {
       }
     }
     Views: {
-      admin_actors: {
-        Row: {
-          created_at: string | null
-          email: string | null
-          email_confirme: boolean | null
-          id: string | null
-          last_sign_in_at: string | null
-        }
-        Insert: {
-          created_at?: string | null
-          email?: string | null
-          email_confirme?: never
-          id?: string | null
-          last_sign_in_at?: string | null
-        }
-        Update: {
-          created_at?: string | null
-          email?: string | null
-          email_confirme?: never
-          id?: string | null
-          last_sign_in_at?: string | null
-        }
-        Relationships: []
-      }
       subscription_reminders_status: {
         Row: {
           company_id: string | null
@@ -813,6 +747,16 @@ export type Database = {
       }
     }
     Functions: {
+      admin_actors: {
+        Args: never
+        Returns: {
+          created_at: string
+          email: string
+          email_confirme: boolean
+          id: string
+          last_sign_in_at: string
+        }[]
+      }
       attach_payment_links: {
         Args: { p_links: Json; p_provider: string; p_reference: string }
         Returns: undefined
@@ -841,6 +785,10 @@ export type Database = {
           p_year: number
         }
         Returns: string
+      }
+      plan_effectif: {
+        Args: { p_company_id: string }
+        Returns: Database["public"]["Enums"]["plan_code"]
       }
       plan_label: {
         Args: { p: Database["public"]["Enums"]["plan_code"] }

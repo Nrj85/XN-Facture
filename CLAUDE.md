@@ -2042,8 +2042,12 @@ route d'export rendait un 200 avec un CSV d'apparence normale dont la colonne «
 titulaire » était vide partout** — la seule exploitable dans un fichier de prospection.
 
 ⚠️ **`tsc` NE POUVAIT RIEN**, et c’est la raison pour laquelle le défaut a vécu : le client
-Supabase n'est pas typé (§4), donc `.rpc('nom_inexistant')` compile. Une RPC révoquée, renommée
-ou non déployée se lisait comme une base vide.
+Supabase n'était pas typé (§4), donc `.rpc('nom_inexistant')` compilait. Une RPC révoquée,
+renommée ou non déployée se lisait comme une base vide.
+
+⚠️ **CE CHEMIN EST FERMÉ DEPUIS LE 9 oct. 2026** : le générique `<Database>` est posé, et `tsc`
+refuse un nom de fonction ou de table inconnu. Le contrôle des `error`, lui, reste nécessaire —
+un nom juste peut échouer pour des droits.
 
 ##### `AdminRead<T>` : un tableau vide et un échec ne sont plus la même chose
 
@@ -3302,9 +3306,13 @@ déclaré ne correspond pas et la fonction échoue **à l'exécution**.
 ordonner le résultat d'une fonction, mais je ne veux pas que le classement de cet écran
 dépende de ce détail de comportement : neuf lignes se trient en mémoire pour rien.
 
-⚠️ **`tsc` NE PEUT PAS ATTRAPER UNE RPC FAUSSE.** Le client Supabase n'est pas typé (§4) :
-`.rpc('nom_inexistant')` compile, et l'écran afficherait une liste **vide sans la moindre
-erreur**. Le seul contrôle qui tranche est de regarder `/admin` avec un administrateur réel.
+⚠️ **`tsc` NE POUVAIT PAS ATTRAPER UNE RPC FAUSSE — vrai le 8 oct., FAUX depuis le 9.** Le
+client Supabase n'était pas typé (§4) : `.rpc('nom_inexistant')` compilait, et l'écran aurait
+affiché une liste **vide sans la moindre erreur**. Le générique `<Database>` a été posé depuis,
+et `tsc` refuse désormais un nom de fonction inconnu.
+
+⚠️ **Mais regarder `/admin` avec un administrateur réel reste le contrôle qui tranche** : le
+typage vérifie le NOM, pas que la fonction rende ce qu'on croit.
 
 **Vérifié — 10 contrôles sur la fonction, 11 sur les écrans, EN PRODUCTION** :
 
@@ -3909,8 +3917,10 @@ lib/
   supabase/         config (env typé), client (navigateur), middleware,
                     server (RSC/actions + createIsolatedClient : vérifie un mot de
                     passe SANS toucher à la session — sinon elle retombe en aal1)
-  db/               database.types (GÉNÉRÉ — ⚠️ il ne PROTÈGE pas : le client n'est
-                    pas typé, voir ci-dessous),
+  db/               database.types (GÉNÉRÉ — ⚠️ **À RÉGÉNÉRER APRÈS CHAQUE
+                    MIGRATION** depuis le 9 oct. 2026 : le client est
+                    désormais typé, donc un fichier périmé REFUSE un nom
+                    que la base connaît. Voir §4),
                     letterhead (image de l'en-tête — la SEULE lecture de
                     company_letterheads ; jamais dans Company),
                     types (alias de lignes), mappers (ligne ↔ domaine),
@@ -3961,15 +3971,46 @@ message générique.
 reviendrait à faire descendre l'entreprise partout. Les factures, devis et clients ne sont
 **jamais** dans un contexte.
 
-⚠️ **`database.types.ts` NE PROTÈGE PAS AUTANT QU'IL EN A L'AIR — constaté le 5 oct. 2026.**
-`createServerClient` est appelé **sans le générique `<Database>`** (`lib/supabase/server.ts`) :
-le client n'est donc pas typé, `from('table_inexistante')` compile, et les lignes reviennent en
-`any`. **La preuve est historique, pas théorique** : `site_testimonials` a manqué entièrement du
-fichier de types du 1er au 5 octobre pendant que **six** appels l'utilisaient, sans qu'une seule
-compilation échoue. Ce qui est réellement vérifié, ce sont les endroits qui nomment un alias de
-`lib/db/types.ts` — par exemple `.single<CompanyRow>()` dans `queries.ts`. **Ailleurs, ce
-fichier est de la documentation, pas un garde-fou.** Poser le générique est une amélioration
-réelle, mais elle touche 63 sites d'appel : à décider avec l'utilisateur, pas en passant.
+⚠️ **`database.types.ts` EST DEVENU UN GARDE-FOU — le générique `<Database>` est posé depuis le
+9 oct. 2026** (`lib/supabase/server.ts`, les deux fabriques).
+
+**Ce qu'il attrape, et ce qu'il n'attrape pas — mesuré par contre-épreuve**, en écrivant des
+noms volontairement faux puis en lisant la sortie de `tsc` :
+
+```
+from('table_qui_nexiste_pas')                  TS2769  REFUSE
+rpc('rpc_qui_nexiste_pas')                     TS2345  REFUSE
+from('companies').select('colonne_inventee')           PASSE  <-- NON attrape
+```
+
+⚠️ **LES NOMS DE COLONNE DANS `select()` NE SONT PAS VÉRIFIÉS. Ne pas vendre ce garde-fou pour
+plus qu'il n'est** : il couvre les noms de TABLE et de FONCTION, pas le contenu des chaînes de
+sélection.
+
+⚠️ **CE DOCUMENT ANNONÇAIT « 63 sites d'appel : à décider avec l'utilisateur » — C'ÉTAIT FAUX,
+et ce chiffre a retardé la décision de quatre jours.** 63 était le nombre d'appelants de
+`createClient()`, et **aucun n'avait à changer** : le générique vit dans la fabrique. **Mesuré
+en le posant pour de vrai : 4 erreurs, 3 fichiers** — puis **1 seule** après régénération des
+types, parce que trois des quatre étaient les `.rpc('admin_actors')` que le fichier déclarait
+encore comme une VUE. **`tsc` aurait donc attrapé le défaut du 8 oct.**
+
+La dernière erreur était réelle et se corrige par un mot-clé : `PaymentLinks` était une
+`interface`, et **TypeScript ne donne d'index signature implicite qu'aux alias de type**,
+jamais aux interfaces — elle ne pouvait donc pas être affectée au paramètre `Json` de
+`attach_payment_links`. Passée en `type`, sans aucun `as unknown as`.
+
+⚠️ **CONSÉQUENCE OPÉRATIONNELLE : `database.types.ts` doit être RÉGÉNÉRÉ APRÈS CHAQUE
+MIGRATION.** Tant qu'il n'était que de la documentation, un fichier périmé ne gênait personne ;
+maintenant il **refusera un nom que la base connaît**. C'est exactement ce qui s'est passé ici :
+les trois erreurs `admin_actors` venaient du fichier, pas du code.
+
+```
+GET https://api.supabase.com/v1/projects/<ref>/types/typescript?included_schemas=public
+```
+
+**La preuve historique reste vraie et vaut d'être gardée** : `site_testimonials` a manqué
+entièrement du fichier de types du 1er au 5 octobre pendant que **six** appels l'utilisaient,
+sans qu'une seule compilation échoue. C'est ce qui ne peut plus arriver.
 
 **Le mappeur `lib/db/mappers.ts` est la seule frontière** où `snake_case` devient `camelCase`
 et où `qty_milli` redevient une quantité. C'est ce qui permet à `toView`, `computeTotals`,

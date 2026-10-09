@@ -1,6 +1,30 @@
 import { cookies } from 'next/headers';
 import { createServerClient } from '@supabase/ssr';
 import { publicConfig } from '@/lib/supabase/config';
+import type { Database } from '@/lib/db/database.types';
+
+/**
+ * ⚠️ **LE GÉNÉRIQUE `<Database>` EST POSÉ ICI, ET C'EST TOUT CE QU'IL FALLAIT
+ * — 9 oct. 2026.** Sans lui le client n'était pas typé : `from('table_
+ * inexistante')` compilait, `.rpc('nom_inexistant')` aussi, et les lignes
+ * revenaient en `any`. La preuve était historique, pas théorique —
+ * `site_testimonials` a manqué entièrement du fichier de types du 1er au
+ * 5 oct. pendant que SIX appels l'utilisaient, sans qu'une seule compilation
+ * échoue.
+ *
+ * ⚠️ **CE PROJET ANNONÇAIT « 63 SITES D'APPEL » : C'ÉTAIT FAUX, et le chiffre
+ * a retardé la décision.** 63 était le nombre d'appelants de `createClient()`
+ * — et **aucun n'a à changer**, puisque le générique vit dans la fabrique.
+ * Mesuré en le posant pour de vrai : **4 erreurs, 3 fichiers**. Et trois de
+ * ces quatre étaient les `.rpc('admin_actors')` corrigés à la main la veille :
+ * **`tsc` aurait attrapé le défaut du 8 oct.**
+ *
+ * ⚠️ **CONSÉQUENCE À CONNAÎTRE : `database.types.ts` cesse d'être de la
+ * documentation pour devenir un garde-fou.** Il doit donc être **régénéré
+ * après chaque migration**, sinon il refusera un nom que la base connaît :
+ *
+ *     GET /v1/projects/<ref>/types/typescript?included_schemas=public
+ */
 
 /**
  * Client Supabase côté serveur — Server Components, Server Actions, routes.
@@ -13,7 +37,7 @@ import { publicConfig } from '@/lib/supabase/config';
 export function createClient() {
   const { url, anonKey } = publicConfig();
 
-  return createServerClient(url, anonKey, {
+  return createServerClient<Database>(url, anonKey, {
     cookies: {
       // ⚠️ **L'ADAPTATEUR EST ASYNCHRONE, ET `createClient` RESTE SYNCHRONE.**
       // Next 15 a rendu `cookies()` asynchrone. Le réflexe serait de mettre un
@@ -73,7 +97,7 @@ export function createClient() {
 export function createIsolatedClient() {
   const { url, anonKey } = publicConfig();
 
-  return createServerClient(url, anonKey, {
+  return createServerClient<Database>(url, anonKey, {
     auth: { persistSession: false, autoRefreshToken: false },
     cookies: {
       getAll() {
