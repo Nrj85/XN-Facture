@@ -809,10 +809,16 @@ Il faut **Database → Read-write** à la création ; le reste peut rester en le
 jeton révoqué.
 
 ⚠️ **CE PROJET N'A AUCUN REGISTRE DE MIGRATIONS** — `supabase_migrations.schema_migrations`
-n'existe pas : **les dix-neuf migrations appliquées l'ont toutes été en SQL direct** (0017 est
-la seule du dossier à ne pas être appliquée ; il y a vingt fichiers au 8 oct. 2026). Ne pas
-créer ce registre à l'occasion d'une migration : il n'inscrirait que celle-là et laisserait
-croire que les dix-huit autres n'ont jamais été jouées.
+n'existe pas : **les vingt migrations du dossier sont appliquées, toutes en SQL direct**
+(mesuré le 9 oct. 2026 sur `information_schema`). Ne pas créer ce registre à l'occasion d'une
+migration : il n'inscrirait que celle-là et laisserait croire que les dix-neuf autres n'ont
+jamais été jouées.
+
+⚠️ **CE DÉCOMPTE A ÉTÉ FAUX DEUX FOIS, ET LA SECONDE EST DE MA MAIN.** Il annonçait
+« dix-sept » le 5 oct., puis « dix-neuf, dont 0017 non appliquée » le 8 oct. — **j'ai recopié
+l'avertissement du §4 au lieu de mesurer.** 0017 EST appliquée : `company_letterheads` existe
+et les quatre colonnes `letterhead_*` sont bien sur `companies`. **Un décompte de migrations se
+lit dans le catalogue, jamais dans ce document.**
 
 Retour client : *« beaucoup d'entreprises ont leur propre papier à en-tête »*. Deux situations
 réelles, un seul mécanisme : **le document s'efface pour ne pas imprimer par-dessus ce que le
@@ -1779,7 +1785,7 @@ réglage survit à qui déploie et depuis où. La documentation Supabase le dit 
 deployments. »
 
 ⚠️ **CE `config.toml` EST VOLONTAIREMENT MINIMAL, et NE DOIT PAS être régénéré par
-`supabase init`.** Ce projet n'utilise pas la CLI pour sa base : les dix-neuf migrations ont
+`supabase init`.** Ce projet n'utilise pas la CLI pour sa base : les vingt migrations ont
 été appliquées en SQL direct et `supabase_migrations.schema_migrations` n'existe pas. Un
 fichier complet déclarerait une pile locale que personne ne fait tourner, et inviterait à des
 commandes `supabase db` qui se compareraient à un registre inexistant.
@@ -3661,10 +3667,14 @@ supabase/
                                 `authenticated` sur la vue `admin_actors`.
                                 Un administrateur pouvait supprimer de VRAIS
                                 comptes auth.users en une requête REST
-  migrations/0017_papier_en_tete.sql ⚠️ **NON APPLIQUÉE** (jeton de gestion
-                                révoqué le 5 oct. 2026). Réglages d'en-tête sur
-                                `companies` + image dans `company_letterheads`.
-                                L'image ne remonte JAMAIS dans `Company`
+  migrations/0017_papier_en_tete.sql APPLIQUÉE — ⚠️ **cette ligne annonçait
+                                « NON APPLIQUÉE » et c'était FAUX**, hérité du
+                                jeton révoqué le 5 oct. 2026. Mesuré le
+                                9 oct. 2026 : `company_letterheads` existe et
+                                les 4 colonnes `letterhead_*` sont sur
+                                `companies`. Réglages d'en-tête sur `companies`
+                                + image dans `company_letterheads` ; l'image ne
+                                remonte JAMAIS dans `Company`
 
 docs/
   mentions-legales-questions-juriste.md  Note de relecture juridique (à emporter chez
