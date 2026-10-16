@@ -261,7 +261,13 @@ export function InvoiceForm({
               {pending && (
                 <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden />
               )}
-              {pending ? 'Enregistrement…' : 'Envoyer la facture'}
+              {/* ⚠️ **« Émettre » ET NON « Envoyer » — 16 oct. 2026.** Ce
+                  bouton crée la facture DÉJÀ émise, avec son numéro définitif.
+                  Il n'envoie aucun email : l'envoi est la phase 5. Voir
+                  l'explication en tête de `invoice-detail.tsx`. « Émettre »
+                  est le mot juste, et il s'oppose proprement à « Enregistrer
+                  comme brouillon » juste à côté. */}
+              {pending ? 'Enregistrement…' : 'Émettre la facture'}
             </Button>
           )}
         </div>
@@ -310,14 +316,14 @@ export function InvoiceForm({
 
               <Field
                 label="Numéro de facture"
-                hint="Attribué automatiquement à l’envoi. Un brouillon n’en consomme pas, ce qui évite les trous dans la séquence."
+                hint="Attribué automatiquement à l’émission. Un brouillon n’en consomme pas, ce qui évite les trous dans la séquence."
               >
                 {(props) => (
                   <Input
                     {...props}
                     readOnly
                     numeric
-                    value={invoice?.number ?? 'Attribué à l’envoi'}
+                    value={invoice?.number ?? 'Attribué à l’émission'}
                     className="bg-sand text-ink-3"
                   />
                 )}

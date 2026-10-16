@@ -1,5 +1,5 @@
 import type { ActionResult } from '@/lib/actions/result';
-import { BadgeCheck, Ban, Coins, RotateCcw, Send, Undo2 } from 'lucide-react';
+import { BadgeCheck, Ban, Coins, RotateCcw, FileCheck, Undo2 } from 'lucide-react';
 import type { StatusAction } from '@/components/documents/status-menu';
 import { sendInvoiceAction, setInvoiceStatusAction } from '@/lib/actions/invoices';
 import type { InvoiceView } from '@/lib/types';
@@ -79,7 +79,7 @@ export function invoiceStatusActions({
     draft: [
       {
         label: 'Marquer comme envoyée',
-        icon: Send,
+        icon: FileCheck,
         hint: 'Attribue le numéro définitif.',
         onSelect: () => run(() => sendInvoiceAction(invoice.id)),
       },

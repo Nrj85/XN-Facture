@@ -5,7 +5,7 @@ import type { ActionResult } from '@/lib/actions/result';
 import { useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Loader2, Pencil, Send, Trash2 } from 'lucide-react';
+import { ArrowLeft, FileCheck, Loader2, Mail, Pencil, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { ConfirmDialog } from '@/components/ui/dialog';
@@ -142,9 +142,9 @@ export function InvoiceDetail({
               {pending ? (
                 <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden />
               ) : (
-                <Send className="h-4 w-4" aria-hidden />
+                <FileCheck className="h-4 w-4" aria-hidden />
               )}
-              {pending ? 'Envoi…' : 'Envoyer'}
+              {pending ? 'Enregistrement…' : 'Marquer comme envoyée'}
             </Button>
           )}
           <StatusMenu
@@ -171,6 +171,58 @@ export function InvoiceDetail({
           </Button>
         </div>
       </header>
+
+      {/*
+        ⚠️ **XN-FACTURE N'ENVOIE RIEN À VOS CLIENTS, ET L'ÉCRAN DOIT LE DIRE —
+        16 oct. 2026.** Remonté par l'utilisateur : *« quand je clique sur
+        envoyé la facture n'arrive pas dans la boîte mail du client »*. Il avait
+        raison, et rien n'était cassé : **l'envoi par email n'existe pas**
+        (phase 5). `sendInvoiceAction` attribue le numéro et pose
+        `status = 'sent'` — c'est tout.
+
+        ⚠️ **LE DÉFAUT N'ÉTAIT PAS L'ABSENCE, C'ÉTAIT L'ÉTIQUETTE.** Le bouton
+        disait « Envoyer », affichait un avion en papier puis « Envoi… », sur
+        une facture dont le client a une adresse enregistrée. C'est le contrôle
+        mort du §6.1 **sous sa pire forme** : pas un bouton qui ne fait rien —
+        il attribue un numéro, ce qui est réel et irréversible — mais un bouton
+        **dont le nom affirme une action qu'il ne fait pas**. Et la conséquence
+        est sérieuse : on croit son client servi, et on attend un paiement pour
+        un document qu'il n'a jamais reçu.
+
+        ⚠️ **LE STATUT « Envoyée » RESTE, LUI, ET C'EST COHÉRENT** : ce n'est
+        pas une affirmation du logiciel, c'est une **déclaration de
+        l'utilisateur** — « je l'ai envoyée ». D'où « MARQUER comme envoyée ».
+
+        ⚠️ **DEUX MOMENTS, DEUX TEXTES.** Sur un brouillon, l'explication
+        arrive AVANT le clic, là où elle empêche la fausse croyance. Sur une
+        facture émise, elle reste visible tant que le paiement se fait
+        attendre — c'est précisément là qu'on se demande pourquoi le client ne
+        règle pas. Elle disparaît une fois la facture payée ou annulée : la
+        question ne se pose plus, et une note permanente deviendrait du bruit.
+      */}
+      {(invoice.status === 'draft' || invoice.status === 'sent') && (
+        <p className="flex items-start gap-2.5 rounded-card border border-line bg-surface px-4 py-3 text-[12.5px] leading-relaxed text-ink-2">
+          <Mail className="mt-0.5 h-4 w-4 shrink-0 text-ink-3" aria-hidden />
+          {invoice.status === 'draft' ? (
+            <span>
+              <strong className="font-semibold text-ink">
+                « Marquer comme envoyée » attribue le numéro définitif
+              </strong>{' '}
+              et fige la facture. <strong className="font-semibold text-ink">Cela n’envoie aucun
+              email</strong> : téléchargez ensuite le PDF pour le transmettre à votre client, par
+              email ou par WhatsApp.
+            </span>
+          ) : (
+            <span>
+              <strong className="font-semibold text-ink">
+                XN-Facture n’envoie pas vos factures à vos clients.
+              </strong>{' '}
+              Ce statut dit que <em>vous</em> l’avez envoyée. Si ce n’est pas encore fait,
+              téléchargez le PDF et transmettez-le-lui.
+            </span>
+          )}
+        </p>
+      )}
 
       {actionError && (
         <p

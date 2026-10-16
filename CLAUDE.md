@@ -498,8 +498,8 @@ transitions de statut, supprimer.
 ### Factures — `/factures`
 - **Liste** : filtres par statut avec compteurs, recherche par client ou numéro, bascule en
   cartes sous `md`, états vides distincts (aucune facture / aucun résultat).
-- **Actions rapides** par ligne : action contextuelle (envoyer un brouillon, encaisser),
-  modifier, télécharger le PDF, supprimer avec confirmation.
+- **Actions rapides** par ligne : action contextuelle (marquer un brouillon comme envoyé,
+  encaisser), modifier, télécharger le PDF, supprimer avec confirmation.
 - **Création / modification** (`/nouvelle`, `/[id]/modifier`) : client, dates, lignes
   dynamiques, TVA automatique, et **aperçu du document en temps réel** calculé par le même
   moteur que l'enregistrement.
@@ -508,8 +508,138 @@ transitions de statut, supprimer.
 - **Statuts** : brouillon → envoyée → partiellement payée → payée, plus annulée.
   « En retard » est **dérivé**, jamais stocké.
 - **Encaissements partiels** : le montant se saisit, le statut en découle.
-- **Numérotation** `FAC-AAAA-NNNN`, attribuée **à l'envoi** — un brouillon ne consomme pas de
+- **Numérotation** `FAC-AAAA-NNNN`, attribuée **à l'émission** — un brouillon ne consomme pas de
   numéro, ce qui évite les trous dans la séquence.
+
+#### XN-Facture N'ENVOIE PAS vos documents, et l'écran le dit — 16 oct. 2026
+
+⚠️ **REMONTÉ PAR L'UTILISATEUR, ET IL AVAIT RAISON** : *« lorsque j'édite une facture et que
+j'ai déjà enregistré le client avec son mail, quand je clique sur envoyé la facture n'arrive
+pas dans la boîte mail du client »*.
+
+**Rien n'était cassé. L'envoi par email N'EXISTE PAS** — c'est la phase 5. Mesuré avant de
+répondre, et non récité depuis ce document :
+
+```
+grep resend|sendEmail|nodemailer|smtp  sur lib/ app/ components/
+  -> AUCUN envoi applicatif. Que des commentaires, les pages legales,
+     et des mailto: vers NOTRE propre adresse de contact.
+sendInvoiceAction  1. attribue le numero FAC-AAAA-NNNN
+                   2. status = sent        <- c est TOUT
+```
+
+⚠️ **LE DÉFAUT N'ÉTAIT PAS L'ABSENCE, C'ÉTAIT L'ÉTIQUETTE — et c'est le §6.1 sous sa pire
+forme.** Pas un contrôle qui ne fait rien : il attribue un numéro, ce qui est réel et
+irréversible. Mais **un contrôle dont le NOM affirme une action qu'il ne fait pas.** Le bouton
+disait « Envoyer », portait un avion en papier, affichait « Envoi… », et la facture passait à
+« Envoyée » — sur un document dont le client a une adresse enregistrée. **Personne ne peut en
+conclure autre chose.** Et la conséquence est sérieuse : on croit son client servi, et on
+attend un paiement pour un document qu'il n'a jamais reçu.
+
+C'est le défaut de la grille tarifaire du 7 oct. (« Relances par email » vendu sans
+implémentation), **mais à l'intérieur du produit**.
+
+##### Ce qui a été renommé, et pourquoi pas tout
+
+| Où | Avant | Après |
+|---|---|---|
+| Détail facture / devis | « Envoyer » · « Envoi… » · icône avion | « Marquer comme envoyée » · « Enregistrement… » · icône document-coche |
+| Action rapide de la liste | « Envoyer la facture de X » | « Marquer comme envoyée la facture de X » |
+| Formulaire de création | « Envoyer la facture » | « **Émettre** la facture » |
+| Fenêtre de confirmation | « Facture créée et **envoyée** » | « Facture **émise** » |
+| Maquette de la landing | « Envoyer » | « Émettre » |
+| Partout | « attribué à l'envoi » | « attribué à l'émission » |
+
+⚠️ **LES DEUX MENUS DE STATUT DISAIENT DÉJÀ JUSTE** — « Marquer comme envoyée » /
+« Marquer comme envoyé », avec le bon libellé d'aide. **Le bon mot était donc déjà choisi**, et
+seuls les contrôles les PLUS VISIBLES mentaient. Le renommage les aligne sur eux, il n'invente
+rien.
+
+⚠️ **« Envoyer le lien » DU MOT DE PASSE OUBLIÉ N'EST PAS TOUCHÉ : celui-là est VRAI.** Il
+envoie réellement un email. **Vérifier avant de renommer en masse** — un grep sur « Envoyer »
+rend aussi les contrôles honnêtes.
+
+⚠️ **LE STATUT « Envoyée » RESTE, ET CE N'EST PAS UNE INCOHÉRENCE.** Ce n'est pas une
+affirmation du logiciel : c'est une **déclaration de l'utilisateur** — « je l'ai envoyée ».
+D'où « MARQUER comme envoyée ». Renommer l'état aurait touché le badge, les filtres, les
+statistiques et l'i18n, pour supprimer un mot qui, à cette place, est juste.
+
+⚠️ **LES DEVIS ONT ÉTÉ TRAITÉS AUSSI, et il le fallait.** Le problème a été signalé sur une
+facture, mais les devis portaient le mot à l'identique : **corriger la moitié d'un défaut
+laisse l'autre moitié tromper**, et rend le produit incohérent.
+
+##### La bande qui dit le vrai chemin
+
+Renommer ne suffisait pas : **rien à l'écran ne disait comment transmettre réellement le
+document.** Une bande apparaît donc sur le détail, et **son texte dépend de l'état** :
+
+```
+brouillon  « Marquer comme envoyee » attribue le numero definitif et fige la
+           facture. CELA N ENVOIE AUCUN EMAIL : telechargez ensuite le PDF
+           pour le transmettre a votre client, par email ou par WhatsApp.
+emise      XN-FACTURE N ENVOIE PAS VOS FACTURES A VOS CLIENTS. Ce statut dit
+           que VOUS l avez envoyee. Si ce n est pas encore fait, telechargez
+           le PDF et transmettez-le-lui.
+```
+
+⚠️ **DEUX MOMENTS, DEUX TEXTES, ET AUCUN AUTRE.** Sur un brouillon, l'explication arrive
+**avant** le clic — là où elle empêche la fausse croyance. Sur un document émis, elle reste
+visible **tant que le paiement se fait attendre**, c'est-à-dire précisément quand on se demande
+pourquoi le client ne règle pas. Elle **disparaît** une fois payé ou annulé : la question ne se
+pose plus, et une note permanente deviendrait du bruit.
+
+⚠️ **LA FENÊTRE DE CONFIRMATION ÉTAIT DÉJÀ À MOITIÉ HONNÊTE** — son corps disait « Téléchargez
+le PDF pour le transmettre à votre client ». C'est son **titre** qui mentait. **Quand un titre
+et un corps se contredisent, c'est le titre qu'on retient** : il est plus gros et lu en premier.
+
+**Vérifié à l'écran, les deux états, 1440 et 500 px** — page d'aperçu temporaire montée hors du
+groupe `(app)`, supprimée aussitôt :
+
+```
+brouillon  bouton « Marquer comme envoyee » · icone document-coche
+           la bande annonce le numero ET dit qu aucun email ne part
+           l apercu dit « Numero attribue a l emission »
+emise      plus aucun bouton de transition · badge « Envoyee »
+           la bande dit que XN-Facture n envoie rien, et que le statut
+           est une DECLARATION
+500 px     la rangee passe sur deux lignes, aucun debordement,
+           aucune troncature
+landing    inchangee : ○ / a 1,86 ko
+```
+
+⚠️ **TROIS PIÈGES PAYÉS POUR OBTENIR CETTE CAPTURE.**
+
+1. **UN `200` QUI NE PROUVAIT RIEN.** Ma page d'aperçu n'était pas dans `PUBLIC_PATHS` : le
+   middleware renvoyait un **307** vers `/connexion`, et `Invoke-WebRequest` suit les
+   redirections par défaut. J'ai lu « 200 » et capturé… l'écran de connexion. **Affirmer le
+   code réel avec `-MaximumRedirection 0`** — c'est exactement le piège que mes propres notes
+   venaient de consigner pour `fetch`.
+2. **Pas besoin de toucher au middleware :** `isPublic` teste `startsWith(path + '/')`, donc
+   une page posée sous `/conditions/…` est publique **sans aucune modification à annuler**.
+3. **`.next/types` A GARDÉ LA PAGE SUPPRIMÉE** et `tsc` a échoué sur trois fichiers générés
+   visant un fichier qui n'existait plus. Ce n'est pas le code : c'est le piège du `.next`
+   périmé du §9. **Rebâtir d'abord.**
+
+##### ⚠️ CE QUI N'A PAS PU ÊTRE VÉRIFIÉ, ET POURQUOI
+
+**Le jeton de gestion Supabase est RÉVOQUÉ** — mesuré le 16 oct. 2026 :
+
+```
+GET /v1/projects/<ref>   401 Invalid access token
+GET /v1/projects         401        <- la sonde qui discriminerait un jeton
+                                       a portee projet echoue AUSSI
+```
+
+Conséquence : **aucun parcours contre la base réelle n'a pu être joué**, ni en local ni en
+production. Le contrôle visuel est passé par une page d'aperçu à props synthétiques — ce qui
+prouve le **rendu des deux états**, et non le parcours réel. **Ne pas écrire « vérifié de bout
+en bout »** pour ce changement.
+
+⚠️ **ET UN COMPTE JETABLE EST RESTÉ EN BASE**, le ménage passant par cette même API :
+`557e1d38-f23e-4013-a87d-0a05916ec139`, adresse en `envoi.*@gmail.com`. Il est **NON confirmé**
+(l'étape de confirmation a échoué la première), donc il ne peut pas se connecter — mais il doit
+être supprimé. **Le relever au prochain ménage**, et rejouer le parcours réel dès que le jeton
+est renouvelé.
 
 ### Devis — `/devis`
 Même squelette que les factures, avec trois différences de fond : une **date de validité** au
@@ -4498,7 +4628,7 @@ Prises avec l'utilisateur. **Ne pas les rouvrir sans le lui demander.**
 | Périmètre v1 | Paiements partiels, PDF + email, devis, avoirs, relances |
 | Devise et TVA | Configurables par entreprise (XAF et 19,25 % par défaut) |
 | Modification d'une facture envoyée | **Libre.** Choix explicite de l'utilisateur, contre ma recommandation de la verrouiller |
-| Numéro de facture | Attribué **à l'envoi**, pas à la création |
+| Numéro de facture | Attribué **à l'émission**, pas à la création |
 | Devise par facture | Pas de sélecteur — elle vient des paramètres |
 | Préfixe de devis | Constante `DEV`, non configurable (contrairement au préfixe de facture, qui porte une contrainte comptable) |
 

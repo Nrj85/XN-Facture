@@ -9,8 +9,8 @@ import {
   BadgeCheck,
   FileCheck,
   FileOutput,
+  Mail,
   Pencil,
-  Send,
   ThumbsDown,
   Trash2,
   Undo2,
@@ -124,7 +124,7 @@ export function QuoteDetail({
     draft: [
       {
         label: 'Marquer comme envoyé',
-        icon: Send,
+        icon: FileCheck,
         hint: 'Attribue le numéro définitif.',
         onSelect: () => run(() => sendQuoteAction(quote.id)),
       },
@@ -182,8 +182,8 @@ export function QuoteDetail({
               disabled={pending}
               className="gap-1.5"
             >
-              <Send className="h-4 w-4" aria-hidden />
-              {pending ? 'Envoi…' : 'Envoyer'}
+              <FileCheck className="h-4 w-4" aria-hidden />
+              {pending ? 'Enregistrement…' : 'Marquer comme envoyé'}
             </Button>
           )}
           {quote.displayStatus === 'accepted' && (
@@ -231,6 +231,41 @@ export function QuoteDetail({
           </Button>
         </div>
       </header>
+
+      {/*
+        ⚠️ **MÊME DÉFAUT QUE SUR LA FACTURE, MÊME CORRECTIF — 16 oct. 2026.**
+        Le bouton disait « Envoyer » et affichait « Envoi… » : il attribue le
+        numéro et pose le statut, **il n'envoie aucun email**. L'envoi est la
+        phase 5. Voir l'explication longue en tête de `invoice-detail.tsx`.
+
+        ⚠️ **NE PAS NE TRAITER QUE LA FACTURE.** L'utilisateur a signalé le
+        problème sur une facture, mais les devis portaient le mot à
+        l'identique — corriger la moitié d'un défaut laisse l'autre moitié
+        tromper, et rend l'ensemble incohérent.
+      */}
+      {(quote.status === 'draft' || quote.status === 'sent') && !quote.invoiceId && (
+        <p className="flex items-start gap-2.5 rounded-card border border-line bg-surface px-4 py-3 text-[12.5px] leading-relaxed text-ink-2">
+          <Mail className="mt-0.5 h-4 w-4 shrink-0 text-ink-3" aria-hidden />
+          {quote.status === 'draft' ? (
+            <span>
+              <strong className="font-semibold text-ink">
+                « Marquer comme envoyé » attribue le numéro définitif
+              </strong>{' '}
+              et fige le devis. <strong className="font-semibold text-ink">Cela n’envoie aucun
+              email</strong> : téléchargez ensuite le PDF pour le transmettre à votre client, par
+              email ou par WhatsApp.
+            </span>
+          ) : (
+            <span>
+              <strong className="font-semibold text-ink">
+                XN-Facture n’envoie pas vos devis à vos clients.
+              </strong>{' '}
+              Ce statut dit que <em>vous</em> l’avez envoyé. Si ce n’est pas encore fait,
+              téléchargez le PDF et transmettez-le-lui.
+            </span>
+          )}
+        </p>
+      )}
 
       {convertError && (
         <p

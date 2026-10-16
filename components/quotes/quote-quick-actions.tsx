@@ -2,7 +2,7 @@
 
 import { useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { BadgeCheck, FileOutput, Pencil, Send, Trash2 } from 'lucide-react';
+import { BadgeCheck, FileOutput, Pencil, FileCheck, Trash2 } from 'lucide-react';
 import { IconButton } from '@/components/ui/icon-button';
 import { DownloadPdfIconButton } from '@/components/pdf/download-pdf-button';
 import { pdfFileName } from '@/lib/pdf/payload';
@@ -47,8 +47,10 @@ export function QuoteQuickActions({
     <div className={cn('flex items-center gap-0.5', className)}>
       {status === 'draft' && (
         <IconButton
-          icon={Send}
-          label={`Envoyer le devis de ${quote.clientName}`}
+          icon={FileCheck}
+          // ⚠️ **PAS « Envoyer » — ce bouton n'envoie rien** (voir
+          // `invoice-detail.tsx`). Il attribue le numéro et pose le statut.
+          label={`Marquer comme envoyé le devis de ${quote.clientName}`}
           tone="brand"
           disabled={pending}
           onClick={(event) => {

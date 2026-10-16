@@ -231,7 +231,10 @@ export function QuoteForm({
               {pending && (
                 <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden />
               )}
-              {pending ? 'Enregistrement…' : 'Envoyer le devis'}
+              {/* ⚠️ « Émettre » et non « Envoyer » — ce bouton crée le devis
+                  déjà émis, il n'envoie aucun email. Voir `invoice-form.tsx`
+                  et l'explication en tête de `invoice-detail.tsx`. */}
+              {pending ? 'Enregistrement…' : 'Émettre le devis'}
             </Button>
           )}
         </div>
@@ -280,14 +283,14 @@ export function QuoteForm({
 
               <Field
                 label="Numéro de devis"
-                hint="Attribué automatiquement à l’envoi, sur une séquence distincte de celle des factures."
+                hint="Attribué automatiquement à l’émission, sur une séquence distincte de celle des factures."
               >
                 {(props) => (
                   <Input
                     {...props}
                     readOnly
                     numeric
-                    value={quote?.number ?? 'Attribué à l’envoi'}
+                    value={quote?.number ?? 'Attribué à l’émission'}
                     className="bg-sand text-ink-3"
                   />
                 )}

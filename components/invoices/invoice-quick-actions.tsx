@@ -3,7 +3,7 @@
 import { usePlanLimit } from '@/components/subscription/plan-limit';
 import { useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { BadgeCheck, Pencil, Send, Trash2 } from 'lucide-react';
+import { BadgeCheck, Pencil, FileCheck, Trash2 } from 'lucide-react';
 import { IconButton } from '@/components/ui/icon-button';
 import { DownloadPdfIconButton } from '@/components/pdf/download-pdf-button';
 import { pdfFileName } from '@/lib/pdf/payload';
@@ -60,8 +60,12 @@ export function InvoiceQuickActions({
     <div className={cn('flex items-center gap-0.5', className)}>
       {isDraft && (
         <IconButton
-          icon={Send}
-          label={`Envoyer la facture de ${invoice.clientName}`}
+          icon={FileCheck}
+          // ⚠️ **PAS « Envoyer » — ce bouton n'envoie rien.** Il attribue le
+          // numéro définitif et pose le statut. Voir l'explication en tête de
+          // `invoice-detail.tsx` : le nom d'un contrôle ne doit pas affirmer
+          // une action qu'il ne fait pas.
+          label={`Marquer comme envoyée la facture de ${invoice.clientName}`}
           tone="brand"
           disabled={pending}
           onClick={(event) => {

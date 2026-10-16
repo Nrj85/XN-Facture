@@ -20,21 +20,33 @@ const COPY: Record<CreationNotice, Record<'invoice' | 'quote', { title: string; 
   created: {
     invoice: {
       title: 'Facture créée avec succès',
-      body: 'Elle est enregistrée comme brouillon. Son numéro définitif lui sera attribué à l’envoi.',
+      body: 'Elle est enregistrée comme brouillon. Son numéro définitif lui sera attribué à l’émission.',
     },
     quote: {
       title: 'Devis créé avec succès',
-      body: 'Il est enregistré comme brouillon. Son numéro définitif lui sera attribué à l’envoi.',
+      body: 'Il est enregistré comme brouillon. Son numéro définitif lui sera attribué à l’émission.',
     },
   },
+  /*
+    ⚠️ **LES DEUX TITRES DISAIENT « créée et ENVOYÉE » — 16 oct. 2026.**
+    Remonté par l'utilisateur : la facture n'arrivait pas dans la boîte de son
+    client. Rien n'était cassé — **l'envoi par email n'existe pas** (phase 5).
+    Le corps du message était déjà honnête (« Téléchargez le PDF pour le
+    transmettre »), mais **un titre et un corps qui se contredisent, c'est le
+    titre qu'on retient** : il est plus gros, il est lu en premier, et il
+    affirmait l'acte accompli.
+
+    C'est le moment le PLUS important pour dire la vérité : juste après le
+    geste, quand la personne décide s'il lui reste quelque chose à faire.
+  */
   sent: {
     invoice: {
-      title: 'Facture créée et envoyée',
-      body: 'Son numéro définitif est attribué. Téléchargez le PDF pour le transmettre à votre client.',
+      title: 'Facture émise',
+      body: 'Son numéro définitif est attribué. XN-Facture ne l’envoie pas à votre client : téléchargez le PDF et transmettez-le-lui, par email ou par WhatsApp.',
     },
     quote: {
-      title: 'Devis créé et envoyé',
-      body: 'Son numéro définitif est attribué. Téléchargez le PDF pour le transmettre à votre client.',
+      title: 'Devis émis',
+      body: 'Son numéro définitif est attribué. XN-Facture ne l’envoie pas à votre client : téléchargez le PDF et transmettez-le-lui, par email ou par WhatsApp.',
     },
   },
   updated: {
@@ -115,7 +127,7 @@ export function DocumentCreatedDialog({
           <div className="flex items-baseline justify-between gap-4">
             <dt className="text-[12.5px] text-ink-2">Numéro</dt>
             <dd className="tabular text-[13px] font-medium text-ink">
-              {number ?? <span className="text-ink-3">Attribué à l’envoi</span>}
+              {number ?? <span className="text-ink-3">Attribué à l’émission</span>}
             </dd>
           </div>
           <div className="flex items-center justify-between gap-4">

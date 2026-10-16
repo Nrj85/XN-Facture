@@ -93,7 +93,7 @@ export function AppPreview() {
 
             <div className={styles.docActions} data-reveal style={rang(9)}>
               <span className={styles.docPrimary}>Télécharger le PDF</span>
-              <span className={styles.docSecondary}>Envoyer</span>
+              <span className={styles.docSecondary}>Émettre</span>
             </div>
           </div>
         </div>

@@ -119,7 +119,7 @@ export function InvoicePreview({
           <p className="mt-2 text-[11.5px] text-ink-3">
             Numéro{' '}
             <span className="tabular font-semibold text-ink-2">
-              {number ?? 'attribué à l’envoi'}
+              {number ?? 'attribué à l’émission'}
             </span>
           </p>
         </div>
