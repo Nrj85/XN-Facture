@@ -622,24 +622,51 @@ landing    inchangee : ○ / a 1,86 ko
 
 ##### ⚠️ CE QUI N'A PAS PU ÊTRE VÉRIFIÉ, ET POURQUOI
 
-**Le jeton de gestion Supabase est RÉVOQUÉ** — mesuré le 16 oct. 2026 :
-
-```
-GET /v1/projects/<ref>   401 Invalid access token
-GET /v1/projects         401        <- la sonde qui discriminerait un jeton
-                                       a portee projet echoue AUSSI
-```
-
+Le 16 oct. 2026, le jeton de gestion Supabase répondait `401 Invalid access token`.
 Conséquence : **aucun parcours contre la base réelle n'a pu être joué**, ni en local ni en
 production. Le contrôle visuel est passé par une page d'aperçu à props synthétiques — ce qui
-prouve le **rendu des deux états**, et non le parcours réel. **Ne pas écrire « vérifié de bout
-en bout »** pour ce changement.
+prouve le **rendu des deux états**, et non le parcours réel.
 
-⚠️ **ET UN COMPTE JETABLE EST RESTÉ EN BASE**, le ménage passant par cette même API :
-`557e1d38-f23e-4013-a87d-0a05916ec139`, adresse en `envoi.*@gmail.com`. Il est **NON confirmé**
-(l'étape de confirmation a échoué la première), donc il ne peut pas se connecter — mais il doit
-être supprimé. **Le relever au prochain ménage**, et rejouer le parcours réel dès que le jeton
-est renouvelé.
+⚠️ **LE JETON A ÉTÉ RENOUVELÉ LE 20 oct. 2026, ET LE MÉNAGE EST FAIT** — le compte jetable
+`557e1d38-f23e-4013-a87d-0a05916ec139` (`envoi.zbo1d6@gmail.com`) est supprimé, contre-épreuves
+comprises : 0 reste sous cet identifiant, 0 compte d'essai restant, 9 comptes · 9 entreprises ·
+9 appartenances · 0 orpheline · 0 journal orphelin · un seul administrateur, le vrai.
+
+⚠️ **MAIS LE PARCOURS RÉEL DE CE RENOMMAGE N'A TOUJOURS PAS ÉTÉ JOUÉ.** Ne pas écrire
+« vérifié de bout en bout » pour le changement de libellé tant qu'un compte réel n'a pas suivi
+le chemin complet jusqu'au PDF.
+
+###### Renouveler ce jeton — pièges mesurés le 20 oct. 2026
+
+⚠️ **LE PRESET « Read-only » ÉCRASE SILENCIEUSEMENT LE RÉGLAGE QUI COMPTE.** L'écran de
+création propose des presets ; choisir `Read-only` configure une trentaine de permissions d'un
+coup **et repose `Database` sur `Read`** — exactement l'état qui fait échouer tout DDL en
+`25006`. Il faut donc, APRÈS le preset, rouvrir la section `Database` et remettre la ligne
+`Database` sur **`Read-write`** ; le libellé du preset rebascule alors sur `Custom`, et c'est
+le signe que la correction a pris.
+
+⚠️ **`Migrations` RESTE SUR `None`, ET CE N'EST PAS UN OUBLI** — ce projet n'a aucun registre
+de migrations, elles sont appliquées en SQL direct par `POST /database/query`, qui relève de la
+permission `Database`. De même, **`Application services` reste entièrement sur `None`** :
+Storage et Realtime ne sont utilisés nulle part (mesuré par `grep` sur `lib/`, `app/`,
+`components/` : zéro occurrence), et **`Auth` est laissé fermé délibérément** — l'endpoint
+`GET /config/auth` rend les réglages SMTP, or le mot de passe SMTP de ce projet EST la clé
+d'API Resend. On n'accorde pas un droit dont on ignore ce qu'il expose.
+
+⚠️ **LA SONDE QUI TRANCHE EST UN VRAI DDL, PAS L'AUTHENTIFICATION.** Un jeton en lecture répond
+200 à `GET /v1/projects/<ref>` et 201 à un `select` : les deux premiers contrôles ne
+discriminent rien. Le seul qui mord est un `create table` suivi d'un `drop table`, avec sa
+contre-épreuve de ménage.
+
+⚠️ **ET LA NOTE DU 5 oct. SUR `GET /v1/projects` NE S'EST PAS REPRODUITE.** Elle annonce qu'un
+jeton à portée projet peut faire répondre 401 à la liste du compte ; **le 20 oct., avec un
+jeton à portée Project limité à XN-Facture, cet appel a rendu 200.** Le conseil reste bon —
+sonder l'endpoint par projet, qui est sans ambiguïté — mais **ne pas lire un 401 sur la liste
+comme une preuve de portée projet** : ce n'est pas systématique.
+
+⚠️ **CE JETON EXPIRE.** Celui du 20 oct. est à 7 jours. Une expiration et une révocation
+donnent **le même `401`**, indiscernables de l'extérieur : avant de conclure à une révocation,
+vérifier la date d'expiration dans le tableau de bord.
 
 ### Devis — `/devis`
 Même squelette que les factures, avec trois différences de fond : une **date de validité** au
