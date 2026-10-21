@@ -11,6 +11,7 @@ import { ConfirmDialog } from '@/components/ui/dialog';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Input } from '@/components/ui/input';
 import { StatusBadge } from '@/components/ui/status-badge';
+import { AccountingExportButton } from '@/components/invoices/accounting-export-button';
 import { InvoiceQuickActions } from '@/components/invoices/invoice-quick-actions';
 import { formatDate } from '@/lib/format';
 import { matchesQuery, STATUS_LABELS } from '@/lib/invoices';
@@ -29,7 +30,25 @@ function filterLabel(filter: Filter): string {
   return filter === 'all' ? 'Toutes' : STATUS_LABELS[filter];
 }
 
-export function InvoiceList({ views }: { views: InvoiceView[] }) {
+export function InvoiceList({
+  views,
+  /**
+   * L'export comptable est-il ouvert à la formule EFFECTIVE de l'entreprise ?
+   *
+   * ⚠️ Résolu côté serveur par `effectivePlan()` : un abonnement Entreprise
+   * expiré vaut Découverte. Le calculer ici demanderait de faire descendre
+   * l'abonnement jusqu'à la liste, et la règle d'expiration existe déjà en
+   * trois exemplaires — on n'en crée pas un quatrième.
+   *
+   * ⚠️ **CE BOOLÉEN N'AUTORISE RIEN, il décide de l'affichage.** La route
+   * `/api/comptabilite/export` refait le contrôle côté serveur, et c'est elle
+   * qui tranche.
+   */
+  accountingAllowed,
+}: {
+  views: InvoiceView[];
+  accountingAllowed: boolean;
+}) {
   const router = useRouter();
   const { formatMoney } = useCompany();
   const t = useT();
@@ -70,6 +89,17 @@ export function InvoiceList({ views }: { views: InvoiceView[] }) {
         <p className="mt-2 text-sm text-ink-2">
           {views.length} facture{views.length > 1 ? 's' : ''} au total.
         </p>
+
+        {/*
+          Posé dans l'en-tête, pas dans la carte : l'export porte TOUTES les
+          factures, jamais le résultat des filtres juste en dessous. Le mettre
+          à côté d'eux laisserait croire qu'il en dépend — c'est l'erreur
+          signalée sur l'export d'administration, dont le libellé a dû porter
+          le mot « tout » pour s'en défendre.
+        */}
+        <div className="mt-4">
+          <AccountingExportButton allowed={accountingAllowed} />
+        </div>
       </header>
 
       <Card>

@@ -178,7 +178,51 @@ export interface OctroiRendu {
    * suivent aucune commande.
    */
   orderSettled: boolean;
+  /** Vrai si un versement a été inscrit au journal des paiements. */
+  paymentRecorded: boolean;
 }
+
+/** Les quatre canaux de règlement réels, plus « autre ». */
+export const CANAUX = ['mtn_momo', 'orange_money', 'bank', 'cash', 'autre'] as const;
+export type Canal = (typeof CANAUX)[number];
+
+/**
+ * Un versement **réellement reçu**, déclaré par l'exploitant.
+ *
+ * ⚠️ **LA RÉFÉRENCE N'EST PAS DÉCORATIVE : c'est elle qui empêche les
+ * doublons.** `subscription_payments` porte `unique (provider,
+ * provider_reference)` — saisir deux fois la même transaction est refusé par
+ * la BASE, pas par le formulaire. Une référence vide rendrait cette contrainte
+ * inopérante, d'où son caractère obligatoire.
+ */
+export interface PaiementSaisi {
+  /** Entier de francs. Le FCFA n'a pas de centimes. */
+  amount: number;
+  channel: Canal;
+  /** Le numéro de transaction de l'opérateur, ou la référence du virement. */
+  reference: string;
+}
+
+/**
+ * ⚠️ **LES BORNES REPRENNENT CELLES DE LA MIGRATION 0023.** Si l'une bouge,
+ * l'autre doit bouger — sinon le formulaire accepte ce que la base refuse.
+ */
+const paiementSchema = z.object({
+  amount: z
+    .number()
+    .int('Le montant se saisit en francs entiers : le FCFA n’a pas de centimes.')
+    .min(1, 'Le montant reçu doit être supérieur à zéro.')
+    .max(100_000_000, 'Montant hors bornes.'),
+  channel: z.enum(CANAUX),
+  reference: z
+    .string()
+    .trim()
+    .min(
+      1,
+      'La référence du versement est obligatoire : c’est elle qui empêche de saisir deux fois le même paiement.',
+    )
+    .max(100, 'Référence trop longue : 100 caractères au maximum.'),
+});
 
 /**
  * Octroyer une formule à une entreprise — réservé aux administrateurs.
@@ -202,6 +246,15 @@ export async function grantPlanAction(
   companyId: string,
   plan: string,
   months: number,
+  /**
+   * Un versement réellement reçu, ou `null` quand il n'y en a pas.
+   *
+   * ⚠️ **FACULTATIF, ET IL DOIT LE RESTER.** Un octroi peut suivre un
+   * virement, mais aussi un geste commercial, une correction d'erreur ou un
+   * essai. Le rendre obligatoire forcerait à inventer un montant — exactement
+   * ce que 0022 refusait de faire, et ce qui fausserait le chiffre d'affaires.
+   */
+  paiement: PaiementSaisi | null = null,
 ): Promise<ActionResult<OctroiRendu>> {
   if (!(await isPlatformAdmin())) {
     return fail('Réservé aux administrateurs de plateforme.');
@@ -211,6 +264,29 @@ export async function grantPlanAction(
   if (!parsed.success) return fail(firstIssue(parsed.error));
 
   const supabase = createClient();
+
+  // ⚠️ **LE PAIEMENT S'ENREGISTRE AVANT L'OCTROI, et l'ordre n'est pas
+  // indifférent.** C'est la règle déjà retenue pour le webhook Tara : si
+  // l'insertion est refusée par `unique (provider, provider_reference)`, c'est
+  // que ce versement a déjà été traité — et on s'arrête **avant** de prolonger
+  // une seconde fois. L'ordre inverse prolongerait l'abonnement une fois par
+  // saisie en double, et c'est la saisie en double qu'on cherche à attraper.
+  let paiementInscrit = false;
+  if (paiement) {
+    const p = paiementSchema.safeParse(paiement);
+    if (!p.success) return fail(firstIssue(p.error));
+
+    const { error: erreurPaiement } = await supabase.rpc('admin_record_payment', {
+      p_company: parsed.data.companyId,
+      p_plan: parsed.data.plan,
+      p_amount: p.data.amount,
+      p_channel: p.data.channel,
+      p_reference: p.data.reference,
+    });
+    if (erreurPaiement) return failFromDb(erreurPaiement);
+    paiementInscrit = true;
+  }
+
   const { data, error } = await supabase.rpc('admin_set_plan', {
     p_company: parsed.data.companyId,
     p_plan: parsed.data.plan,
@@ -242,5 +318,6 @@ export async function grantPlanAction(
     plan: ligne.formule_posee,
     expiresAt: ligne.echeance_posee ?? null,
     orderSettled: ligne.commande_soldee,
+    paymentRecorded: paiementInscrit,
   });
 }

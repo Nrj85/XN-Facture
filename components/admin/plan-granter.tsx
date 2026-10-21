@@ -6,7 +6,9 @@ import { Button } from '@/components/ui/button';
 import { Combobox } from '@/components/ui/combobox';
 import { Dialog } from '@/components/ui/dialog';
 import { Field } from '@/components/ui/field';
-import { grantPlanAction } from '@/lib/actions/subscription';
+import { Input } from '@/components/ui/input';
+import { Switch } from '@/components/ui/switch';
+import { grantPlanAction, type Canal } from '@/lib/actions/subscription';
 import { formatDateLong } from '@/lib/format';
 import { formatAmount } from '@/lib/money';
 import { PLANS, planByCode } from '@/lib/plans';
@@ -34,6 +36,18 @@ const DUREES = [
   { value: '12', label: '12 mois', hint: 'Une année complète' },
 ];
 
+/** Les canaux par lesquels l'argent arrive réellement, ici. */
+const CANAUX_LABELS: { value: Canal; label: string; hint?: string }[] = [
+  { value: 'mtn_momo', label: 'MTN Mobile Money' },
+  { value: 'orange_money', label: 'Orange Money' },
+  { value: 'bank', label: 'Virement bancaire' },
+  { value: 'cash', label: 'Espèces' },
+  // ⚠️ « Autre » existe pour ne pas forcer un mensonge quand le canal n'est
+  // aucun des quatre. Sans lui, on choisirait « virement » au hasard, et le
+  // journal des paiements porterait une information fausse.
+  { value: 'autre', label: 'Autre', hint: 'Précisez dans la référence' },
+];
+
 export function PlanGranter({
   company,
   onClose,
@@ -48,6 +62,19 @@ export function PlanGranter({
   const [fait, setFait] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
+  /**
+   * Saisie du versement — **repliée par défaut, et facultative**.
+   *
+   * ⚠️ Un octroi peut suivre un virement, mais aussi un geste commercial, une
+   * correction d'erreur ou un essai. La rendre obligatoire forcerait à
+   * inventer un montant, ce qui fausserait le chiffre d'affaires — exactement
+   * ce que 0022 refusait de faire.
+   */
+  const [avecPaiement, setAvecPaiement] = useState(false);
+  const [montant, setMontant] = useState('');
+  const [canal, setCanal] = useState<string>('mtn_momo');
+  const [reference, setReference] = useState('');
+
   // À chaque ouverture on repart de l'état réel de l'entreprise, plutôt que de
   // garder le choix précédent : sans cela, octroyer Pro à une société puis
   // ouvrir la suivante proposerait Pro par défaut, et un clic distrait
@@ -58,6 +85,10 @@ export function PlanGranter({
     setMois('1');
     setErreur(null);
     setFait(null);
+    setAvecPaiement(false);
+    setMontant('');
+    setCanal('mtn_momo');
+    setReference('');
   }, [company]);
 
   if (!company) return null;
@@ -69,7 +100,17 @@ export function PlanGranter({
   const valider = () => {
     setErreur(null);
     startTransition(async () => {
-      const r = await grantPlanAction(company.id, plan, Number(mois));
+      const r = await grantPlanAction(
+        company.id,
+        plan,
+        Number(mois),
+        // ⚠️ `Number('')` vaut 0, pas NaN : sans ce repli le serveur recevrait
+        // un montant de zéro, que la base refuserait avec un message correct
+        // mais déroutant sur un champ laissé vide par inadvertance.
+        avecPaiement
+          ? { amount: Number(montant.replace(/[^0-9]/g, '')) || 0, channel: canal as Canal, reference }
+          : null,
+      );
       if (!r.ok) {
         setErreur(r.error);
         return;
@@ -78,11 +119,13 @@ export function PlanGranter({
       // aurait recalculée ici. La règle « prolonger ou repartir » vit dans
       // 0022 : la refaire à l'écran produirait un jour une date affichée qui
       // n'est pas celle qui est enregistrée.
+      const base = r.data.expiresAt
+        ? `${planByCode(r.data.plan).name} jusqu’au ${formatDateLong(r.data.expiresAt)}.`
+        : 'Formule Découverte rétablie, sans échéance.';
       setFait(
-        r.data.expiresAt
-          ? `${planByCode(r.data.plan).name} jusqu’au ${formatDateLong(r.data.expiresAt)}.` +
-            (r.data.orderSettled ? ' La commande en attente a été soldée.' : '')
-          : 'Formule Découverte rétablie, sans échéance.',
+        base +
+          (r.data.orderSettled ? ' La commande en attente a été soldée.' : '') +
+          (r.data.paymentRecorded ? ' Le versement est inscrit au journal des paiements.' : ''),
       );
     });
   };
@@ -177,15 +220,71 @@ export function PlanGranter({
           )}
 
           {/*
-            Dire ce que le geste N'EST PAS. Un administrateur qui octroie après
-            un virement mobile money pourrait croire que le chiffre d'affaires
-            s'en trouve mis à jour : il ne l'est pas, et c'est délibéré —
-            `subscription_payments` ne porte que de l'argent constaté.
+            ⚠️ **LA SAISIE DU VERSEMENT EST FACULTATIVE, ET REPLIÉE PAR
+            DÉFAUT.** Le chiffre d'affaires ne doit porter que de l'argent
+            réellement reçu : c'est l'exploitant qui le déclare, le logiciel ne
+            le devine jamais. Un octroi sans versement reste parfaitement
+            légitime — geste commercial, correction, essai.
           */}
+          <div className="space-y-3 rounded-[10px] border border-line bg-paper px-3 py-3">
+            <Switch
+              checked={avecPaiement}
+              onCheckedChange={setAvecPaiement}
+              label="J’ai reçu un paiement pour cet abonnement"
+            />
+
+            {avecPaiement ? (
+              <div className="space-y-3">
+                <Field label="Montant reçu" hint="En francs entiers — le FCFA n’a pas de centimes.">
+                  {(props) => (
+                    <Input
+                      {...props}
+                      numeric
+                      inputMode="numeric"
+                      placeholder="5000"
+                      value={montant}
+                      onChange={(e) => setMontant(e.target.value)}
+                    />
+                  )}
+                </Field>
+
+                <Field label="Canal">
+                  {(props) => (
+                    <Combobox {...props} value={canal} onChange={setCanal} options={CANAUX_LABELS} />
+                  )}
+                </Field>
+
+                {/*
+                  ⚠️ **LA RÉFÉRENCE EST OBLIGATOIRE, et ce n'est pas de la
+                  paperasse** : c'est elle qui porte l'idempotence. La base
+                  refuse deux versements de même référence — c'est ce qui
+                  empêche de créditer deux fois la même transaction.
+                */}
+                <Field
+                  label="Référence du versement"
+                  hint="Le numéro de transaction de l’opérateur. C’est lui qui empêche d’enregistrer deux fois le même paiement."
+                >
+                  {(props) => (
+                    <Input
+                      {...props}
+                      placeholder="MP260921.1430.A12345"
+                      value={reference}
+                      onChange={(e) => setReference(e.target.value)}
+                    />
+                  )}
+                </Field>
+              </div>
+            ) : (
+              <p className="text-[11.5px] leading-relaxed text-ink-3">
+                Sans cette case, l’octroi n’inscrit{' '}
+                <strong className="font-medium text-ink-2">aucun paiement</strong> : le chiffre
+                d’affaires ne compte que l’argent réellement encaissé.
+              </p>
+            )}
+          </div>
+
           <p className="text-[11.5px] leading-relaxed text-ink-3">
-            L’octroi est enregistré au journal d’activité, avec votre compte comme auteur. Il
-            n’inscrit <strong className="font-medium text-ink-2">aucun paiement</strong> : le
-            chiffre d’affaires reste celui qui a été réellement encaissé.
+            L’octroi est enregistré au journal d’activité, avec votre compte comme auteur.
           </p>
 
           {erreur && (

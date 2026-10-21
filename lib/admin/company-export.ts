@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { siteOrigin } from '@/lib/site-origin';
+import { jourPourNom, toCsv as composerCsv, type Colonne } from '@/lib/csv';
 
 /**
  * Export des entreprises inscrites, pour les campagnes de prospection.
@@ -243,7 +244,7 @@ export async function getCompanyExport(): Promise<CompanyExport> {
   return { rows, excluded, failure: null };
 }
 
-const COLONNES: { titre: string; lire: (r: CompanyExportRow) => string | number }[] = [
+const COLONNES: Colonne<CompanyExportRow>[] = [
   { titre: 'Entreprise', lire: (r) => r.name },
   { titre: 'Raison sociale', lire: (r) => r.legalName },
   { titre: 'Email du titulaire', lire: (r) => r.ownerEmail },
@@ -265,57 +266,21 @@ const COLONNES: { titre: string; lire: (r: CompanyExportRow) => string | number 
 ];
 
 /**
- * Neutralise une cellule que le tableur prendrait pour une formule.
- *
- * ⚠️ **C'est une protection, pas une coquetterie.** Les noms d'entreprise sont
- * saisis par les utilisateurs. Excel et LibreOffice évaluent toute cellule
- * commençant par `=`, `+`, `-` ou `@` : quelqu'un qui nomme son entreprise
- * `=HYPERLINK("http://...","Cliquez")` — ou pire — attaquerait la machine de
- * celui qui ouvre l'export, c'est-à-dire précisément la nôtre. Le préfixe
- * apostrophe force le tableur à lire du texte. Les tabulations et retours
- * chariot de tête servent le même contournement, d'où leur présence ici.
- */
-function neutraliser(valeur: string): string {
-  return /^[=+\-@\t\r]/.test(valeur) ? `'${valeur}` : valeur;
-}
-
-/** Échappe une cellule au format CSV : guillemets doublés, champ encadré si besoin. */
-function cellule(valeur: string | number): string {
-  const texte = neutraliser(String(valeur ?? ''));
-  return /[";\r\n]/.test(texte) || texte !== texte.trim()
-    ? `"${texte.replace(/"/g, '""')}"`
-    : texte;
-}
-
-/**
  * Compose le fichier.
  *
- * ⚠️ **Trois détails décident si le fichier s'ouvre proprement dans Excel** —
- * et les trois ont été choisis, pas subis :
- *
- * - **Le séparateur est le point-virgule.** Excel en configuration française
- *   attend `;` ; avec une virgule il empile tout dans une seule colonne et
- *   impose un assistant d'importation.
- * - **Le fichier commence par une marque d'ordre d'octets (BOM).** Sans elle,
- *   Excel lit l'UTF-8 comme du latin-1 : « Douala » passe encore, « Échéance »
- *   et « Société » deviennent illisibles.
- * - **Les fins de ligne sont en CRLF**, comme le veut la spécification CSV.
+ * ⚠️ **LA MÉCANIQUE A DÉMÉNAGÉ DANS `lib/csv.ts` le 21 oct. 2026**, sans
+ * changer de comportement. L'export comptable en avait besoin à l'identique :
+ * la recopier aurait garanti qu'un jour l'un des deux fichiers s'ouvre
+ * proprement dans Excel et pas l'autre — ou, bien pire, qu'un seul des deux
+ * reste protégé contre l'injection de formules. Le raisonnement sur le
+ * point-virgule, la marque d'ordre d'octets et les fins de ligne CRLF y est
+ * conservé en entier, de même que l'anti-injection.
  */
 export function toCsv(rows: CompanyExportRow[]): string {
-  const lignes = [
-    COLONNES.map((c) => cellule(c.titre)).join(';'),
-    ...rows.map((r) => COLONNES.map((c) => cellule(c.lire(r))).join(';')),
-  ];
-  return `﻿${lignes.join('\r\n')}\r\n`;
+  return composerCsv(COLONNES, rows);
 }
 
 /** `xn-facture-entreprises-2026-09-17.csv` */
 export function exportFilename(now = new Date()): string {
-  const jourIso = new Intl.DateTimeFormat('en-CA', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    timeZone: 'Africa/Douala',
-  }).format(now);
-  return `xn-facture-entreprises-${jourIso}.csv`;
+  return `xn-facture-entreprises-${jourPourNom(now)}.csv`;
 }

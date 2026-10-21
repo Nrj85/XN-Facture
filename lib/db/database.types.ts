@@ -757,6 +757,16 @@ export type Database = {
           last_sign_in_at: string
         }[]
       }
+      admin_record_payment: {
+        Args: {
+          p_amount: number
+          p_channel: string
+          p_company: string
+          p_plan: string
+          p_reference: string
+        }
+        Returns: string
+      }
       admin_set_plan: {
         Args: { p_company: string; p_months?: number; p_plan: string }
         Returns: {

@@ -97,6 +97,27 @@ export interface PlanDefinition {
    * Découverte, jamais fermer ».
    */
   customLetterhead: boolean;
+  /**
+   * La formule donne-t-elle accès à l'export comptable des factures ?
+   *
+   * ⚠️ **C'EST LA SEULE CHOSE QUI SÉPARE RÉELLEMENT ENTREPRISE DE PRO, depuis
+   * le 21 oct. 2026.** Avant cette date, les deux formules étaient
+   * **fonctionnellement identiques** — `enforce_invoice_quota` (0007) ne
+   * distingue que `discovery` du reste — et la carte à 15 000 FCFA vendait
+   * « Export comptable » sans aucune implémentation. On a livré la promesse
+   * plutôt que de la retirer.
+   *
+   * ⚠️ **LE VERROU EST APPLICATIF ICI, ET IL NE PEUT PAS ÊTRE AILLEURS — ne
+   * pas y lire un relâchement de la règle de 0007.** Cette règle vise les
+   * ÉCRITURES : un plafond de factures qu'on saute d'un `PATCH` REST n'est pas
+   * un plafond, d'où le déclencheur en base. Un export est une **LECTURE des
+   * propres factures de l'appelant**, que la RLS lui accorde déjà et qu'il
+   * peut de toute façon consulter écran par écran. Contourner la garde ne
+   * donnerait donc accès à **rien de nouveau** — seulement à une mise en
+   * forme. Il n'y a aucune écriture à verrouiller, et inventer une table pour
+   * en créer une serait pire que le mal.
+   */
+  accountingExport: boolean;
 }
 
 export const PLANS: PlanDefinition[] = [
@@ -118,6 +139,7 @@ export const PLANS: PlanDefinition[] = [
     // fonction existait et était ouverte à tous, alors que la carte Pro la
     // VENDAIT déjà. Le verrou est en base (0021).
     customLetterhead: false,
+    accountingExport: false,
   },
   {
     code: 'pro',
@@ -152,6 +174,10 @@ export const PLANS: PlanDefinition[] = [
     monthlyInvoices: null,
     maxMembers: 1,
     customLetterhead: true,
+    // ⚠️ **FERMÉ À PRO, ET C'EST TOUT L'OBJET DU 21 oct. 2026.** C'est la
+    // seule ligne qui sépare désormais Entreprise de Pro ; l'ouvrir ici
+    // rendrait les deux formules de nouveau identiques.
+    accountingExport: false,
   },
   {
     code: 'business',
@@ -178,14 +204,27 @@ export const PLANS: PlanDefinition[] = [
     // de prix.
     features: [
       'Tout ce que contient Pro',
+      // ⚠️ **PASSÉE DE `upcoming` À `features` LE 21 oct. 2026, parce qu'elle
+      // EXISTE enfin.** C'était l'une des deux promesses vendues sans
+      // implémentation ; `lib/accounting-export.ts` et
+      // `/api/comptabilite/export` la livrent. **Ne jamais remonter une ligne
+      // ici sans en chercher le code** — c'est la faute du 7 oct.
+      'Export comptable de vos factures, prêt pour le tableur',
       'Support prioritaire',
     ],
-    upcoming: ['Jusqu’à 5 utilisateurs sur le même carnet de clients', 'Export comptable'],
+    // ⚠️ **« Jusqu'à 5 utilisateurs » RESTE À VENIR, et doit y rester.**
+    // `company_members` n'a toujours **aucune politique d'écriture** : il
+    // n'existe ni invitation, ni RPC, ni écran. Une entreprise = son créateur,
+    // définitivement. Construire ce parcours est une décision produit à part
+    // entière, pas un ajout — voir « Ce qui n'existe PAS encore » en §2.
+    upcoming: ['Jusqu’à 5 utilisateurs sur le même carnet de clients'],
     cta: 'Choisir Entreprise',
     monthlyInvoices: null,
     maxMembers: 5,
     // Héritée de Pro, comme le dit la première ligne de `features`.
     customLetterhead: true,
+    // La seule ligne réelle ET exclusive de cette carte.
+    accountingExport: true,
   },
 ];
 
@@ -271,6 +310,18 @@ export function effectivePlan(
  */
 export function planAllowsLetterhead(plan: PlanCode): boolean {
   return planByCode(plan).customLetterhead;
+}
+
+/**
+ * L'export comptable est-il ouvert à cette formule ?
+ *
+ * ⚠️ **L'APPELANT DOIT AVOIR PASSÉ PAR `effectivePlan()`**, comme pour le
+ * papier à en-tête : un abonnement Entreprise payé mais **expiré** vaut
+ * Découverte, et lui laisser l'export reviendrait à ne jamais faire expirer la
+ * seule fonction qui justifie l'écart de prix.
+ */
+export function planAllowsAccountingExport(plan: PlanCode): boolean {
+  return planByCode(plan).accountingExport;
 }
 
 // --- Périodicité de facturation ---------------------------------------------
