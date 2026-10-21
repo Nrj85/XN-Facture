@@ -658,16 +658,36 @@ Storage et Realtime ne sont utilisés nulle part (mesuré par `grep` sur `lib/`,
 `GET /config/auth` rend les réglages SMTP, or le mot de passe SMTP de ce projet EST la clé
 d'API Resend. On n'accorde pas un droit dont on ignore ce qu'il expose.
 
-⚠️ **LA SONDE QUI TRANCHE EST UN VRAI DDL, PAS L'AUTHENTIFICATION.** Un jeton en lecture répond
-200 à `GET /v1/projects/<ref>` et 201 à un `select` : les deux premiers contrôles ne
-discriminent rien. Le seul qui mord est un `create table` suivi d'un `drop table`, avec sa
-contre-épreuve de ménage.
+⚠️ **LA SONDE QUI TRANCHE EST UN VRAI DDL — ET NE PAS SONDER `GET /v1/projects/<ref>`.**
+C'est la correction du 21 oct. 2026, et elle porte sur **ma propre consigne de la veille** :
+j'avais prescrit cet endpoint comme « sans ambiguïté », **après avoir recommandé de mettre
+tout sauf `Database` sur `None`**. Or ces deux conseils se contredisent — la métadonnée de
+projet relève de la permission `project_admin_read`, qu'on vient précisément de retirer.
+Mesuré sur le jeton du 21 oct., parfaitement fonctionnel :
 
-⚠️ **ET LA NOTE DU 5 oct. SUR `GET /v1/projects` NE S'EST PAS REPRODUITE.** Elle annonce qu'un
-jeton à portée projet peut faire répondre 401 à la liste du compte ; **le 20 oct., avec un
-jeton à portée Project limité à XN-Facture, cet appel a rendu 200.** Le conseil reste bon —
-sonder l'endpoint par projet, qui est sans ambiguïté — mais **ne pas lire un 401 sur la liste
-comme une preuve de portée projet** : ce n'est pas systématique.
+```
+GET /v1/projects/<ref>   403  Missing required permission(s): project_admin_read
+GET /v1/projects         403  Missing required permission(s): projects_read
+select 1                 201  [{"ok":1}]
+create table + drop      201  ACCEPTE          <- la base repond tres bien
+```
+
+⚠️ **401 ET 403 NE DISENT PAS LA MÊME CHOSE, et la contre-épreuve le prouve** — c'est la
+distinction à retenir, parce qu'elle évite de déclarer révoqué un jeton qui va bien :
+
+```
+jeton VOLONTAIREMENT faux  401  « JWT could not be decoded »   -> invalide ou expire
+jeton correct, droit absent 403  « Missing required permission(s): … »
+                                 -> VALIDE, et le corps NOMME ce qui manque
+```
+
+**Le seul contrôle qui mord reste donc un `create table` suivi d'un `drop table`**, avec sa
+contre-épreuve de ménage. Un jeton en LECTURE y répondrait `25006`.
+
+⚠️ **ET LA NOTE DU 5 oct. SUR `GET /v1/projects` TOMBE AVEC.** Elle annonçait qu'un 401 sur la
+liste du compte pouvait signaler une portée projet. **Le 20 oct. cet appel a rendu 200, le
+21 oct. un 403** : il ne dit donc rien sur la portée, seulement sur les permissions accordées.
+Ne rien en conclure.
 
 ⚠️ **CE JETON EXPIRE.** Celui du 20 oct. est à 7 jours. Une expiration et une révocation
 donnent **le même `401`**, indiscernables de l'extérieur : avant de conclure à une révocation,
