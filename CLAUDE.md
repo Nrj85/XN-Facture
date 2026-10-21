@@ -205,14 +205,19 @@ un quatrième passait pour exclusif alors qu'il est ouvert à tous. Trouvé en v
 |---|---|---|
 | **Pro** 5 000/mois *(mise en avant)* | « Relances par email » | **N'existe pas** — phase 5. Les seules relances du projet sont NOS avis d'échéance d'abonnement (0011), qui partent à nos abonnés ; rien ne relance les clients de l'utilisateur |
 | **Entreprise** 15 000/mois | « Jusqu'à 5 utilisateurs » | **N'existe pas** — `company_members` n'a aucune politique d'écriture |
-| **Entreprise** 15 000/mois | « Export comptable » | **N'existe pas** — le seul export du dépôt est le CSV d'administration, réservé aux admins de plateforme |
+| **Entreprise** 15 000/mois | « Export comptable » | ~~N'existe pas~~ — **LIVRÉ le 21 oct. 2026** : `lib/accounting-export.ts` + `/api/comptabilite/export`. La ligne est passée dans `features`, et elle est réelle |
 | **Entreprise** 15 000/mois | « Tableau de bord et encours par ancienneté » | Existe, mais ouvert à **toutes** les formules, Découverte comprise |
 
 ⚠️ **C'EST LE CONTRÔLE MORT DU §6.1 PORTÉ AU NIVEAU COMMERCIAL** — la pire variante, puisqu'on
 en demande le prix. Et les CGU ne disent rien de l'abonnement, donc l'écart n'avait aucun
 filet contractuel.
 
-⚠️ **PRO ET ENTREPRISE SONT FONCTIONNELLEMENT IDENTIQUES AUJOURD'HUI.**
+⚠️ ~~**PRO ET ENTREPRISE SONT FONCTIONNELLEMENT IDENTIQUES AUJOURD'HUI.**~~ — **PLUS VRAI
+DEPUIS LE 21 oct. 2026.** L'export comptable est réservé à Entreprise, et c'est la **seule**
+chose qui les sépare. Le paragraphe d'époque est conservé ci-dessous : il décrit l'état qui a
+motivé le travail, et il reste exact sur le plafond de factures.
+
+⚠️ **PRO ET ENTREPRISE ÉTAIENT FONCTIONNELLEMENT IDENTIQUES.**
 `enforce_invoice_quota()` (0007) ne distingue que `discovery` du reste : `if v_plan <>
 'discovery' then return`. **Rien, dans tout le dépôt, ne sépare les deux formules payantes.**
 Il ne reste donc à Entreprise qu'une seule ligne réelle et exclusive — « Support prioritaire »
@@ -2381,6 +2386,118 @@ diagnostic fait accuser le produit : celle-ci rend désormais l'URL et un aperç
 ⚠️ **CE RELEVÉ EST LOCAL.** Le §3 est formel : un `build` vert et un serveur local qui répond
 ne prouvent rien sur Vercel. **À rejouer en production** — `SITE=https://www.xn-facture.com`.
 
+#### Entreprise se sépare de Pro, et les paiements reçus se saisissent — 21 oct. 2026
+
+Deux demandes de l'utilisateur, après l'explication de 0022 : *« Oui sépare »* et *« un endroit
+où le saisir »*.
+
+##### L'export comptable — la SEULE chose qui sépare Entreprise de Pro
+
+⚠️ **LES DEUX FORMULES ÉTAIENT FONCTIONNELLEMENT IDENTIQUES**, et la carte à 15 000 FCFA
+vendait « Export comptable » **sans aucune implémentation** depuis le 7 oct. Deux sorties
+existaient : livrer, ou retirer la promesse. **L'utilisateur a choisi de livrer**, après une
+question posée explicitement — l'autre promesse, « Jusqu'à 5 utilisateurs », demandait une
+phase entière (migration, politiques d'écriture, invitation, écran, rôles qu'aucune donnée
+réelle n'a jamais éprouvés) et **reste affichée « à venir ».**
+
+⚠️ **LA GARDE DE FORMULE EST APPLICATIVE, ET ELLE NE PEUT PAS ÊTRE AILLEURS — ne pas y lire un
+relâchement de la règle de 0007.** Cette règle vise les **écritures** : un plafond qu'on saute
+d'un `PATCH` REST n'est pas un plafond, d'où le déclencheur en base. Un export est une
+**LECTURE des propres factures de l'appelant**, que la RLS lui accorde déjà et qu'il peut
+consulter écran par écran. Contourner la garde ne donnerait accès à **rien de nouveau**,
+seulement à une mise en forme. Il n'y a aucune écriture à verrouiller, et inventer une table
+pour en créer une serait pire que le mal.
+
+⚠️ **LA RÈGLE VIT DONC EN DEUX EXEMPLAIRES**, comme pour le papier à en-tête : `/factures`
+décide de l'**affichage** (bouton réel ou lien verrouillé), `/api/comptabilite/export` décide
+de l'**accès**. Les deux passent par `effectivePlan()` — un abonnement Entreprise **expiré**
+vaut Découverte, sans quoi la seule fonction qui justifie l'écart de prix n'expirerait jamais.
+
+⚠️ **402 ET NON 403.** Ce n'est pas un refus de droit, c'est une fonction qui existe et qu'il
+faut souscrire. Le code le dit, et le bouton peut donc proposer `/abonnement` plutôt qu'un
+cul-de-sac. Hors formule, le bouton est **remplacé par un lien**, ni grisé (contrôle mort,
+§6.1) ni masqué (cacher une fonction qu'on VEND).
+
+**Trois décisions de contenu, qui sont des décisions comptables :**
+
+- ⚠️ **LES BROUILLONS SONT EXCLUS, LES ANNULÉES NON.** Un brouillon n'a pas de numéro : ce
+  n'est pas une pièce comptable, c'est une intention. Une annulée **garde son numéro**, et la
+  séquence `FAC-AAAA-NNNN` doit rester continue — l'omettre creuserait un trou que le
+  comptable lirait comme une facture manquante.
+- ⚠️ **ON EXPORTE LE STATUT STOCKÉ, PAS L'AFFICHÉ.** `deriveStatus` replie `partially_paid`
+  sur « Envoyée » — dette assumée, défendable à l'écran où ce qui compte est le reste dû.
+  **Pour un comptable, c'est faux.** Symétriquement « en retard » n'y figure pas : c'est un
+  statut dérivé d'une date, qui changerait tout seul entre deux exports du même exercice.
+- ⚠️ **LES MONTANTS SORTENT EN ENTIERS NUS, sans espace ni symbole.** `formatMoney` produit
+  « 1 192 500 FCFA » avec une espace fine insécable : lisible à l'écran, **inutilisable dans
+  un tableur**, qui y verrait du texte et refuserait d'additionner.
+
+⚠️ **LA MÉCANIQUE CSV A ÉTÉ EXTRAITE DANS `lib/csv.ts`.** Elle vivait privée dans
+`lib/admin/company-export.ts` ; la recopier aurait garanti qu'un jour l'un des deux fichiers
+s'ouvre proprement dans Excel et pas l'autre — ou, bien pire, **qu'un seul des deux reste
+protégé contre l'injection de formules**. Les deux exports la partagent désormais, et rien
+d'autre : ils ont deux publics distincts.
+
+##### Enregistrer un paiement reçu — migration 0023
+
+0022 n'écrivait **rien** dans `subscription_payments`, délibérément : un octroi peut suivre un
+virement, un geste commercial, une correction ou un essai, et inventer un montant polluerait
+la seule source du chiffre d'affaires réel. **Conséquence signalée à l'utilisateur, et qu'il a
+voulu combler : l'argent réellement reçu par mobile money n'était tracé nulle part.**
+
+La règle ne change pas, elle se précise : **ce n'est plus le logiciel qui devine un montant,
+c'est l'exploitant qui déclare ce qu'il a reçu.** La saisie est **facultative et repliée par
+défaut** — un octroi sans versement reste parfaitement légitime.
+
+⚠️ **FONCTION SÉPARÉE, ET NON UN PARAMÈTRE DE PLUS SUR `admin_set_plan`.** Ajouter des
+paramètres à une fonction qui en a déjà un à valeur par défaut crée une **surcharge** : deux
+fonctions de même nom, et tout appel devient ambigu. C'est le piège évité en 0006.
+
+⚠️ **LE PAIEMENT S'ENREGISTRE AVANT L'OCTROI, et l'ordre n'est pas indifférent.** C'est la
+règle déjà retenue pour le webhook Tara : si l'insertion est refusée par
+`unique (provider, provider_reference)`, ce versement a déjà été traité — et on s'arrête
+**avant** de prolonger une seconde fois. L'ordre inverse prolongerait l'abonnement une fois
+par saisie en double, et c'est la saisie en double qu'on cherche à attraper.
+
+⚠️ **LA RÉFÉRENCE EST OBLIGATOIRE, et ce n'est pas de la paperasse** : c'est elle qui porte
+l'idempotence. Une référence vide rendrait la contrainte inopérante.
+
+⚠️ **`period_start` ET `period_end` RESTENT NULLES.** La période est portée par
+`subscriptions.expires_at`, que `admin_set_plan` calcule. La recopier ici en ferait une
+seconde vérité.
+
+⚠️ **`provider = 'manuel'`.** Le jour où Tara encaissera, ses lignes porteront
+`provider = 'tara'` : les deux sources resteront distinguables dans le même journal.
+
+##### Vérifié EN PRODUCTION — 27 contrôles, 0 échec
+
+```
+MARQUEUR        « Export comptable de vos factures » servi par www.xn-facture.com
+contre-epreuve  « 5 utilisateurs » toujours annonce « a venir »
+Decouverte      le lien VERROUILLE est servi · il OUVRE vers /abonnement
+                le bouton d export est ABSENT · la route refuse en 402
+                le refus nomme la formule qu il faut, en francais
+paiement        enregistre · MEME reference -> REFUSEE, message dedie
+                1 seule ligne, 15 000 FCFA
+octroi          Entreprise jusqu au 2026-11-21
+Entreprise      le VRAI bouton est servi · plus de lien verrouille
+le FICHIER      200 · text/csv · nom date et nomme · EF BB BF · CRLF
+                13 colonnes · UNE facture (le brouillon est EXCLU)
+                1000000 / 192500 / 1192500 — entiers SOMMABLES
+/admin          bandeau juste · colonne Formule servie
+menage          administrateur revoque EN PREMIER · 9/9 · 0 orpheline
+                0 journal orphelin · 0 paiement · le vrai admin seul
+```
+
+⚠️ **UN CONTRÔLE A ÉCHOUÉ AU PREMIER PASSAGE, ET C'ÉTAIT MON ASSERTION — PAS LE PRODUIT.**
+« Le lien verrouillé est servi » cherchait `Export comptable — formule Entreprise` d'un bloc.
+**React SSR insère `<!-- -->` entre deux nœuds de texte adjacents**, et ce libellé est coupé
+par `{planByCode('business').name}` : la chaîne entière n'existe donc jamais dans le HTML, sur
+une page parfaitement correcte. **Normaliser avant de comparer** (`replace(/<!--\s*-->/g, '')`)
+— c'est le piège de l'espace fine insécable des montants, sous un autre caractère. Et le
+diagnostic a été **ajouté avant de corriger**, pour prouver l'hypothèse au lieu de relâcher
+l'assertion jusqu'à ce qu'elle passe.
+
 #### Une lecture ratée ne dit plus « 0 » — 8 oct. 2026
 
 ⚠️ **LES TROIS LECTURES DE L'ESPACE ADMIN IGNORAIENT LEUR `error`**, et c'est le contrôle mort
@@ -4199,6 +4316,14 @@ supabase/
   migrations/0019_admin_actors_fonction.sql APPLIQUÉE le 8 oct. 2026.
                                 `admin_actors` devient une FONCTION. La vue
                                 reste en place : le code déployé la lit encore
+  migrations/0023_paiement_manuel.sql APPLIQUÉE le 21 oct. 2026.
+                                `admin_record_payment()` — l'exploitant
+                                DÉCLARE un versement réellement reçu.
+                                Fonction SÉPARÉE (un paramètre de plus sur
+                                0022 aurait créé une surcharge ambiguë).
+                                **À appeler AVANT l'octroi** : l'unicité
+                                (provider, provider_reference) attrape la
+                                saisie en double avant de prolonger deux fois
   migrations/0022_admin_octroi_formule.sql APPLIQUÉE le 21 oct. 2026.
                                 `admin_set_plan()` — un administrateur de
                                 plateforme octroie une formule. ROUVRE la
@@ -4329,7 +4454,17 @@ lib/
                       doit appeler revalidatePath('/', 'layout'))
                     · letterhead (papier à en-tête — MÊME liste blanche que le logo)
                     · locale · result, schemas, context
+  csv.ts            Mécanique CSV COMMUNE — anti-injection Excel, marque
+                    d'ordre d'octets, point-virgule, CRLF. **Un seul
+                    exemplaire** : les deux exports la partagent
+  accounting-export.ts  Export comptable des factures d'UNE entreprise, pour
+                    SON comptable. Brouillons exclus, ANNULÉES incluses (la
+                    séquence comptable doit rester continue) · statut STOCKÉ
+                    et non affiché · montants en entiers nus, sommables.
+                    Réservé à la formule Entreprise — voir §2
   admin/company-export.ts  Lignes et CSV de l export des entreprises (anti-injection)
+                    — TRANSVERSAL et réservé aux admins. **Ne pas confondre
+                    avec `accounting-export.ts`** : deux publics distincts
   vat.ts            Régime de TVA — contenu du bloc de totaux (5 rendus) et régime
                     d'un nouveau document. Le taux de l'entreprise ne se lit JAMAIS seul
   plans.ts          Les trois formules et leurs prix — SOURCE UNIQUE du montant
