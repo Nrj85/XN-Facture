@@ -2222,7 +2222,8 @@ vide le HTML statique de `/connexion`.
 
 ### Espace administrateur de plateforme — `/admin`
 
-Vue transversale de **toutes les entreprises**, en **lecture seule** : chiffres de la
+Vue transversale de **toutes les entreprises**, en lecture seule **sauf deux exceptions
+nommées** — les témoignages (0016) et la formule d'une entreprise (0022) : chiffres de la
 plateforme, liste des entreprises avec leurs volumes, comptes avec dernière connexion, et
 journal d'activité.
 
@@ -2242,6 +2243,143 @@ importantes :
 client, une facture et trois lignes ; il ne voit pas la liste des administrateurs ; ses
 écritures croisées touchent zéro ligne ; l'écriture dans le journal et l'auto-promotion sont
 refusées en 403.
+
+#### Octroyer une formule depuis `/admin` — migration 0022 (21 oct. 2026)
+
+Demande de l'utilisateur : *« que je puisse, depuis mon compte administrateur, octroyer une
+nouvelle formule à un client qui est par exemple à Découverte, le faire passer à Pro ou à
+Entreprise »*. Une colonne **Formule** dans le tableau des entreprises, cliquable, qui ouvre un
+dialogue : formule, durée, confirmation.
+
+⚠️ **CETTE CAPACITÉ EXISTAIT DÉJÀ — 0022 la sort de la console SQL, il ne l'invente pas.**
+CLAUDE.md documente depuis le 9 sept. 2026 la procédure manuelle d'activation après paiement :
+un `update` sur `subscriptions`, un autre sur `subscription_orders`. **Le risque n'augmente
+donc pas**, il se déplace d'un endroit sans trace vers un endroit qui en laisse une. C'est la
+réponse à la question « est-ce que cela alourdit le code ? » : le poids en lignes est modeste,
+et ce qui comptait vraiment était ailleurs — voir les trois points ci-dessous.
+
+##### ⚠️ LA DÉCISION « LECTURE SEULE » DU §8 EST ROUVERTE, pour la DEUXIÈME fois
+
+0016 l'avait rouverte pour les **seuls** témoignages, avec cet avertissement : « ne pas en
+faire un précédent — pour une facture, une formule ou un journal, la réponse est tout autre ».
+**C'est précisément une formule.** La décision est reprise **par l'utilisateur, explicitement**,
+et elle reste bornée :
+
+- **aucune politique RLS d'écriture n'est ajoutée** sur `subscriptions` — la table reste sans
+  `insert`, `update` ni `delete` **pour qui que ce soit**, administrateur compris ;
+- le seul chemin est `admin_set_plan()`, `security definer`, dont la garde
+  `is_platform_admin()` est **à l'intérieur** ;
+- `platform_admins`, `subscription_payments`, `subscription_orders`, `subscription_reminders`
+  et `activity_log` restent sans aucune écriture possible depuis l'interface.
+
+⚠️ **POURQUOI PAS UNE POLITIQUE RLS.** Un `update … using (is_platform_admin())` laisserait un
+administrateur écrire **n'importe quelle colonne, sur n'importe quelle ligne, par un simple
+`PATCH` REST** — une échéance en 2099, ou `requested` réécrit pour brouiller la piste. Une
+fonction ne peut faire que ce qu'elle fait : trois écritures nommées, bornées, journalisées.
+
+##### Le bandeau de l'écran disait « Cet espace n'écrit rien » — il est corrigé
+
+⚠️ **LE LAISSER AURAIT ÉTÉ LE §6.1 SOUS SA FORME LA PLUS TRAÎTRE** : non pas un bouton qui ne
+fait rien, mais **un écran qui nie ce qu'il fait**. Il annonce désormais « Presque tout est en
+lecture seule » et nomme les deux exceptions. **Toute nouvelle ouverture d'écriture doit
+repasser par cette phrase.**
+
+##### Prolonger ou repartir — la règle, et pourquoi elle dépend du changement de formule
+
+```
+meme formule, echeance encore valable   -> PROLONGE depuis l echeance
+formule differente, ou echeance passee  -> REPART d aujourd hui
+Decouverte                              -> echeance EFFACEE, duree ignoree
+```
+
+C'est la règle déjà retenue pour le webhook Tara : renouveler une semaine avant le terme ferait
+sinon **perdre cette semaine** — on paierait pour se faire retirer du temps. À l'inverse,
+prolonger un Pro expiré depuis trois mois offrirait ces trois mois, et prolonger un Pro en
+cours par du Entreprise **surclasserait gratuitement la période déjà payée**.
+
+⚠️ **L'ÉCRAN AFFICHE L'ÉCHÉANCE RENDUE PAR LA BASE, jamais une date recalculée côté client.**
+Refaire ce calcul dans le dialogue produirait un jour une date affichée qui n'est pas celle
+qui est enregistrée.
+
+##### Ce qui n'est volontairement PAS fait
+
+⚠️ **AUCUNE ÉCRITURE DANS `subscription_payments`.** Le réflexe serait « on active, donc on a
+été payé » — et ce serait faux. Cette table journalise de l'argent **réellement encaissé**,
+avec son montant, son canal et sa référence de prestataire. Un octroi peut suivre un virement,
+un geste commercial, une correction ou un essai : y inscrire un montant inventé polluerait la
+seule source du chiffre d'affaires réel. **Le dialogue le dit à l'écran**, pour qu'un
+administrateur ne croie pas avoir mis son chiffre d'affaires à jour. La trace est dans
+`activity_log`, à sa place.
+
+⚠️ **AUCUNE RÈGLE D'EXPIRATION NOUVELLE — elle existe déjà en TROIS exemplaires** :
+`effectivePlan()`, `enforce_invoice_quota()` (0007/0008) et `plan_effectif()` (0021). 0022
+**pose** une échéance, elle ne décide jamais si une formule est expirée ; et `/admin` affiche
+la formule **effective** en passant par `effectivePlan()`. Un quatrième exemplaire aurait
+garanti la divergence.
+
+⚠️ **LA COMMANDE N'EST SOLDÉE QUE SI ELLE PORTE LA MÊME FORMULE.** L'index unique partiel de
+0009 garantit au plus **une** commande en attente par entreprise — mais rien ne dit qu'elle
+porte la formule octroyée. Octroyer Pro en marquant « payée » une commande Entreprise écrirait
+une contre-vérité dans la seule table qui trace les intentions d'achat.
+
+⚠️ **LE CHAMP « Durée » DISPARAÎT POUR DÉCOUVERTE**, il n'est pas grisé. Il ne serait pas
+seulement inutile, il serait **mensonger** : la formule gratuite n'a pas d'échéance, et la base
+ignore la valeur. §6.1, pas de contrôle mort.
+
+⚠️ **UN SEUL DIALOGUE, piloté par la ligne sélectionnée** — une modale par ligne en monterait
+autant qu'il y a d'entreprises. Même règle que la confirmation de suppression et le dialogue
+d'encaissement. Il se réinitialise à chaque ouverture sur l'état **réel** de l'entreprise :
+sans cela, octroyer Pro à une société puis ouvrir la suivante proposerait Pro par défaut, et un
+clic distrait changerait la formule de quelqu'un qui n'avait rien demandé.
+
+**Éprouvée en base, 13 sondes AVEC leurs témoins négatifs, dans une transaction ANNULÉE** —
+aucune donnée réelle touchée :
+
+```
+A. compte ordinaire -> business   REFUSE 42501 « Reserve aux administrateurs »
+B-E. formule / 99 mois / 0 mois / entreprise inconnue   REFUSES
+F. remise a Decouverte            echeance EFFACEE
+G. Decouverte -> Pro 1 mois       aujourd hui + 1 mois
+H. Pro + 1 mois (meme formule)    PROLONGE 11-21 -> 12-21
+I. Pro -> Entreprise 1 mois       REPART d aujourd hui
+J. commande Pro / octroi Entreprise   reste EN ATTENTE
+K. commande Pro / octroi Pro          SOLDEE
+L. journal     6 lignes, actor_id = l administrateur
+M. paiements   0 ligne, INCHANGE
+ACL   {postgres, authenticated, service_role} — aucune entree nue
+```
+
+⚠️ **SANS LE TÉMOIN « compte ordinaire », LES QUATRE REFUS NE PROUVERAIENT RIEN** : une
+fonction qui refuserait tout le monde rendrait exactement les mêmes verdicts.
+
+**Et le parcours RÉEL, par un vrai clic, 18 contrôles** — compte et entreprise **jetables**,
+l'octroi portant sur **l'entreprise jetable et jamais sur un client réel** :
+
+```
+/admin          l ancien bandeau « n ecrit rien » a DISPARU
+                la colonne « Formule » existe · la ligne dit « Decouverte »
+dialogue        vise la BONNE entreprise · annonce la formule actuelle
+                dit qu AUCUN paiement n est inscrit
+                le champ « Duree » APPARAIT pour une formule payante
+octroi          « Pro jusqu au 21 nov. 2026 »
+LA BASE         pro / 2026-11-21 — exactement la date attendue
+journal         status=pro · granted_by_admin=true · acteur = l administrateur
+contre-epreuve  0 paiement inscrit
+RECHARGEMENT    la ligne dit « Pro -> 21/11/2026 »
+500 px          aucun debordement
+menage          administrateur REVOQUE EN PREMIER · 9 entreprises, 9 comptes,
+                0 orpheline, 0 journal orphelin, un seul administrateur — le vrai
+```
+
+⚠️ **UN PREMIER PASSAGE A ÉCHOUÉ À LA CONNEXION, PAS SUR L'OCTROI — et il faut savoir lire
+ça.** L'attente du formulaire a expiré : `/connexion` n'a **rien dans son HTML statique**
+(`useSearchParams` impose un `<Suspense>`), le formulaire n'existe qu'après hydratation. Le
+second passage, script identique, est passé de bout en bout. **Lire à QUELLE étape un test
+échoue avant d'incriminer le changement qu'on vient de faire** — et une attente sans
+diagnostic fait accuser le produit : celle-ci rend désormais l'URL et un aperçu de la page.
+
+⚠️ **CE RELEVÉ EST LOCAL.** Le §3 est formel : un `build` vert et un serveur local qui répond
+ne prouvent rien sur Vercel. **À rejouer en production** — `SITE=https://www.xn-facture.com`.
 
 #### Une lecture ratée ne dit plus « 0 » — 8 oct. 2026
 
@@ -4061,6 +4199,14 @@ supabase/
   migrations/0019_admin_actors_fonction.sql APPLIQUÉE le 8 oct. 2026.
                                 `admin_actors` devient une FONCTION. La vue
                                 reste en place : le code déployé la lit encore
+  migrations/0022_admin_octroi_formule.sql APPLIQUÉE le 21 oct. 2026.
+                                `admin_set_plan()` — un administrateur de
+                                plateforme octroie une formule. ROUVRE la
+                                décision « lecture seule » du §8 pour la
+                                DEUXIÈME fois, et **toujours sans aucune
+                                politique RLS d'écriture** : la garde
+                                `is_platform_admin()` est DANS la fonction.
+                                N'écrit JAMAIS dans `subscription_payments`
   migrations/0021_entete_formule_payante.sql APPLIQUÉE le 9 oct. 2026.
                                 Le papier à en-tête devient une fonction
                                 des formules PAYANTES. DEUX déclencheurs —
@@ -4119,7 +4265,9 @@ app/
 
 components/
   admin/       admin-view, export-companies-button (export CSV des entreprises),
-               testimonials-editor (témoignages — publier est séparé d'enregistrer)
+               testimonials-editor (témoignages — publier est séparé d'enregistrer),
+               plan-granter (octroi d'une formule — UN SEUL dialogue, piloté par
+               la ligne choisie ; l'échéance affichée vient de la BASE)
   ui/          Primitives : button, icon-button, card, input, field, switch, combobox,
                date-picker, dialog, popover, action-menu, status-badge, empty-state,
                password-input (bascule afficher/masquer — les 7 champs du projet)
@@ -4658,6 +4806,7 @@ Prises avec l'utilisateur. **Ne pas les rouvrir sans le lui demander.**
 | Numéro de facture | Attribué **à l'émission**, pas à la création |
 | Devise par facture | Pas de sélecteur — elle vient des paramètres |
 | Préfixe de devis | Constante `DEV`, non configurable (contrairement au préfixe de facture, qui porte une contrainte comptable) |
+| Espace d'administration en lecture seule | **ROUVERTE DEUX FOIS, chaque fois à la demande explicite de l'utilisateur et pour une table nommée** : les témoignages (0016, 1er oct. 2026) puis la formule d'une entreprise (0022, 21 oct. 2026). Tout le reste — factures, clients, journal, paiements, commandes, liste des administrateurs — n'a **toujours aucune politique d'écriture**. La question à se poser avant toute nouvelle ouverture reste « que peut faire quelqu'un qui obtient ce droit ? », et la réponse doit tenir en une phrase |
 
 ---
 

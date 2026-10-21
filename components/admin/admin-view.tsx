@@ -18,7 +18,10 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { Input } from '@/components/ui/input';
 import { StatCard } from '@/components/dashboard/stat-card';
 import { ExportCompaniesButton } from '@/components/admin/export-companies-button';
+import { PlanGranter } from '@/components/admin/plan-granter';
+import { formatDate } from '@/lib/format';
 import { formatAmount, formatMoney } from '@/lib/money';
+import { parsePlan, planByCode } from '@/lib/plans';
 import type {
   AdminAccountRow,
   AdminActivityRow,
@@ -73,6 +76,8 @@ const ENTITES: Record<string, string> = {
   client: 'Client',
   invoice: 'Facture',
   quote: 'Devis',
+  // Écrit par `admin_set_plan` (0022) : c'est la trace d'un octroi de formule.
+  subscription: 'Abonnement',
 };
 
 const ACTIONS: Record<string, { label: string; ton: 'neutre' | 'vert' | 'rouge' | 'ambre' }> = {
@@ -106,6 +111,19 @@ function resume(row: AdminActivityRow): string {
   const numero = typeof d.number === 'string' ? d.number : null;
   const nom = typeof d.name === 'string' ? d.name : null;
 
+  // ⚠️ **L'ABONNEMENT SE LIT AUTREMENT, et sans ce cas la ligne dirait « Sans
+  // numéro · discovery → pro ».** Un octroi n'a pas de numéro de document, et
+  // les codes bruts ne sont pas des mots d'interface : on rend les noms
+  // commerciaux et la date de fin, qui sont ce qu'on vient vérifier.
+  if (row.entity === 'subscription') {
+    const avant = parsePlan(d.previous_status);
+    const apres = parsePlan(d.status);
+    const depuis = avant ? planByCode(avant).name : '?';
+    const vers = apres ? planByCode(apres).name : '?';
+    const fin = typeof d.expires_at === 'string' ? ` jusqu’au ${formatDate(d.expires_at)}` : '';
+    return `${depuis} → ${vers}${fin}`;
+  }
+
   if (row.action === 'status_changed') {
     const avant = typeof d.previous_status === 'string' ? d.previous_status : '?';
     const apres = typeof d.status === 'string' ? d.status : '?';
@@ -137,6 +155,12 @@ export function AdminView({
   adminEmail: string;
 }) {
   const [recherche, setRecherche] = useState('');
+  /**
+   * L'entreprise dont on règle la formule — `null` quand la fenêtre est
+   * fermée. **Un seul exemplaire du dialogue**, piloté par cet état : une
+   * modale par ligne en monterait autant qu'il y a d'entreprises.
+   */
+  const [cible, setCible] = useState<AdminCompanyRow | null>(null);
 
   const filtrees = useMemo(() => {
     const aiguille = recherche.trim().toLowerCase();
@@ -180,15 +204,26 @@ export function AdminView({
         </Link>
       </header>
 
-      {/* Dire en clair ce que cet espace peut et ne peut pas faire. Un écran
-          d'administration muet sur ses propres limites invite à chercher des
-          boutons qui n'existent pas. */}
+      {/*
+        Dire en clair ce que cet espace peut et ne peut pas faire. Un écran
+        d'administration muet sur ses propres limites invite à chercher des
+        boutons qui n'existent pas.
+
+        ⚠️ **CE TEXTE DISAIT « Cet espace n'écrit rien » — C'EST DEVENU FAUX**
+        le 21 oct. 2026, quand la migration 0022 a ouvert l'octroi de formule.
+        Le laisser aurait été le défaut du §6.1 sous sa forme la plus traître :
+        non pas un bouton qui ne fait rien, mais **un écran qui nie ce qu'il
+        fait**. Toute nouvelle ouverture d'écriture doit repasser par ici.
+      */}
       <p className="flex items-start gap-2.5 rounded-[10px] border border-line bg-brand-soft px-4 py-3 text-[12.5px] leading-relaxed text-ink-2">
         <ShieldCheck className="mt-px h-4 w-4 shrink-0 text-brand-hover" aria-hidden />
         <span>
-          <strong className="font-semibold text-ink">Lecture seule.</strong> Cet espace n’écrit
-          rien : la base n’accorde aux administrateurs que des droits de consultation. Le retrait
-          d’un administrateur, comme son ajout, passe par la console SQL.
+          <strong className="font-semibold text-ink">Presque tout est en lecture seule.</strong>{' '}
+          Deux exceptions, et deux seulement : les <strong className="font-semibold text-ink">témoignages</strong>{' '}
+          de la page d’accueil, et la <strong className="font-semibold text-ink">formule</strong>{' '}
+          d’une entreprise. Tout le reste — factures, clients, journal, liste des administrateurs
+          — ne peut pas être écrit d’ici : la base elle-même le refuse. L’ajout comme le retrait
+          d’un administrateur passe par la console SQL.
         </span>
       </p>
 
@@ -276,6 +311,7 @@ export function AdminView({
                   <th scope="col" className="label-caps px-5 py-2.5 text-right">Facturé</th>
                   <th scope="col" className="label-caps px-5 py-2.5 text-right">Encaissé</th>
                   <th scope="col" className="label-caps px-5 py-2.5 text-left">Créée le</th>
+                  <th scope="col" className="label-caps px-5 py-2.5 text-left">Formule</th>
                 </tr>
               </thead>
               <tbody>
@@ -301,6 +337,45 @@ export function AdminView({
                     </td>
                     <td className="tabular whitespace-nowrap px-5 py-3.5 text-ink-2">
                       {jour(c.createdAt)}
+                    </td>
+                    {/*
+                      ⚠️ **LA FORMULE AFFICHÉE EST L'EFFECTIVE**, résolue par
+                      `effectivePlan()` dans la lecture. Un abonnement payé
+                      mais expiré vaut Découverte : montrer « Pro » dessus
+                      ferait croire qu'il n'y a personne à relancer.
+
+                      ⚠️ **L'ÉTAT NE TIENT PAS À LA COULEUR** (§6.2, règle 5) :
+                      le nom de la formule et le mot « expiré » le portent, et
+                      tous deux survivent au noir et blanc.
+                    */}
+                    <td className="whitespace-nowrap px-5 py-3.5">
+                      <button
+                        type="button"
+                        onClick={() => setCible(c)}
+                        className="inline-flex min-h-9 items-center gap-2 rounded-[10px] border border-line bg-surface px-2.5 py-1 text-[12.5px] font-medium text-ink transition-colors duration-150 hover:border-line-strong hover:bg-sand"
+                      >
+                        <span
+                          className={
+                            c.plan === 'discovery'
+                              ? 'text-ink-2'
+                              : 'font-semibold text-brand-hover'
+                          }
+                        >
+                          {planByCode(c.plan).name}
+                        </span>
+                        {c.expired ? (
+                          <span className="text-[11.5px] text-ink-2">expiré</span>
+                        ) : (
+                          c.expiresAt && (
+                            <span className="tabular text-[11.5px] text-ink-3">
+                              → {formatDate(c.expiresAt)}
+                            </span>
+                          )
+                        )}
+                        <span className="sr-only">
+                          — changer la formule de {c.name}
+                        </span>
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -446,6 +521,12 @@ export function AdminView({
           </ul>
         )}
       </Card>
+
+      {/*
+        Monté UNE fois, hors du tableau. Il se ferme en remettant la cible à
+        `null`, et `PlanGranter` ne rend rien tant qu'elle l'est.
+      */}
+      <PlanGranter company={cible} onClose={() => setCible(null)} />
     </div>
   );
 }

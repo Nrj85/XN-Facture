@@ -1,6 +1,8 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { computeTotals } from '@/lib/invoice-calc';
+import { effectivePlan, type PlanCode } from '@/lib/plans';
+import { today } from '@/lib/today';
 
 /**
  * Lectures de l'espace administrateur — **transversales à toutes les
@@ -43,6 +45,24 @@ export interface AdminCompanyRow {
   invoiced: number;
   collected: number;
   lastActivity: string | null;
+  /**
+   * Formule **EFFECTIVE**, résolue par `effectivePlan()`.
+   *
+   * ⚠️ **Jamais le `plan` brut de la table.** Un abonnement payé mais expiré
+   * vaut Découverte : afficher « Pro » dessus serait la divergence exacte
+   * contre laquelle `effectivePlan()` met en garde, et l'administrateur
+   * croirait n'avoir personne à relancer.
+   */
+  plan: PlanCode;
+  /** Échéance brute, `null` pour Découverte qui n'expire pas. */
+  expiresAt: string | null;
+  /**
+   * Vrai quand la formule STOCKÉE est payante mais que l'échéance est passée.
+   * `plan` vaut alors `discovery` : sans ce drapeau, l'écran ne pourrait pas
+   * distinguer « n'a jamais payé » de « a payé, c'est fini » — deux situations
+   * commerciales opposées.
+   */
+  expired: boolean;
 }
 
 export interface AdminActivityRow {
@@ -154,7 +174,7 @@ export async function getAdminOverview(): Promise<{
 }> {
   const supabase = createClient();
 
-  const [companies, members, clients, invoices, quotes] = await Promise.all([
+  const [companies, members, clients, invoices, quotes, subscriptions] = await Promise.all([
     supabase.from('companies').select('id,name,legal_name,city,created_at'),
     supabase.from('company_members').select('company_id,user_id'),
     supabase.from('clients').select('id,company_id'),
@@ -162,6 +182,10 @@ export async function getAdminOverview(): Promise<{
       .from('invoices')
       .select('id,company_id,status,amount_paid,vat_rate,updated_at,invoice_items(qty_milli,unit_price)'),
     supabase.from('quotes').select('id,company_id'),
+    // ⚠️ Lecture autorisée par `subscriptions_admin_select` (0006). Elle est
+    // en SELECT seulement : accorder une formule passe par `admin_set_plan`,
+    // jamais par une écriture directe sur cette table.
+    supabase.from('subscriptions').select('company_id,plan,expires_at'),
   ]);
 
   type LigneBrute = { qty_milli: number; unit_price: number };
@@ -220,20 +244,41 @@ export async function getAdminOverview(): Promise<{
     encaissePar.set(f.company_id, (encaissePar.get(f.company_id) ?? 0) + f.amount_paid);
   }
 
-  const lignes: AdminCompanyRow[] = (companies.data ?? []).map((c) => ({
-    id: c.id,
-    name: c.name,
-    legalName: c.legal_name,
-    city: c.city,
-    createdAt: c.created_at,
-    members: membresPar.get(c.id) ?? 0,
-    clients: clientsPar.get(c.id) ?? 0,
-    invoices: facturesPar.get(c.id) ?? 0,
-    quotes: devisPar.get(c.id) ?? 0,
-    invoiced: factureePar.get(c.id) ?? 0,
-    collected: encaissePar.get(c.id) ?? 0,
-    lastActivity: derniereAct.get(c.id) ?? null,
-  }));
+  // ⚠️ **LA FORMULE PASSE PAR `effectivePlan()`, LA RÈGLE N'EST PAS RECOPIÉE.**
+  // Elle existe déjà en trois exemplaires (`effectivePlan`, 0007 et 0021) ; en
+  // réécrire un quatrième ici garantirait qu'un jour l'écran annonce « Pro »
+  // pendant que la base applique le plafond de Découverte.
+  const aujourdhui = today();
+  const formulePar = new Map<string, { plan: PlanCode; expiresAt: string | null }>();
+  for (const s of subscriptions.data ?? []) {
+    formulePar.set(s.company_id, { plan: s.plan, expiresAt: s.expires_at });
+  }
+
+  const lignes: AdminCompanyRow[] = (companies.data ?? []).map((c) => {
+    // Une entreprise sans ligne d'abonnement est impossible — le déclencheur
+    // `companies_default_subscription` (0006) en crée une à l'insertion — mais
+    // le repli évite qu'une anomalie de données fasse tomber toute la page.
+    const abo = formulePar.get(c.id) ?? { plan: 'discovery' as PlanCode, expiresAt: null };
+    const effective = effectivePlan(abo.plan, abo.expiresAt, aujourdhui);
+
+    return {
+      id: c.id,
+      name: c.name,
+      legalName: c.legal_name,
+      city: c.city,
+      createdAt: c.created_at,
+      members: membresPar.get(c.id) ?? 0,
+      clients: clientsPar.get(c.id) ?? 0,
+      invoices: facturesPar.get(c.id) ?? 0,
+      quotes: devisPar.get(c.id) ?? 0,
+      invoiced: factureePar.get(c.id) ?? 0,
+      collected: encaissePar.get(c.id) ?? 0,
+      lastActivity: derniereAct.get(c.id) ?? null,
+      plan: effective,
+      expiresAt: abo.expiresAt,
+      expired: abo.plan !== 'discovery' && effective === 'discovery',
+    };
+  });
 
   // De la plus active à la moins active : c'est l'ordre dans lequel on veut
   // lire une liste d'entreprises quand on exploite un service.
