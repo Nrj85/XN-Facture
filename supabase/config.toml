@@ -27,7 +27,9 @@ project_id = "tpzmmgcfpnsysaghdqrx"
 # environments and deployments. »
 #
 # ⚠️ **CELA NE REND PAS LA FONCTION PUBLIQUE SANS GARDE.** Elle porte les
-# siennes, dans cet ordre : un segment secret de 43 caractères dans l'URL,
+# siennes, dans cet ordre : un segment secret dans l'URL (24 caractères au
+# minimum, et celui en place en fait 24 — mesuré le 21 oct. 2026 ; ce
+# commentaire annonçait 43, ce qui était faux),
 # comparé en temps constant ; un rappel de `POST /transactions/status` qui
 # refuse de croire la notification ; le statut de la commande ; le montant ;
 # et l'idempotence portée par `unique (provider, provider_reference)`.

@@ -42,6 +42,30 @@ export async function GET() {
   // reviendrait à ne jamais faire expirer la seule fonction qui justifie
   // l'écart de prix entre Pro et Entreprise.
   const abonnement = await getSubscription(companyId);
+
+  /*
+    ⚠️ **UNE LECTURE RATÉE NE DOIT PAS SE LIRE « DÉCOUVERTE » — corrigé le
+    23 oct. 2026.** `getSubscription` ignorait son `error` : une requête qui
+    n'aboutissait pas rendait le repli `discovery`, et cette route répondait
+    **402 « réservé à la formule Entreprise » À UN CLIENT QUI PAIE**. Le refus
+    était parfaitement formulé, parfaitement poli, et parfaitement faux — la
+    pire forme, puisque rien n'invitait à réessayer.
+
+    **503 et non 402** : rien n'est cassé chez nous, une lecture n'a pas
+    abouti. C'est la règle déjà retenue pour l'export des entreprises
+    (8 oct.), et elle dit à l'utilisateur de recommencer plutôt que d'aller
+    souscrire ce qu'il a déjà.
+  */
+  if (abonnement.readFailed) {
+    return NextResponse.json(
+      {
+        error:
+          'Votre formule n’a pas pu être lue à l’instant, donc l’export n’a pas été produit. Réessayez dans un moment — rien n’a changé dans vos factures.',
+      },
+      { status: 503 },
+    );
+  }
+
   const formule = effectivePlan(abonnement.plan, abonnement.expiresAt, today());
 
   if (!planAllowsAccountingExport(formule)) {

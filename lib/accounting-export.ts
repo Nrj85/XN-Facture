@@ -29,7 +29,22 @@ import { jourPourNom, toCsv, type Colonne } from '@/lib/csv';
  * qu'une comptabilité doit éviter. Elle figure donc, avec son statut en clair.
  */
 export function isAccountable(invoice: InvoiceView): boolean {
-  return invoice.number !== null;
+  /*
+    ⚠️ **LES DEUX CONDITIONS SONT NÉCESSAIRES, et ne tester que le numéro
+    était un VRAI DÉFAUT — corrigé le 23 oct. 2026.**
+
+    « Un brouillon n'a pas de numéro » est faux dès qu'on repasse une facture
+    émise en brouillon : `setInvoiceStatusAction` n'attribue un numéro que dans
+    l'autre sens (`status !== 'draft' && number === null`) et **conserve celui
+    qui existe** — à dessein, pour que le document retrouve sa place dans la
+    séquence s'il est réémis.
+
+    Conséquence du filtre d'origine : une facture repassée en brouillon partait
+    **dans le fichier du comptable, étiquetée « Brouillon »** — précisément ce
+    que le commentaire ci-dessus jure d'éviter. Le statut STOCKÉ est donc le
+    juge, et le numéro ne sert plus qu'à écarter ce qui n'a jamais été émis.
+  */
+  return invoice.status !== 'draft' && invoice.number !== null;
 }
 
 /**

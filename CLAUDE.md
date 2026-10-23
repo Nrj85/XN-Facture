@@ -1746,8 +1746,127 @@ les voit pas**, et le parcours y reste manuel tant qu'elles ne sont pas sur Verc
 panne totale que **rien ne signalerait**, puisqu'on répond toujours 200 à Tara. Engendrer
 avec `randomBytes(32).toString('base64url')` : 43 caractères, aucun caractère à encoder.
 
+⚠️ **LE SECRET EN PLACE FAIT 24 CARACTÈRES, PAS 43 — mesuré le 21 oct. 2026**, et deux
+endroits annonçaient 43 (ce paragraphe et `config.toml`). Ce n'est **pas** un défaut :
+`webhookSecret()` exige 24 au minimum, et la forme a été vérifiée **base64url pure, sans
+aucun `+` `/` ni `=`** — le piège de l'espace est donc bel et bien écarté. 24 caractères de
+base64url valent 144 bits : largement assez. **Le conseil de génération ci-dessus reste le
+bon pour un secret NEUF** ; ce qui était faux, c'est de décrire l'existant.
+
 ⚠️ **LA MÊME VALEUR DOIT ÊTRE POSÉE DANS L'ENVIRONNEMENT DE L'EDGE FUNCTION.** Deux valeurs
 différentes = toutes les notifications refusées, en silence.
+
+##### ⚠️⚠️ AUCUN LIEN TARA N'EST PAYABLE — ET C'EST LE VRAI BLOCAGE. Mesuré le 21 oct. 2026
+
+**Question de l'utilisateur : « est-ce que je peux recevoir les paiements via Tara sans
+problème ? »** Mesuré par `POST /transactionlist` sur le compte réel — lecture seule, aucun
+lien créé. **Les quatre transactions du compte, sans exception :**
+
+```
+XN-PRO-27B3B4    isActive=false   collectionStatus=ERROR     encaisse=0   5 000 F, 8 oct.
+product-456      isActive=false   collectionStatus=PENDING   encaisse=0
+XN-CTRL-F7CBB0   isActive=false   collectionStatus=PENDING   encaisse=0
+XN-CTRL-C399A5   isActive=false   collectionStatus=PENDING   encaisse=0
+certified=false  sur le seul vrai lien d abonnement
+```
+
+⚠️ **`isActive = false` PARTOUT, ET `totalAmount = 0` PARTOUT : PAS UN FRANC N'A JAMAIS ÉTÉ
+ENCAISSÉ.** Et le seul lien d'abonnement réel — Pro à 5 000 F, créé le 8 oct. — porte
+`collectionStatus = ERROR`, là où les liens de contrôle à 100 F sont restés `PENDING`.
+Contre-épreuve en base : `subscription_payments` est **vide**, et les trois commandes qui
+portent des liens Tara (7–8 oct.) sont **toutes encore `pending`**.
+
+⚠️ **CE BLOCAGE EST EN AMONT DE TOUT LE CODE.** Déployer l'Edge Function et poser les
+`TARA_*` sur Vercel **ne changerait rien** : le lien qu'on fabriquerait sortirait inactif. Le
+webhook n'est donc PAS la première chose à régler — il était jusqu'ici présenté comme le
+seul mur, et c'est faux.
+
+⚠️ **CE QUE JE NE PEUX PAS TRANCHER, ET QU'IL NE FAUT PAS DEVINER : POURQUOI.** Ni
+`isActive`, ni `collectionStatus`, ni `certified` ne figurent dans la documentation — aucun
+des quatre fichiers de `docs/tara-api/` ne les mentionne. Les hypothèses plausibles (compte
+marchand non certifié / KYC, aucun collecteur configuré, lien à activer depuis le tableau de
+bord) **sont des hypothèses**. Le contrôle qui tranche n'est pas un appel d'API : c'est le
+tableau de bord Tara, ou leur support. **Question pour le titulaire du compte, pas pour moi.**
+
+##### ⚠️ LE SECRET DU WEBHOOK EST VISIBLE CHEZ TARA — mais il faut la clé d'API pour le lire
+
+⚠️ **CE TITRE ANNONÇAIT « LE SECRET DU WEBHOOK N'EST PAS SECRET » : c'était mon erreur, pas un
+constat.** Corrigé le 21 oct. 2026 quelques heures plus tard, après avoir sondé le bon
+endpoint. Le détail et la contre-épreuve suivent — **et un titre faux est pire qu'un titre
+absent, parce qu'on le retient sans lire la suite.**
+
+`POST /transactionlist` rend, pour chaque transaction, le **`webHookUrl` complet, secret
+inclus**. Constaté le 21 oct. 2026 sur `XN-PRO-27B3B4`.
+
+⚠️⚠️ **J'AI ÉCRIT ICI « quiconque connaît le `businessId` peut lire notre secret » — C'EST
+FAUX, ET JE LE CORRIGE LE MÊME JOUR.** J'avais étendu la découverte du 7 oct. (« Tara ne
+valide pas `apiKey` »), mesurée sur `/paymentlinks` et `/transactions/status`, à
+`/transactionlist` **sans l'éprouver sur CET endpoint**. Mesuré, avec un faux de **même
+longueur et même alphabet** pour que seule la valeur diffère :
+
+```
+/transactionlist     vraie cle            ACCEPTE — webHookUrl lisible
+                     meme FORME, fausse   REFUSE  « API_KEY_IS_NULL »  (24 car.)
+                     vraie cle PERMUTEE   REFUSE                       (24 car.)
+/transactions/status vraie cle            TRANSACTION_NOT_FOUND
+                     meme FORME, fausse   TRANSACTION_NOT_FOUND   <- IDENTIQUES
+```
+
+⚠️ **LA CONTRE-ÉPREUVE EST CE QUI REND CE RELEVÉ CONCLUANT** : la **même** fausse clé est
+refusée sur un endpoint et acceptée sur l'autre. Sans elle, « refusé » pourrait venir d'un
+hoquet de Tara. **`/transactionlist` valide la clé par sa VALEUR, pas par sa forme** — et le
+message `API_KEY_IS_NULL` est trompeur, il sort aussi sur une clé non vide mais fausse.
+
+**Ce qui reste vrai, et c'est beaucoup plus étroit :** le secret est stocké en clair chez Tara
+et rendu par un appel **authentifié**. Il est donc exposé à qui détient `TARA_API_KEY` — nous,
+et Tara. **C'est une frontière de confiance tierce ordinaire, pas une faille.** Le
+`businessId` seul ne l'ouvre pas, et `TARA_API_KEY` reste bien un secret.
+
+⚠️ **LA LEÇON EST CELLE DU 7 oct., À L'ENVERS.** Ce jour-là j'avais surévalué une faille faute
+d'avoir lu par où arrive la notification ; ici j'ai surévalué une fuite faute d'avoir sondé
+l'endpoint dont je parlais. **Un comportement mesuré sur un endpoint ne se transporte pas aux
+autres** — cette API le prouve deux fois, puisque deux de ses endpoints traitent la même clé
+différemment.
+
+⚠️ **IL RESTE UNE FUITE RÉELLE, ET C'EST LA SEULE : le secret a été imprimé dans une
+transcription de session le 21 oct. 2026.** Elle ne vient pas de Tara, elle vient de ma sonde.
+**C'est à elle seule le motif de rotation** — pas une faiblesse de conception.
+
+⚠️ **CE QUI TIENT ENCORE, ET C'EST CE QUI SAUVE LA CONCEPTION :** la fonction **ne croit pas
+la notification**. Elle rappelle `POST /transactions/status` et exige `SUCCESS`. Un attaquant
+qui lit le secret et forge une notification doit donc produire un `productId` **réellement
+réglé** — c'est-à-dire payer. La garde utile a toujours été le rappel, jamais le secret.
+**Ne pas renforcer le secret en croyant renforcer la sécurité ; c'est le rappel qui protège.**
+
+⚠️ **CE SECRET A ÉTÉ IMPRIMÉ DANS UNE TRANSCRIPTION DE SESSION le 21 oct. 2026**, par une
+sonde qui demandait tous les champs de la transaction. **À faire tourner** — bien que, le
+point ci-dessus étant établi, la rotation ne protège pas de grand-chose. Les deux copies
+doivent bouger ensemble (Vercel + environnement de la fonction).
+
+##### ⚠️ TROIS ERREURS DANS `docs/tara-api/endpoints.md`, mesurées le 21 oct. 2026
+
+Le skill `tara-api-developer` prime sur ce document, mais **l'API réelle prime sur le
+skill** :
+
+| `endpoints.md` annonce | Mesuré |
+|---|---|
+| `/transactionlist` : « la réponse est **un tableau à la racine** (pas d'enveloppe) » | **Faux** — c'est `{ price, transactionList: [...], message? }` |
+| `/paid/transactionlist` : « même requête et même forme de réponse » | **Faux** — **HTTP 405**, et du **HTML** en corps. L'endpoint n'accepte pas ce `POST` |
+| champs `transactionId`, `amount`, `createdAt` | Réels : `identifier`, `dailyAmount`/`totalAmount`, `creationDate` |
+
+⚠️ **ET UN PIÈGE DE SILENCE, DE LA FAMILLE DU §6.1.** Une fenêtre de pagination trop large
+rend **HTTP 200**, un corps **sans champ `status`**, et `transactionList: []` :
+
+```
+start=0 size=1,2,3   OK
+start=0 size=5       OK — rend les 4
+start=0 size=10      message=INVALID_SEARCH_RANGE   transactionList=[]   HTTP 200
+```
+
+**La règle d'or n° 1 du skill ne suffit donc pas ici** : tester `res.ok` ou
+`status === 'FAILURE'` laisse conclure « ce compte n'a aucune transaction » sur une erreur de
+paramètre. **Lire `message` aussi**, et garder `size` petit. Sans effet sur nous aujourd'hui —
+aucun code du dépôt n'appelle `/transactionlist` — mais à savoir avant d'en écrire.
 
 ##### ⚠️ L'API TARA N'AUTHENTIFIE PAS LA CLÉ — mesuré le 7 oct. 2026
 
@@ -1784,7 +1903,17 @@ s'activer. **Ce chemin ne fonctionne pas**, et la raison tient en une ligne de
 
 **L'adresse de notification est portée par la TRANSACTION, pas par le compte.** Le lien d'un
 tiers porte donc SON `webHookUrl` : nous ne sommes jamais prévenus, et rien ne s'active.
-Atteindre la fonction exige le secret de 43 caractères de l'URL, que personne d'autre n'a.
+Atteindre la fonction exige le secret de l'URL.
+
+⚠️ **CETTE PHRASE DISAIT « de 43 caractères » — c'est faux, il en fait 24**, mesuré le
+21 oct. 2026 (au-dessus du minimum de 24 exigé par `webhookSecret()`, donc sans défaut).
+
+⚠️ **ELLE DISAIT AUSSI « que personne d'autre n'a », ET J'AI D'ABORD CRU DEVOIR LE CORRIGER —
+À TORT.** J'ai annoncé le même jour que le `businessId` suffisait à lire le secret, puis
+mesuré que **non** : `/transactionlist` valide `TARA_API_KEY` par sa valeur. Le relevé et sa
+contre-épreuve sont plus haut. **La phrase d'origine était donc substantiellement juste** : le
+secret n'est lisible que par qui détient la clé d'API. **Ce qui protège réellement reste le
+rappel à `/transactions/status`, pas le secret** — cela n'a jamais changé.
 
 ⚠️ **J'avais écrit « EXPLOITABLE, NE PAS DÉPLOYER » dans CLAUDE.md, dans le message du commit
 `8cc7f1d` et en tête de la fonction, sans avoir vérifié par où la notification arrive.**
@@ -2192,6 +2321,28 @@ GET  /v1/projects/<ref>/secrets     200  []   (la LECTURE passe deja)
 La seconde est facile à oublier : sans elle, la fonction se déploie mais n'a **aucune**
 variable d’environnement, donc elle refuse tout en silence.
 
+⚠️ **IL EN FAUT QUATRE, ET LA LIGNE « la LECTURE passe deja » NE VAUT PLUS — remesuré le
+21 oct. 2026 sur le jeton courant** :
+
+```
+GET /v1/projects/<ref>/functions   403  Missing: edge_functions_read
+GET /v1/projects/<ref>/secrets     403  Missing: edge_functions_secrets_read
+```
+
+Ce n'est **pas** une régression : c'est la conséquence directe du conseil « tout sur `None`
+sauf `Database` » suivi à la lettre lors du renouvellement. Le relevé du 7 oct. décrivait un
+jeton plus ouvert. **Pour déployer et vérifier, il faut donc les quatre** —
+`edge_functions_write`, `edge_functions_secrets_write`, et les deux `..._read` sans lesquels
+on ne peut même pas constater ce qu'on vient de poser. Ou un `supabase functions deploy` par
+le titulaire du compte.
+
+⚠️ **SEULES LES TROIS `TARA_*` SONT À POSER.** `SUPABASE_URL` et
+`SUPABASE_SERVICE_ROLE_KEY` — les deux autres noms que la fonction lit — sont **injectées
+par Supabase** dans toute Edge Function. C'est précisément ce qui fait de l'Edge Function la
+bonne sortie : `service_role` y vit sans jamais toucher Vercel, ce que « Déploiement »
+interdit. **À confirmer au premier déploiement réel** : tant que la fonction n'a pas tourné,
+c'est une lecture de la documentation de Supabase, pas une mesure.
+
 ⚠️ **`supabase/functions` est EXCLU de `tsconfig.json`.** Le fichier tourne sur **Deno**, avec
 des globales qui n'existent pas dans l'application ; sans cette exclusion, `**/*.ts` le ferait
 échouer à la compilation de Next.
@@ -2227,6 +2378,51 @@ du temps.
 
 ⚠️ **On répond 200 à Tara même sur refus.** Ils ne retentent jamais : un 4xx ne provoquerait
 aucun renvoi, il perdrait seulement l'événement. Le motif reste dans le journal de la fonction.
+
+##### ⚠️ MAIS LE HANDLER EST SYNCHRONE, ET LA RÉFÉRENCE PRESCRIT LE CONTRAIRE — 21 oct. 2026
+
+Trouvé en confrontant `docs/tara-api/webhooks.md` au code, et non en relisant ce document.
+La référence est explicite : *« Réponds `2xx` **immédiatement**, puis traite en asynchrone.
+Un handler lent fait échouer la livraison. »* **Notre fonction fait tout avant de répondre** —
+mesuré sur le fichier :
+
+```
+1 appel a Tara /transactions/status     AbortSignal.timeout(15000)
+5 aller-retours PostgREST               AUCUN delai borne
+puis seulement le 200
+```
+
+⚠️ **ET TARA NE RETENTE JAMAIS.** Une livraison perdue, c'est donc un abonnement **encaissé**
+dont la formule reste **fermée**, et **rien chez nous ne le signalerait** — exactement la
+famille du repli muet payé le 6 oct. sur le domaine faux.
+
+⚠️ **CE QUI EST INCONNU, ET QU'IL NE FAUT PAS DEVINER : le budget de livraison de Tara.** Il
+n'est documenté nulle part (`webhooks.md` dit qu'un handler lent échoue, sans jamais chiffrer
+le seuil). **On ne peut donc PAS affirmer qu'on le dépasse** — seulement que notre marge
+n'est bornée nulle part, les cinq appels PostgREST n'ayant aucun délai. Écrire « la fonction
+est trop lente » serait inventer un chiffre ; écrire « tout va bien » serait pire.
+
+**Trois sorties, à trancher le jour du déploiement :**
+
+1. **Borner les cinq `rest()`**, comme l'appel à Tara l'est déjà. Le moins coûteux, et utile
+   quoi qu'il arrive.
+2. **Répondre 200 d'abord**, puis traiter — ce que la référence demande. ⚠️ Mais cela
+   **retire le seul endroit où un refus est visible** : aujourd'hui le motif part au journal
+   avant la réponse. À ne pas faire sans décider où le refus devient observable.
+3. **Utiliser `/resend-webhook`** — un `productId`, et Tara rejoue. ⚠️ **C'est le filet
+   existant, et nous ne l'employons pas**, ni même ne savons détecter qu'une notification a
+   manqué. Depuis le 21 oct., l'octroi manuel de `/admin` est une seconde marche arrière.
+
+⚠️ **CE QUI A ÉTÉ CONFRONTÉ ET QUI EST CONFORME, pour ne pas le revérifier** : `status`
+comparé en majuscules avec repli (jamais de liste fermée sans *fallback*) · déduplication sur
+`paymentId` et non `productId` · `amount` parsé depuis une **chaîne**, en tolérant aussi un
+nombre · `/transactions/status` comme vérification, **aucun HMAC inventé** ·
+`Authorization: Bearer` **et** `apiKey` dans le corps, dans les deux copies qui appellent
+l'API · `webHookUrl` en HTTPS.
+
+⚠️ **`reference/` DU SKILL N'EST TOUJOURS PAS SYNCHRONISÉ — revérifié le 21 oct. 2026** : le
+dossier installé ne contient que `SKILL.md`. Les quatre fichiers de `docs/tara-api/` restent
+la seule source. **Les relire, et non relire ce document.**
 
 ⚠️ **L'idempotence tient sur `unique (provider, provider_reference)`**, dans
 `subscription_payments` — pas dans le code applicatif. Un webhook est rejoué.
@@ -2517,6 +2713,70 @@ une page parfaitement correcte. **Normaliser avant de comparer** (`replace(/<!--
 — c'est le piège de l'espace fine insécable des montants, sous un autre caractère. Et le
 diagnostic a été **ajouté avant de corriger**, pour prouver l'hypothèse au lieu de relâcher
 l'assertion jusqu'à ce qu'elle passe.
+
+#### Cinq défauts de 0022/0023 corrigés — 23 oct. 2026
+
+Trouvés par une revue du code livré le 21 oct., **chacun vérifié sur pièces
+avant d'être corrigé** — plusieurs constats de revue se révèlent faux, et on ne
+corrige pas sur parole.
+
+⚠️ **1. L'EXPORT COMPTABLE EMPORTAIT LES BROUILLONS — le plus grave, parce
+qu'il sort de l'entreprise.** `isAccountable` ne testait que `number !== null`,
+sur la foi de « un brouillon n'a pas de numéro ». **C'est faux** :
+`setInvoiceStatusAction` n'attribue un numéro que dans le sens
+`status !== 'draft' && number === null` et **conserve** celui qui existe. Donc
+une facture **repassée en brouillon** partait chez le comptable, étiquetée
+« Brouillon » — précisément ce que l'en-tête du fichier jure d'éviter. Le
+statut STOCKÉ est désormais le juge.
+
+⚠️ **2. « 5000,50 » ÉTAIT ENREGISTRÉ 500 050 FCFA.** `montant.replace(/[^0-9]/g,
+'')` effaçait la virgule au lieu de la refuser : **cent fois trop**, en
+silence, dans la seule table qui porte le chiffre d'affaires réel. Le §5 pose
+que le FCFA n'a pas de centimes — une décimale n'est donc pas une imprécision
+à arrondir, c'est une saisie à REFUSER. `francsSaisis()` accepte les
+séparateurs de milliers (« 5 000 », « 5.000 », l'espace fine U+202F que produit
+`formatAmount`) et refuse toute décimale. **17 contrôles dont 10 en
+contre-épreuve.**
+
+⚠️ **3. LE PANNEAU DE VERSEMENT S'AFFICHAIT POUR DÉCOUVERTE**, alors que le
+champ « Durée » disparaît pour exactement cette raison. On pouvait donc
+inscrire un encaissement en regard d'une formule **gratuite**. **Et le masquer
+ne suffisait pas** : la réinitialisation ne s'exécute qu'au changement
+d'ENTREPRISE (`[company]`), pas de formule — cocher sur Pro puis basculer sur
+Découverte laissait le versement partir. **La validation tranche aussi**
+(`avecPaiement && !gratuit`).
+
+⚠️ **4. UN 402 « RÉSERVÉ À ENTREPRISE » ÉTAIT SERVI À UN CLIENT QUI PAIE.**
+`getSubscription` ignorait son `error` : une lecture qui n'aboutit pas rendait
+le repli `discovery`, et l'export comptable refusait — poliment, correctement
+formulé, **et faux**. C'est le défaut du 8 oct. à l'identique : un échec et une
+absence rendus de la même forme. D'où `readFailed?: true` sur `Subscription`,
+et **503 au lieu de 402** sur la route. ⚠️ **On ne LÈVE pas** :
+`getSubscription` sert la coquille applicative, une exception emporterait toute
+l'application pour un badge de formule.
+
+⚠️ **5. CHAQUE VERSEMENT S'AFFICHAIT « ? → ? » AU JOURNAL.** 0023 écrit
+`entity = 'subscription'` comme 0022, mais ses `details` portent
+`{ payment, amount, channel, reference, plan }` — **ni `previous_status` ni
+`status`**. `resume()` les lisait quand même et `parsePlan(undefined)` rendait
+`null`. L'écran censé tracer l'argent n'en disait donc rien. Le drapeau
+`payment` est lu **avant** tout le reste.
+
+**Vérifié** : `tsc`, `lint`, `build` · **`○ /` toujours à 1,86 ko**.
+
+##### ⚠️ DEUX DÉFAUTS RESTENT, et ils exigent une MIGRATION — non faits
+
+Ils touchent la base de production : **à décider avec l'utilisateur**, pas à
+appliquer en passant.
+
+| Défaut | Pourquoi il faut du SQL |
+|---|---|
+| `admin_record_payment` puis `admin_set_plan` sont **deux appels non transactionnels** | Si l'octroi échoue après que le versement a été écrit, l'argent est journalisé, la formule n'est pas posée — **et la reprise est refusée à jamais** par l'unicité de la référence. Il faut une fonction qui fasse les deux en une transaction |
+| `unique (provider, provider_reference)` avec `provider = 'manuel'` constant | Rend les références **globalement uniques** : deux entreprises qui paient toutes deux « MoMo octobre » se bloquent mutuellement. La clé devrait porter `company_id` |
+
+⚠️ **NE PAS « corriger » l'unicité en la supprimant** : c'est elle qui attrape
+la saisie en double avant de prolonger deux fois un abonnement, et c'est la
+seule protection du webhook Tara contre un renvoi.
 
 #### Une lecture ratée ne dit plus « 0 » — 8 oct. 2026
 
@@ -2872,6 +3132,122 @@ Un test qui accorde ce droit devrait le retirer dans un `finally`, pas à la der
 Les totaux de la page sont calculés **en TypeScript** par `computeTotals`, jamais en SQL —
 même règle qu'ailleurs. ⚠️ La lecture charge toutes les factures de toutes les entreprises
 avec leurs lignes : exact, mais **à revoir quand le volume grandira**.
+
+### Une erreur serveur n'est plus un cul-de-sac — 23 oct. 2026
+
+⚠️ **LE DÉPÔT N'AVAIT AUCUNE FRONTIÈRE D'ERREUR. AUCUNE.** Ni `global-error`,
+ni le moindre `error.tsx`, nulle part — mesuré, pas supposé. Toute exception
+d'un composant serveur ou d'une Server Action livrait donc à l'utilisateur la
+page brute de Next :
+
+```
+Application error: a server-side exception has occurred while loading
+www.xn-facture.com (see the server logs for more information).
+Digest: 4166884167@E352
+```
+
+En **anglais**, sur un produit dont tout le reste est français ; sans dire ce
+qui s'est passé ; **et sans aucun bouton pour en sortir.** C'est exactement le
+cul-de-sac que le projet s'interdit ailleurs — « un refus qui n'ouvre aucun
+chemin est un cul-de-sac » — mais appliqué au moment où l'utilisateur est le
+plus démuni. **Remonté par l'utilisateur**, qui le voyait à l'enregistrement et
+à la déconnexion.
+
+⚠️ **CES FRONTIÈRES NE RÉPARENT AUCUNE PANNE — elles la rendent LISIBLE et
+RÉCUPÉRABLE.** Ne jamais lire cette section comme un correctif de cause. La
+cause du signalement du 23 oct. **n'a PAS été trouvée** : voir plus bas.
+
+**Quatre fichiers, et le choix de leur emplacement est le point :**
+
+| Fichier | Couvre |
+|---|---|
+| `app/(app)/error.tsx` | `/dashboard`, `/factures`, `/devis`, `/clients`, `/parametres`, `/abonnement` |
+| `app/(auth)/error.tsx` | **la plus importante** — `signOut()` finit par `redirect('/connexion')` : une panne là laissait dehors, sans session et sans retour |
+| `app/(admin)/error.tsx` | `/admin` vit dans son PROPRE groupe : une frontière dans `(app)` ne l'aurait jamais couvert |
+| `app/global-error.tsx` | dernier recours, quand la coquille racine elle-même tombe |
+
+⚠️ **AUCUNE FRONTIÈRE SUR `(marketing)`, ET C'EST DÉLIBÉRÉ.** Une `error.tsx`
+embarque du JavaScript client dans le graphe de sa route : la poser sur la
+landing aurait alourdi la page que le §2 pèse à l'octet. `global-error.tsx` la
+couvre. **Contrôle : `○ /` reste à 1,86 ko après le build** — vérifié.
+
+⚠️ **`global-error.tsx` N'IMPORTE RIEN DU PROJET, pour deux raisons
+indépendantes.** (1) Il remplace `<html>` et `<body>` : la coquille racine
+ayant échoué, ni `globals.css` ni les polices ne sont garanties, donc une
+classe Tailwind ne peindrait peut-être rien — d'où des styles **en ligne**,
+seule exception admise au §6.1. (2) Importer `ErrorScreen` ou `Button` les
+ferait entrer dans le graphe de la landing. **Ses couleurs sont le QUATRIÈME
+exemplaire de la rampe de marque** (après `tailwind.config.ts`,
+`marketing.css`, `invoice-document.tsx`) : si la rampe bouge, ce fichier aussi.
+
+⚠️ **DEUX BOUTONS, ET L'ORDRE PORTE LA LEÇON.** « Recharger la page »
+(`location.reload()`) est **premier** parce qu'il retélécharge le code ;
+« Réessayer sans recharger » (`reset()` de Next) rejoue le rendu avec le
+JavaScript **déjà en mémoire** et ne peut donc rien contre un onglet périmé.
+
+#### ⚠️ UN IDENTIFIANT DE SERVER ACTION PÉRIMÉ REND 500 — et rien ne l'attrape
+
+Mesuré **en production** le 23 oct. 2026, avec son témoin :
+
+```
+action PERIMEE, chemin JavaScript   404  « Server action not found. »
+action PERIMEE, chemin progressif   500  « 500: Internal Server Error »
+action VALIDE,  chemin progressif   303  -> /connexion      <- tout va bien
+```
+
+C'est ce que détient un onglet resté ouvert **à travers un déploiement** : les
+pages se chargent (ce sont des `GET` neufs) mais **toute soumission échoue**.
+
+⚠️ **ET LES NOUVELLES FRONTIÈRES N'Y CHANGENT RIEN — vérifié, pas supposé.**
+Next traite « Server action not found » **avant tout rendu React**, donc aucune
+`error.tsx` n'est jamais montée : on reçoit la page 500 de l'ancien routeur.
+**Ne pas annoncer que les frontières couvrent ce cas.** La vraie parade est la
+protection de décalage de version (*Skew Protection* chez Vercel, ou
+`deploymentId` dans `next.config.mjs`) — **aucune des deux n'est en place**.
+
+#### ⚠️ CE QUI N'A PAS ÉTÉ TROUVÉ, ET IL FAUT LE DIRE
+
+**La cause du signalement du 23 oct. n'est pas identifiée.** Tout répond
+normalement depuis une session neuve :
+
+```
+11 pages de l application, session ordinaire   200 partout
+/admin et /admin/temoignages, admin jetable    200
+deconnexion, VRAIE Server Action               303 -> /connexion
+etat du compte signalant   derniere connexion 21 oct., 0 facteur MFA,
+                           1 session, entreprise en mode « image »
+```
+
+⚠️ **J'AI CRU LA REPRODUIRE, ET C'ÉTAIT MOI.** Ma première sonde rendait un 500
+sur la déconnexion — j'avais mêlé l'en-tête `Next-Action` à un corps
+multipart. **Sans la contre-épreuve (chemin progressif pur → 303), j'annonçais
+une fausse cause.** C'est la famille de l'assertion qui ne peut pas échouer du
+§9, retournée : **une panne qu'on provoque soi-même ne prouve rien.**
+
+**Vérifié dans un vrai navigateur (CDP), sur une page qui lève pour de vrai :**
+
+```
+l ecran FRANCAIS est rendu   « CETTE PAGE N A PAS PU S AFFICHER »
+                             « aucune de vos donnees n est perdue »
+les 2 boutons sont la        Recharger la page · Reessayer sans recharger
+la reference est affichee    le digest, seul lien vers le journal serveur
+LA COQUILLE SURVIT           barre laterale, menu, deconnexion utilisables
+build                        ○ / toujours a 1,86 ko · tsc et lint propres
+menage                       9 entreprises, 9 comptes, 0 orpheline,
+                             un seul administrateur — le vrai
+```
+
+⚠️ **LE `digest` EST AFFICHÉ À L'ÉCRAN, et c'est volontaire.** C'est la seule
+chose qui relie la capture d'écran d'un utilisateur à une ligne du journal
+serveur. Il ne divulgue rien : c'est une empreinte, jamais le message, qui lui
+reste en anglais et côté serveur — même discipline que `translateAuthError` et
+`AdminRead<T>`.
+
+⚠️ **PIÈGE DE TEST PAYÉ ICI :** un `curl | grep` sur la page d'erreur ne trouve
+**aucun** de ses textes. Next envoie `<html id="__next_error__">` et la
+frontière **se rend côté client, après hydratation** — la charge ne porte que
+la référence `app/(app)/error`. C'est le piège de `/connexion` du §9 sous un
+autre visage : **inspecter le DOM, pas le HTML servi.**
 
 ### Pages légales — `/confidentialite`, `/conditions`, `/mentions-legales`
 Trois pages statiques (420 o chacune), bâties sur un gabarit unique
@@ -4402,6 +4778,19 @@ app/
   api/auth/confirmation         GET, jeton d'email → session (hors middleware)
   api/factures/[id]/pdf         GET, lit la base (runtime Node)
   api/devis/[id]/pdf            GET, idem
+  global-error.tsx              DERNIER RECOURS — il remplace <html> et <body>,
+                                donc AUCUN import du projet : ni la feuille de
+                                styles ni les polices ne sont garanties, et un
+                                import tirerait le systeme de design dans le
+                                graphe de la LANDING (pesee a l octet)
+  (app)/error.tsx               Frontiere de l application
+  (auth)/error.tsx              LA PLUS IMPORTANTE — signOut() finit par
+                                redirect('/connexion') : une panne la laissait
+                                dehors, sans session et sans retour
+  (admin)/error.tsx             /admin a son PROPRE groupe : une frontiere
+                                posee dans (app) ne l aurait jamais couvert
+                                ⚠️ AUCUNE sur (marketing) : elle alourdirait
+                                la landing, que global-error couvre deja
   icon.png                      192×192 — icône du site, balise émise par Next
   apple-icon.png                180×180 — écran d'accueil iOS
   favicon.ico                   64×64 — sert /favicon.ico, demandé en direct
@@ -4446,6 +4835,10 @@ components/
                 renewal-intent (ne pas renouveler / revenir dessus)
   documents/   status-menu, document-created-dialog, use-creation-notice   (facture + devis)
   pdf/         download-pdf-button
+  layout/error-screen.tsx  L ECRAN D ERREUR, seul du projet. Rendu par les
+               QUATRE frontieres ci-dessous. Il ne repare rien : il rend une
+               panne lisible et RECUPERABLE. « Recharger la page » en premier
+               (il retelecharge le code), `reset()` en second
 
 lib/
   types.ts          Client, Invoice/InvoiceView, Quote/QuoteView, Company, statuts

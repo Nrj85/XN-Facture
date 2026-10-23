@@ -268,6 +268,19 @@ export interface Subscription {
    * et l'écran annonce la fin au lieu de proposer le renouvellement.
    */
   renewalDeclined: boolean;
+  /**
+   * La lecture a ÉCHOUÉ — les champs ci-dessus sont un repli, pas un constat.
+   *
+   * ⚠️ **TOUT CE QUI REFUSE QUELQUE CHOSE DOIT LE REGARDER.** Sans ce drapeau,
+   * une base injoignable une seconde se lisait « Découverte », et l'export
+   * comptable répondait **402 « réservé à la formule Entreprise » à un client
+   * qui paie**. Même famille que `AdminRead<T>` (8 oct.) : un échec et une
+   * absence ne doivent jamais avoir la même forme.
+   *
+   * Absent quand la lecture a abouti — y compris quand l'entreprise n'a
+   * simplement aucune ligne, ce qui est un vrai « Découverte ».
+   */
+  readFailed?: true;
 }
 
 export interface SubscriptionPaymentRow {
@@ -292,11 +305,35 @@ export interface SubscriptionPaymentRow {
 export async function getSubscription(companyId: string): Promise<Subscription> {
   const supabase = createClient();
 
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('subscriptions')
     .select('plan,expires_at,requested,renewal_declined')
     .eq('company_id', companyId)
     .maybeSingle();
+
+  /*
+    ⚠️ **UNE LECTURE RATÉE NE DOIT PLUS PASSER POUR « DÉCOUVERTE » — corrigé
+    le 23 oct. 2026.** L'`error` était ignorée : `data` valait `null`, le repli
+    rendait `DEFAULT_PLAN`, et un abonné **Entreprise se voyait refuser son
+    export comptable en 402** — « réservé à la formule Entreprise » — parce
+    qu'une requête n'avait pas abouti une seconde. C'est exactement le défaut
+    du 8 oct. (`AdminRead<T>`) : un échec et une absence rendus identiques.
+
+    On ne LÈVE pas, délibérément : `getSubscription` est appelée par la
+    coquille applicative, donc une exception emporterait toute l'application
+    pour un badge de formule. Le drapeau laisse chaque appelant décider — et
+    seul celui qui REFUSE quelque chose a besoin de le regarder.
+  */
+  if (error) {
+    console.error('getSubscription : lecture échouée', error);
+    return {
+      plan: DEFAULT_PLAN,
+      expiresAt: null,
+      requested: null,
+      renewalDeclined: false,
+      readFailed: true,
+    };
+  }
 
   const row = data as {
     plan?: string;

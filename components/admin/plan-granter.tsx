@@ -48,6 +48,31 @@ const CANAUX_LABELS: { value: Canal; label: string; hint?: string }[] = [
   { value: 'autre', label: 'Autre', hint: 'Précisez dans la référence' },
 ];
 
+/**
+ * Lit un montant saisi à la main et rend des **francs entiers**, ou `null` si
+ * la saisie n'en est pas un.
+ *
+ * ⚠️ **ELLE REFUSE, ELLE NE CORRIGE PAS — c'est tout son objet.** Le §5 pose
+ * que le FCFA n'a pas de centimes : une partie décimale ne peut donc pas être
+ * « arrondie pour arranger », elle révèle que la personne n'a pas saisi ce
+ * qu'elle croyait. Avaler la virgule multipliait le versement par cent, en
+ * silence, dans la seule table qui porte le chiffre d'affaires réel.
+ *
+ * Les séparateurs de milliers restent acceptés — espace, espace insécable,
+ * espace fine insécable (U+202F, celle que `formatAmount` produit), et le
+ * point ou la virgule quand ils groupent par TROIS chiffres. Ce qui est
+ * refusé, c'est le séparateur suivi d'une ou deux décimales.
+ */
+export function francsSaisis(saisie: string): number | null {
+  const nu = saisie.replace(/[\s  ]/g, '');
+  if (nu === '') return null;
+  // Chiffres seuls, ou groupes de trois séparés par un point ou une virgule
+  // — « 5000 », « 5.000 », « 5,000 ». Toute autre forme est ambiguë.
+  if (!/^\d+$/.test(nu) && !/^\d{1,3}([.,]\d{3})+$/.test(nu)) return null;
+  const francs = Number(nu.replace(/[.,]/g, ''));
+  return Number.isSafeInteger(francs) && francs > 0 ? francs : null;
+}
+
 export function PlanGranter({
   company,
   onClose,
@@ -99,16 +124,45 @@ export function PlanGranter({
 
   const valider = () => {
     setErreur(null);
+
+    /*
+      ⚠️ **UNE VIRGULE ÉTAIT AVALÉE, PAS REFUSÉE — défaut d'argent corrigé le
+      23 oct. 2026.** L'ancien code faisait `Number(montant.replace(/[^0-9]/g,
+      ''))` : tout ce qui n'était pas un chiffre disparaissait, donc
+
+          « 5000,50 »  ->  500050 FCFA        cent fois trop
+          « 5000.50 »  ->  500050 FCFA
+
+      — et rien à l'écran ne le signalait. Le §5 est pourtant formel : **le
+      FCFA n'a pas de centimes**, donc une partie décimale n'est pas une
+      imprécision à corriger en silence, c'est une saisie qu'il faut REFUSER.
+      Les séparateurs de milliers, eux, restent acceptés : « 5 000 » et
+      « 5.000 » veulent dire la même chose et ne sont jamais ambigus.
+    */
+    /*
+      ⚠️ **`!gratuit` EST REPRIS ICI, ET CE N'EST PAS UN DOUBLON DE
+      L'AFFICHAGE.** La réinitialisation ne s'exécute qu'au changement
+      d'ENTREPRISE (`[company]`), pas au changement de formule : cocher le
+      versement sur Pro puis basculer sur Découverte laissait `avecPaiement`
+      à `true`, et le versement partait quand même — en regard d'un abonnement
+      gratuit. Masquer le panneau ne suffit donc pas ; c'est la validation qui
+      tranche.
+    */
+    const saisiePaiement = avecPaiement && !gratuit;
+
+    const montantFrancs = saisiePaiement ? francsSaisis(montant) : null;
+    if (saisiePaiement && montantFrancs === null) {
+      setErreur('Saisissez un montant en francs entiers, sans centimes — le FCFA n’en a pas.');
+      return;
+    }
+
     startTransition(async () => {
       const r = await grantPlanAction(
         company.id,
         plan,
         Number(mois),
-        // ⚠️ `Number('')` vaut 0, pas NaN : sans ce repli le serveur recevrait
-        // un montant de zéro, que la base refuserait avec un message correct
-        // mais déroutant sur un champ laissé vide par inadvertance.
-        avecPaiement
-          ? { amount: Number(montant.replace(/[^0-9]/g, '')) || 0, channel: canal as Canal, reference }
+        saisiePaiement
+          ? { amount: montantFrancs as number, channel: canal as Canal, reference }
           : null,
       );
       if (!r.ok) {
@@ -225,7 +279,16 @@ export function PlanGranter({
             réellement reçu : c'est l'exploitant qui le déclare, le logiciel ne
             le devine jamais. Un octroi sans versement reste parfaitement
             légitime — geste commercial, correction, essai.
+
+            ⚠️ **ET IL DISPARAÎT POUR DÉCOUVERTE, comme le champ « Durée » —
+            corrigé le 23 oct. 2026.** Il s'affichait jusque-là sur la formule
+            GRATUITE, ce qui permettait d'inscrire un versement en regard d'un
+            abonnement qui ne coûte rien : une contre-vérité dans la seule
+            table qui porte le chiffre d'affaires réel, et une fenêtre dont la
+            confirmation se contredisait elle-même. C'est le §6.1 — pas de
+            contrôle qui promet ce qui n'a pas de sens.
           */}
+          {!gratuit && (
           <div className="space-y-3 rounded-[10px] border border-line bg-paper px-3 py-3">
             <Switch
               checked={avecPaiement}
@@ -282,6 +345,7 @@ export function PlanGranter({
               </p>
             )}
           </div>
+          )}
 
           <p className="text-[11.5px] leading-relaxed text-ink-3">
             L’octroi est enregistré au journal d’activité, avec votre compte comme auteur.

@@ -105,6 +105,23 @@ function ActionBadge({ action }: { action: string }) {
   );
 }
 
+/**
+ * Noms des canaux d'encaissement, pour le journal.
+ *
+ * ⚠️ **RECOPIÉS DE `plan-granter.tsx` À DESSEIN, et c'est un choix, pas un
+ * oubli.** Les importer tirerait un composant de dialogue dans ce module pour
+ * quatre libellés. La liste fermée vit en base (contrainte `check` de 0023) ;
+ * si elle change, ces deux endroits changent — et le repli `?? d.channel`
+ * garantit qu'un canal inconnu s'affiche brut plutôt que de disparaître.
+ */
+const CANAUX_JOURNAL: Record<string, string> = {
+  mtn_momo: 'MTN Mobile Money',
+  orange_money: 'Orange Money',
+  bank: 'Virement bancaire',
+  cash: 'Espèces',
+  autre: 'Autre',
+};
+
 /** Résumé lisible d'une ligne de journal, à partir de son `details` jsonb. */
 function resume(row: AdminActivityRow): string {
   const d = row.details ?? {};
@@ -116,6 +133,35 @@ function resume(row: AdminActivityRow): string {
   // les codes bruts ne sont pas des mots d'interface : on rend les noms
   // commerciaux et la date de fin, qui sont ce qu'on vient vérifier.
   if (row.entity === 'subscription') {
+    /*
+      ⚠️ **UN VERSEMENT N'EST PAS UN CHANGEMENT DE FORMULE, et le confondre
+      effaçait la trace de l'argent — corrigé le 23 oct. 2026.** La migration
+      0023 écrit elle aussi `entity = 'subscription'`, mais ses `details`
+      portent `{ payment, amount, channel, reference, plan }` : **ni
+      `previous_status`, ni `status`**. La branche ci-dessous les lisait quand
+      même, `parsePlan(undefined)` rendait `null`, et **chaque paiement
+      enregistré s'affichait « ? → ? »**.
+
+      C'est le journal qui y perdait sa valeur : `subscription_payments` est la
+      seule source du chiffre d'affaires réel, et l'écran censé la tracer n'en
+      disait rien. On lit donc le drapeau `payment` AVANT tout le reste.
+    */
+    if (d.payment === true) {
+      const montant = typeof d.amount === 'number' ? formatMoney(d.amount) : 'montant inconnu';
+      const canal =
+        typeof d.channel === 'string' ? (CANAUX_JOURNAL[d.channel] ?? d.channel) : null;
+      const ref = typeof d.reference === 'string' ? d.reference : null;
+      const formule = parsePlan(d.plan);
+      return [
+        `Versement ${montant}`,
+        formule ? planByCode(formule).name : null,
+        canal,
+        ref ? `réf. ${ref}` : null,
+      ]
+        .filter(Boolean)
+        .join(' · ');
+    }
+
     const avant = parsePlan(d.previous_status);
     const apres = parsePlan(d.status);
     const depuis = avant ? planByCode(avant).name : '?';
