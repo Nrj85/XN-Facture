@@ -757,6 +757,22 @@ export type Database = {
           last_sign_in_at: string
         }[]
       }
+      admin_grant_with_payment: {
+        Args: {
+          p_amount: number
+          p_channel: string
+          p_company: string
+          p_months: number
+          p_plan: string
+          p_reference: string
+        }
+        Returns: {
+          commande_soldee: boolean
+          echeance_posee: string
+          formule_posee: Database["public"]["Enums"]["plan_code"]
+          paiement_id: string
+        }[]
+      }
       admin_record_payment: {
         Args: {
           p_amount: number

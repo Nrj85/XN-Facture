@@ -2764,7 +2764,7 @@ l'application pour un badge de formule.
 
 **Vérifié** : `tsc`, `lint`, `build` · **`○ /` toujours à 1,86 ko**.
 
-##### Les deux derniers défauts — migration 0024, ÉCRITE et ÉPROUVÉE, **PAS APPLIQUÉE**
+##### Les deux derniers défauts — migration 0024, **APPLIQUÉE le 23 oct. 2026**
 
 | Défaut de 0023 | Ce que 0024 en fait |
 |---|---|
@@ -2809,17 +2809,44 @@ passerait aussi si la fonction refusait **avant** d'écrire — un contrôle qui
 discrimine rien, famille du §9. **D prouve que le versement avait bien été
 écrit puis annulé**, puisque la même référence est réacceptée.
 
-⚠️ **L'ORDRE D'APPLICATION EST CONTRAINT, et il faut le savoir avant de
-commencer :**
+⚠️ **L'ORDRE D'APPLICATION EST CONTRAINT, et il a été suivi dans cet ordre** —
+le noter, parce qu'une prochaine migration le redemandera :
 
 1. appliquer 0024 ;
 2. **régénérer `database.types.ts`** — le client est typé depuis le 9 oct.,
-   donc `tsc` REFUSE un nom de fonction que le fichier ne connaît pas ;
+   donc `tsc` REFUSE un nom de fonction que le fichier ne connaît pas. Brancher
+   le code avant cette étape ne compile tout simplement pas ;
 3. seulement alors, brancher `grantPlanAction` sur la nouvelle RPC.
 
-**Le code n'est donc pas encore branché, et ce n'est pas un oubli :** il ne
-compilerait pas. Tant que 0024 n'est pas appliquée, `grantPlanAction` continue
-d'enchaîner les deux appels — avec le défaut décrit ci-dessus.
+**État appliqué, vérifié sur la base réelle** :
+
+```
+contrainte  UNIQUE (company_id, provider, provider_reference)
+fonction    (p_company, p_plan, p_months, p_amount, p_channel, p_reference)
+ACL         {postgres, authenticated, service_role} — aucune entree nue
+```
+
+**Et le PARCOURS RÉEL, par PostgREST avec un administrateur jetable** — la
+sonde précédente tournait en transaction annulée, donc elle prouvait la
+logique et non le chemin :
+
+```
+A. TEMOIN non-administrateur    403  42501
+B. octroi + versement           200  pro, echeance 2026-11-23
+   la BASE dit                  plan=pro, expires_at=2026-11-23
+   le VERSEMENT                 5000, mtn_momo, provider=manuel
+C. octroi qui ECHOUE (99 mois)  400  « Duree hors borne »
+   versements avant -> apres    1 -> 1          AUCUN orphelin
+D. MEME ref, duree valide       200  ACCEPTEE   la reference etait libre
+E. doublon, MEME entreprise     400  P0001      l idempotence mord
+menage  9 entreprises, 9 comptes, 0 paiement, 0 orpheline,
+        un seul administrateur — le vrai
+```
+
+⚠️ **`admin_record_payment` N'EST PLUS APPELÉE PAR L'APPLICATION, et il ne faut
+pas la supprimer pour autant.** `admin_grant_with_payment` l'appelle en
+interne : c'est elle qui porte les cinq validations du versement, et les
+recopier dans la nouvelle en ferait un second exemplaire voué à diverger.
 
 #### Une lecture ratée ne dit plus « 0 » — 8 oct. 2026
 
@@ -4755,8 +4782,8 @@ supabase/
   migrations/0019_admin_actors_fonction.sql APPLIQUÉE le 8 oct. 2026.
                                 `admin_actors` devient une FONCTION. La vue
                                 reste en place : le code déployé la lit encore
-  migrations/0024_octroi_transactionnel.sql ⚠️ **ÉCRITE ET ÉPROUVÉE,
-                                PAS APPLIQUÉE** (23 oct. 2026). Corrige les
+  migrations/0024_octroi_transactionnel.sql APPLIQUÉE le 23 oct. 2026,
+                                et le code est branché. Corrige les
                                 deux derniers défauts de 0023 :
                                 `admin_grant_with_payment()` enchaîne
                                 versement et octroi EN UNE TRANSACTION — les
@@ -4768,7 +4795,7 @@ supabase/
                                 ⚠️ La contrainte est RESCOPÉE, jamais
                                 supprimée : c'est le seul filet du webhook
                                 Tara. 8 sondes en transaction ANNULÉE.
-                                ⚠️ **Appliquer, PUIS régénérer
+                                ⚠️ **L ORDRE A ÉTÉ : appliquer, PUIS régénérer
                                 database.types.ts, PUIS brancher le code** —
                                 `tsc` refuse une RPC qu'il ne connaît pas
   migrations/0023_paiement_manuel.sql APPLIQUÉE le 21 oct. 2026.

@@ -271,27 +271,50 @@ export async function grantPlanAction(
   // que ce versement a déjà été traité — et on s'arrête **avant** de prolonger
   // une seconde fois. L'ordre inverse prolongerait l'abonnement une fois par
   // saisie en double, et c'est la saisie en double qu'on cherche à attraper.
-  let paiementInscrit = false;
-  if (paiement) {
-    const p = paiementSchema.safeParse(paiement);
-    if (!p.success) return fail(firstIssue(p.error));
+  /*
+    ⚠️ **UN SEUL APPEL QUAND IL Y A UN VERSEMENT — migration 0024, branchée le
+    23 oct. 2026.** Les deux RPC successives étaient chacune atomique, mais
+    **leur SÉQUENCE ne l'était pas** : deux allers-retours PostgREST, donc deux
+    transactions. Si `admin_set_plan` échouait après que le versement avait été
+    écrit, l'argent était compté, la formule n'était pas posée, **et la reprise
+    devenait impossible** — la référence était déjà prise par la ligne
+    orpheline. Ce n'était pas « un versement en trop », c'était une impasse
+    dont seule la console SQL sortait.
 
-    const { error: erreurPaiement } = await supabase.rpc('admin_record_payment', {
+    `admin_grant_with_payment` enchaîne les deux dans la MÊME transaction : une
+    exception annule désormais aussi le versement, et la même référence reste
+    réutilisable. Éprouvé en transaction annulée, contrôles C et D.
+
+    ⚠️ **SANS VERSEMENT, ON APPELLE TOUJOURS `admin_set_plan` SEULE.** Lui
+    faire porter des paramètres de paiement facultatifs aurait créé la
+    surcharge ambiguë du §0006 ; et un octroi sans versement reste parfaitement
+    légitime — geste commercial, correction, essai.
+  */
+  const paiementInscrit = paiement !== null;
+
+  const appel = async () => {
+    if (!paiement) {
+      return supabase.rpc('admin_set_plan', {
+        p_company: parsed.data.companyId,
+        p_plan: parsed.data.plan,
+        p_months: parsed.data.months,
+      });
+    }
+    const p = paiementSchema.safeParse(paiement);
+    if (!p.success) return { data: null, error: null, refus: firstIssue(p.error) } as const;
+    return supabase.rpc('admin_grant_with_payment', {
       p_company: parsed.data.companyId,
       p_plan: parsed.data.plan,
+      p_months: parsed.data.months,
       p_amount: p.data.amount,
       p_channel: p.data.channel,
       p_reference: p.data.reference,
     });
-    if (erreurPaiement) return failFromDb(erreurPaiement);
-    paiementInscrit = true;
-  }
+  };
 
-  const { data, error } = await supabase.rpc('admin_set_plan', {
-    p_company: parsed.data.companyId,
-    p_plan: parsed.data.plan,
-    p_months: parsed.data.months,
-  });
+  const resultat = await appel();
+  if ('refus' in resultat && resultat.refus) return fail(resultat.refus);
+  const { data, error } = resultat;
 
   // ⚠️ **LE REFUS EST RELAYÉ, JAMAIS MASQUÉ.** `admin_set_plan` rédige ses
   // exceptions EN FRANÇAIS pour être lues à l'écran, et `describeDbError`
