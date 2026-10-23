@@ -2764,19 +2764,62 @@ l'application pour un badge de formule.
 
 **Vérifié** : `tsc`, `lint`, `build` · **`○ /` toujours à 1,86 ko**.
 
-##### ⚠️ DEUX DÉFAUTS RESTENT, et ils exigent une MIGRATION — non faits
+##### Les deux derniers défauts — migration 0024, ÉCRITE et ÉPROUVÉE, **PAS APPLIQUÉE**
 
-Ils touchent la base de production : **à décider avec l'utilisateur**, pas à
-appliquer en passant.
-
-| Défaut | Pourquoi il faut du SQL |
+| Défaut de 0023 | Ce que 0024 en fait |
 |---|---|
-| `admin_record_payment` puis `admin_set_plan` sont **deux appels non transactionnels** | Si l'octroi échoue après que le versement a été écrit, l'argent est journalisé, la formule n'est pas posée — **et la reprise est refusée à jamais** par l'unicité de la référence. Il faut une fonction qui fasse les deux en une transaction |
-| `unique (provider, provider_reference)` avec `provider = 'manuel'` constant | Rend les références **globalement uniques** : deux entreprises qui paient toutes deux « MoMo octobre » se bloquent mutuellement. La clé devrait porter `company_id` |
+| `admin_record_payment` puis `admin_set_plan` sont **deux appels, donc deux transactions** | `admin_grant_with_payment()` les enchaîne **dans un seul appel**. Une exception annule désormais AUSSI le versement |
+| `unique (provider, provider_reference)` est **global** | La clé passe à `(company_id, provider, provider_reference)` |
 
-⚠️ **NE PAS « corriger » l'unicité en la supprimant** : c'est elle qui attrape
-la saisie en double avant de prolonger deux fois un abonnement, et c'est la
-seule protection du webhook Tara contre un renvoi.
+⚠️ **LE DÉFAUT D'ATOMICITÉ N'ÉTAIT PAS « UN VERSEMENT EN TROP » — C'ÉTAIT UNE
+IMPASSE.** Si l'octroi échouait après l'écriture du versement : l'argent était
+compté, la formule n'était pas posée, **et la reprise devenait impossible** —
+la référence était déjà prise par la ligne orpheline. L'exploitant n'avait plus
+que la console SQL, c'est-à-dire exactement ce que 0022 voulait faire
+disparaître.
+
+⚠️ **LA CONTRAINTE EST RESCOPÉE, JAMAIS SUPPRIMÉE.** C'est elle qui attrape la
+saisie en double **avant** de prolonger deux fois, et c'est **le seul filet du
+webhook Tara** contre un renvoi. Vérifié avant d'y toucher : un rejeu Tara
+porte le même `paymentId`, donc le même `productId`, donc la **même
+entreprise** — la clé est identique et le doublon reste refusé. La portée par
+entreprise n'affaiblit la déduplication **sur aucun chemin réel**.
+
+⚠️ **0024 NE RÉÉCRIT NI 0022 NI 0023 : elle les APPELLE.** Recopier la règle
+« prolonger ou repartir » ou les cinq validations du versement en ferait un
+troisième exemplaire, qui divergerait au premier ajustement. Et c'est une
+**fonction nouvelle**, surtout pas un paramètre de plus — le piège de la
+surcharge ambiguë de 0006.
+
+**Éprouvée dans une transaction ANNULÉE, 8 contrôles, aucune donnée touchée :**
+
+```
+A. TEMOIN compte ordinaire      refuse 42501
+B. octroi + versement           echeance 2026-11-23, 1 paiement
+C. octroi qui ECHOUE (99 mois)  refuse, AUCUN versement orphelin
+D. MEME ref, duree valide       ACCEPTEE — la reference n etait pas consommee
+E. meme ref, DEUX entreprises   les deux acceptees
+F. meme ref, MEME entreprise    refuse P0001
+G. rejeu Tara, meme paymentId   refuse 23505
+H. ACL  {postgres, authenticated, service_role} — aucune entree nue
+```
+
+⚠️ **C ET D VONT ENSEMBLE, et c'est ce qui rend C concluant.** C seul
+passerait aussi si la fonction refusait **avant** d'écrire — un contrôle qui ne
+discrimine rien, famille du §9. **D prouve que le versement avait bien été
+écrit puis annulé**, puisque la même référence est réacceptée.
+
+⚠️ **L'ORDRE D'APPLICATION EST CONTRAINT, et il faut le savoir avant de
+commencer :**
+
+1. appliquer 0024 ;
+2. **régénérer `database.types.ts`** — le client est typé depuis le 9 oct.,
+   donc `tsc` REFUSE un nom de fonction que le fichier ne connaît pas ;
+3. seulement alors, brancher `grantPlanAction` sur la nouvelle RPC.
+
+**Le code n'est donc pas encore branché, et ce n'est pas un oubli :** il ne
+compilerait pas. Tant que 0024 n'est pas appliquée, `grantPlanAction` continue
+d'enchaîner les deux appels — avec le défaut décrit ci-dessus.
 
 #### Une lecture ratée ne dit plus « 0 » — 8 oct. 2026
 
@@ -4712,6 +4755,22 @@ supabase/
   migrations/0019_admin_actors_fonction.sql APPLIQUÉE le 8 oct. 2026.
                                 `admin_actors` devient une FONCTION. La vue
                                 reste en place : le code déployé la lit encore
+  migrations/0024_octroi_transactionnel.sql ⚠️ **ÉCRITE ET ÉPROUVÉE,
+                                PAS APPLIQUÉE** (23 oct. 2026). Corrige les
+                                deux derniers défauts de 0023 :
+                                `admin_grant_with_payment()` enchaîne
+                                versement et octroi EN UNE TRANSACTION — les
+                                deux appels séparés laissaient, si l'octroi
+                                échouait, un versement orphelin dont la
+                                référence bloquait TOUTE reprise ; et
+                                l'unicité passe de `(provider, reference)`
+                                à `(company_id, provider, reference)`.
+                                ⚠️ La contrainte est RESCOPÉE, jamais
+                                supprimée : c'est le seul filet du webhook
+                                Tara. 8 sondes en transaction ANNULÉE.
+                                ⚠️ **Appliquer, PUIS régénérer
+                                database.types.ts, PUIS brancher le code** —
+                                `tsc` refuse une RPC qu'il ne connaît pas
   migrations/0023_paiement_manuel.sql APPLIQUÉE le 21 oct. 2026.
                                 `admin_record_payment()` — l'exploitant
                                 DÉCLARE un versement réellement reçu.
