@@ -30,6 +30,32 @@ export function formatDate(iso: IsoDate): string {
   return `${String(p.d).padStart(2, '0')}/${String(p.m).padStart(2, '0')}/${p.y}`;
 }
 
+/**
+ * Un INSTANT — `timestamptz` — en « 28/08/2026 14:02 », heure de Douala.
+ *
+ * ⚠️ **À NE PAS CONFONDRE AVEC `formatDate`, et c'est toute la raison de son
+ * existence.** `formatDate` prend une date CIVILE (`AAAA-MM-JJ`), qui n'a pas
+ * de fuseau : une facture émise le 8 janvier s'affiche le 8 janvier partout.
+ * Ici l'entrée est un instant précis, et le fuseau décide du jour affiché —
+ * d'où `Africa/Douala`, le même que `lib/today.ts`. En UTC, un événement de
+ * 00h30 à Douala se lirait la veille.
+ *
+ * Elle était jusqu'ici privée à `admin-view.tsx`. Le journal d'activité étant
+ * parti dans son propre composant le 24 oct. 2026, elle servait à deux
+ * endroits : la recopier aurait garanti qu'un jour l'un des deux change de
+ * fuseau sans l'autre — la divergence qui ne se voit qu'en production.
+ */
+export function formatInstant(iso: string): string {
+  return new Intl.DateTimeFormat('fr-FR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'Africa/Douala',
+  }).format(new Date(iso));
+}
+
 /** `2026-08-28` → « 28 août 2026 », pour les en-têtes et le PDF. */
 export function formatDateLong(iso: IsoDate): string {
   const p = parts(iso);

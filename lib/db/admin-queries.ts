@@ -352,14 +352,36 @@ export async function getAdminAccounts(): Promise<AdminRead<AdminAccountRow>> {
  * une jointure : `activity_log.company_id` n'a **pas** de clé étrangère — c'est
  * délibéré, pour que l'historique survive à la suppression de ce qu'il
  * journalise — et PostgREST ne sait pas joindre sans relation déclarée.
+ *
+ * ⚠️ **LE PLAFOND EST PASSÉ DE 60 À 400 LE 24 oct. 2026, ET CE N'EST PAS UN
+ * RÉGLAGE DE CONFORT.** L'écran filtre désormais par date, et un filtre de date
+ * posé sur une fenêtre de 60 lignes **ment** : il répondrait « aucun résultat »
+ * pour un mois qui en compte vingt, simplement parce qu'ils sont hors fenêtre.
+ * 400 couvre un peu plus d'un an au rythme mesuré ce jour-là — 41 lignes en
+ * tout, 28 sur trente jours.
+ *
+ * ⚠️ **ET LE TOTAL EST LU, parce qu'un plafond muet est un mensonge.** Sans
+ * `count`, l'écran ne peut pas distinguer « voici tout » de « voici les 400
+ * plus récentes sur 900 », et l'exploitant lirait un historique amputé comme
+ * s'il était complet. C'est le défaut du 8 oct. : un chiffre faux présenté
+ * comme un constat.
+ *
+ * ⚠️ **`count` PEUT ÊTRE `null` SANS QUE RIEN N'AIT ÉCHOUÉ.** L'écran doit
+ * traiter `total === null` comme « inconnu », jamais comme zéro : afficher
+ * « 0 ligne » au-dessus d'une liste pleine serait le même mensonge dans
+ * l'autre sens.
  */
-export async function getAdminActivity(limit = 60): Promise<AdminRead<AdminActivityRow>> {
+export async function getAdminActivity(
+  limit = 400,
+): Promise<AdminRead<AdminActivityRow> & { total: number | null }> {
   const supabase = createClient();
 
   const [journal, companies, comptes] = await Promise.all([
     supabase
       .from('activity_log')
-      .select('id,occurred_at,company_id,actor_id,entity,entity_id,action,details')
+      .select('id,occurred_at,company_id,actor_id,entity,entity_id,action,details', {
+        count: 'exact',
+      })
       .order('occurred_at', { ascending: false })
       .limit(limit),
     supabase.from('companies').select('id,name'),
@@ -371,7 +393,7 @@ export async function getAdminActivity(limit = 60): Promise<AdminRead<AdminActiv
   // lignes, la carte annoncerait « Journal vide » — une affirmation, et fausse.
   if (journal.error) {
     console.error('[admin] lecture du journal impossible :', journal.error.code, journal.error.message);
-    return { rows: [], failure: 'Le journal d’activité n’a pas pu être lu.' };
+    return { rows: [], failure: 'Le journal d’activité n’a pas pu être lu.', total: null };
   }
 
   // ⚠️ **LES DEUX AUTRES NE FONT QUE RÉSOUDRE DES NOMS : elles se dégradent,
@@ -407,7 +429,7 @@ export async function getAdminActivity(limit = 60): Promise<AdminRead<AdminActiv
     details: (row.details as Record<string, unknown> | null) ?? null,
   }));
 
-  return { rows, failure: null };
+  return { rows, failure: null, total: journal.count ?? null };
 }
 
 /**

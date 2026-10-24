@@ -19,7 +19,9 @@ import { Input } from '@/components/ui/input';
 import { StatCard } from '@/components/dashboard/stat-card';
 import { ExportCompaniesButton } from '@/components/admin/export-companies-button';
 import { PlanGranter } from '@/components/admin/plan-granter';
-import { formatDate } from '@/lib/format';
+import { ActivityJournal } from '@/components/admin/activity-journal';
+import { TONS } from '@/components/admin/tones';
+import { formatDate, formatInstant } from '@/lib/format';
 import { formatAmount, formatMoney } from '@/lib/money';
 import { parsePlan, planByCode } from '@/lib/plans';
 import type {
@@ -49,17 +51,14 @@ import type {
  * l'ambiguïté se voie le jour où elle apparaîtra.
  */
 
-/** Un instant ISO en date et heure lisibles, fuseau de l'entreprise. */
-function instant(iso: string): string {
-  return new Intl.DateTimeFormat('fr-FR', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    timeZone: 'Africa/Douala',
-  }).format(new Date(iso));
-}
+/*
+  ⚠️ **`instant()` A QUITTÉ CE FICHIER le 24 oct. 2026 pour `lib/format.ts`.**
+  Le journal d'activité est parti dans son propre composant, et il en avait
+  besoin lui aussi : deux copies auraient divergé sur le fuseau — exactement la
+  divergence qui ne se voit qu'en production. C'est `formatInstant`, importé en
+  tête, et la règle du §6.1 la ramène à sa place : toute date passe par
+  `lib/format.ts`.
+*/
 
 /** Date seule, pour les colonnes où l'heure n'apprend rien. */
 function jour(iso: string): string {
@@ -71,118 +70,12 @@ function jour(iso: string): string {
   }).format(new Date(iso));
 }
 
-const ENTITES: Record<string, string> = {
-  company: 'Entreprise',
-  client: 'Client',
-  invoice: 'Facture',
-  quote: 'Devis',
-  // Écrit par `admin_set_plan` (0022) : c'est la trace d'un octroi de formule.
-  subscription: 'Abonnement',
-};
-
-const ACTIONS: Record<string, { label: string; ton: 'neutre' | 'vert' | 'rouge' | 'ambre' }> = {
-  created: { label: 'Créé', ton: 'vert' },
-  updated: { label: 'Modifié', ton: 'neutre' },
-  status_changed: { label: 'Statut changé', ton: 'ambre' },
-  deleted: { label: 'Supprimé', ton: 'rouge' },
-};
-
-const TONS = {
-  neutre: 'bg-status-draft-bg text-status-draft',
-  vert: 'bg-status-paid-bg text-status-paid',
-  ambre: 'bg-status-sent-bg text-status-sent',
-  rouge: 'bg-status-overdue-bg text-status-overdue',
-} as const;
-
-function ActionBadge({ action }: { action: string }) {
-  const info = ACTIONS[action] ?? { label: action, ton: 'neutre' as const };
-  return (
-    <span
-      className={`inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${TONS[info.ton]}`}
-    >
-      {info.label}
-    </span>
-  );
-}
-
-/**
- * Noms des canaux d'encaissement, pour le journal.
- *
- * ⚠️ **RECOPIÉS DE `plan-granter.tsx` À DESSEIN, et c'est un choix, pas un
- * oubli.** Les importer tirerait un composant de dialogue dans ce module pour
- * quatre libellés. La liste fermée vit en base (contrainte `check` de 0023) ;
- * si elle change, ces deux endroits changent — et le repli `?? d.channel`
- * garantit qu'un canal inconnu s'affiche brut plutôt que de disparaître.
- */
-const CANAUX_JOURNAL: Record<string, string> = {
-  mtn_momo: 'MTN Mobile Money',
-  orange_money: 'Orange Money',
-  bank: 'Virement bancaire',
-  cash: 'Espèces',
-  autre: 'Autre',
-};
-
-/** Résumé lisible d'une ligne de journal, à partir de son `details` jsonb. */
-function resume(row: AdminActivityRow): string {
-  const d = row.details ?? {};
-  const numero = typeof d.number === 'string' ? d.number : null;
-  const nom = typeof d.name === 'string' ? d.name : null;
-
-  // ⚠️ **L'ABONNEMENT SE LIT AUTREMENT, et sans ce cas la ligne dirait « Sans
-  // numéro · discovery → pro ».** Un octroi n'a pas de numéro de document, et
-  // les codes bruts ne sont pas des mots d'interface : on rend les noms
-  // commerciaux et la date de fin, qui sont ce qu'on vient vérifier.
-  if (row.entity === 'subscription') {
-    /*
-      ⚠️ **UN VERSEMENT N'EST PAS UN CHANGEMENT DE FORMULE, et le confondre
-      effaçait la trace de l'argent — corrigé le 23 oct. 2026.** La migration
-      0023 écrit elle aussi `entity = 'subscription'`, mais ses `details`
-      portent `{ payment, amount, channel, reference, plan }` : **ni
-      `previous_status`, ni `status`**. La branche ci-dessous les lisait quand
-      même, `parsePlan(undefined)` rendait `null`, et **chaque paiement
-      enregistré s'affichait « ? → ? »**.
-
-      C'est le journal qui y perdait sa valeur : `subscription_payments` est la
-      seule source du chiffre d'affaires réel, et l'écran censé la tracer n'en
-      disait rien. On lit donc le drapeau `payment` AVANT tout le reste.
-    */
-    if (d.payment === true) {
-      const montant = typeof d.amount === 'number' ? formatMoney(d.amount) : 'montant inconnu';
-      const canal =
-        typeof d.channel === 'string' ? (CANAUX_JOURNAL[d.channel] ?? d.channel) : null;
-      const ref = typeof d.reference === 'string' ? d.reference : null;
-      const formule = parsePlan(d.plan);
-      return [
-        `Versement ${montant}`,
-        formule ? planByCode(formule).name : null,
-        canal,
-        ref ? `réf. ${ref}` : null,
-      ]
-        .filter(Boolean)
-        .join(' · ');
-    }
-
-    const avant = parsePlan(d.previous_status);
-    const apres = parsePlan(d.status);
-    const depuis = avant ? planByCode(avant).name : '?';
-    const vers = apres ? planByCode(apres).name : '?';
-    const fin = typeof d.expires_at === 'string' ? ` jusqu’au ${formatDate(d.expires_at)}` : '';
-    return `${depuis} → ${vers}${fin}`;
-  }
-
-  if (row.action === 'status_changed') {
-    const avant = typeof d.previous_status === 'string' ? d.previous_status : '?';
-    const apres = typeof d.status === 'string' ? d.status : '?';
-    return `${numero ?? 'Sans numéro'} · ${avant} → ${apres}`;
-  }
-  return nom ?? numero ?? 'Sans numéro';
-}
-
 export function AdminView({
   summary,
   companies,
   accounts,
   activity,
+  activityLimit,
   optedOut,
   adminEmail,
 }: {
@@ -195,7 +88,16 @@ export function AdminView({
    * annonçait donc « 0 compte » sur une RPC en échec, sans aucune alerte.
    */
   accounts: AdminRead<AdminAccountRow>;
-  activity: AdminRead<AdminActivityRow>;
+  /**
+   * ⚠️ **`total` EST LE NOMBRE DE LIGNES EN BASE, pas celui des lignes lues.**
+   * Les deux diffèrent dès que le journal dépasse le plafond, et c'est
+   * précisément ce que l'écran doit dire : un historique amputé présenté comme
+   * complet est un chiffre faux donné pour un constat. `null` veut dire
+   * « décompte indisponible », jamais zéro.
+   */
+  activity: AdminRead<AdminActivityRow> & { total: number | null };
+  /** Le plafond de lecture passé à `getAdminActivity`, affiché tel quel. */
+  activityLimit: number;
   /** Titulaires ayant refusé la prospection : ils sont retirés de l’export. */
   optedOut: number;
   adminEmail: string;
@@ -494,7 +396,7 @@ export function AdminView({
                     {a.createdAt ? jour(a.createdAt) : '—'}
                   </td>
                   <td className="tabular whitespace-nowrap px-5 py-3.5 text-ink-2">
-                    {a.lastSignInAt ? instant(a.lastSignInAt) : 'Jamais'}
+                    {a.lastSignInAt ? formatInstant(a.lastSignInAt) : 'Jamais'}
                   </td>
                   <td className="px-5 py-3.5">
                     <span
@@ -513,60 +415,20 @@ export function AdminView({
         )}
       </Card>
 
-      {/* --- Journal --- */}
-      <Card>
-        <CardHeader>
-          <div>
-            <CardTitle>Journal d’activité</CardTitle>
-            <p className="mt-0.5 text-[12.5px] text-ink-3">
-              Alimenté par des déclencheurs en base : rien ne s’y écrit depuis l’application, et
-              rien n’y échappe
-            </p>
-          </div>
-        </CardHeader>
+      {/*
+        --- Journal ---
 
-        {/*
-          ⚠️ **« Journal vide » EST UNE AFFIRMATION : elle ne doit pas servir de
-          repli à une lecture ratée.** C'est précisément la phrase qu'affichait
-          l'écran quand la requête échouait — on en concluait qu'il ne s'était
-          rien passé, alors que rien n'avait été lu.
-        */}
-        {activity.failure ? (
-          <EmptyState
-            icon={TriangleAlert}
-            title={activity.failure}
-            description="Ce n’est pas un journal vide : la base n’a pas répondu. Rechargez la page — si cela persiste, le motif exact est dans le journal du serveur."
-          />
-        ) : activity.rows.length === 0 ? (
-          <EmptyState
-            icon={Users}
-            title="Journal vide"
-            description="Aucune activité depuis la mise en place du journal. Les événements antérieurs ne sont pas rétroactifs — un déclencheur ne connaît que ce qui se passe après lui."
-          />
-        ) : (
-          <ul className="divide-y divide-line">
-            {activity.rows.map((row) => (
-              <li key={row.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-5 py-3">
-                <span className="tabular shrink-0 text-[11.5px] text-ink-3">
-                  {instant(row.occurredAt)}
-                </span>
-                <ActionBadge action={row.action} />
-                <span className="text-[13px] font-medium text-ink">
-                  {ENTITES[row.entity] ?? row.entity}
-                </span>
-                <span className="min-w-0 flex-1 truncate text-[13px] text-ink-2">
-                  {resume(row)}
-                </span>
-                <span className="shrink-0 text-[11.5px] text-ink-3">
-                  {row.companyName ?? 'entreprise supprimée'}
-                  {' · '}
-                  {row.actorEmail ?? 'système'}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
+        Filtres, pagination et rendu vivent dans ActivityJournal depuis le
+        24 oct. 2026. Ce fichier ne fait plus que lui passer ce qu il a lu :
+        les lignes, l echec eventuel, le total en base et le plafond de
+        lecture. Les deux derniers servent a DIRE ce que l ecran couvre.
+      */}
+      <ActivityJournal
+        rows={activity.rows}
+        failure={activity.failure}
+        total={activity.total}
+        limit={activityLimit}
+      />
 
       {/*
         Monté UNE fois, hors du tableau. Il se ferme en remettant la cible à

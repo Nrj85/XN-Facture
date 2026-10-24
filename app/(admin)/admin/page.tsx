@@ -23,6 +23,12 @@ export const metadata: Metadata = { title: 'Espace administrateur' };
 export default async function AdminPage() {
   const admin = await requireAdmin();
 
+  // ⚠️ **LE PLAFOND EST NOMMÉ ICI PARCE QU'IL EST LU DEUX FOIS** : il borne la
+  // requête, et l'écran l'affiche pour dire ce qu'il couvre. Deux littéraux
+  // auraient fini par diverger, et la carte aurait annoncé « les 60 plus
+  // récentes » au-dessus de 400 lignes.
+  const JOURNAL_PLAFOND = 400;
+
   // Les quatre lectures sont indépendantes : les lancer en parallèle évite
   // d'additionner quatre allers-retours vers Dublin.
   //
@@ -34,7 +40,7 @@ export default async function AdminPage() {
   const [overview, accounts, activity, desabonnes] = await Promise.all([
     getAdminOverview(),
     getAdminAccounts(),
-    getAdminActivity(60),
+    getAdminActivity(JOURNAL_PLAFOND),
     getMarketingOptOutCount(),
   ]);
 
@@ -44,6 +50,7 @@ export default async function AdminPage() {
       companies={overview.companies}
       accounts={accounts}
       activity={activity}
+      activityLimit={JOURNAL_PLAFOND}
       optedOut={desabonnes}
       adminEmail={admin.email}
     />
