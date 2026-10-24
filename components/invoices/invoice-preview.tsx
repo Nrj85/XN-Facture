@@ -101,7 +101,17 @@ export function InvoicePreview({
 
           Constaté pour de vrai : sans `isolate`, la capture de la carte avec et
           sans filigrane rendait deux images d'empreinte identique. */}
-      {!enTete && company.logoDataUrl && (
+      {/* ⚠️ **LA CONDITION SUIT LE PDF, et elle a changé le 24 oct. 2026.**
+          Elle valait `!enTete && logoDataUrl` : le filigrane disparaissait dès
+          qu'un papier à en-tête était posé. L'utilisateur l'a demandé sur SA
+          facture, qui porte un papier à bandes et du blanc au milieu — le
+          raisonnement complet est dans `lib/pdf/invoice-document.tsx`.
+
+          ⚠️ **LES DEUX DOIVENT BOUGER ENSEMBLE.** Cet aperçu prétend montrer
+          « le document tel que le client le recevra » : une condition qui
+          diverge du PDF en fait un menteur, et l'écart ne se verrait qu'au
+          téléchargement. */}
+      {company.logoDataUrl && (
         <span
           aria-hidden
           className="pointer-events-none absolute inset-0 -z-10 flex items-center justify-center opacity-[0.07]"
@@ -230,13 +240,16 @@ export function InvoicePreview({
           <caption className="sr-only">Détail des prestations facturées</caption>
           <thead>
             <tr className="border-b border-line">
-              <th scope="col" className="label-caps py-2 text-left">Désignation</th>
+              <th scope="col" className="label-caps py-2 pl-2 text-left">Désignation</th>
               <th scope="col" className="label-caps py-2 text-right">Qté</th>
-              <th scope="col" className="label-caps py-2 text-right">P.U.</th>
-              <th scope="col" className="label-caps py-2 text-right">Total</th>
+              <th scope="col" className="label-caps py-2 pl-2 text-right">P.U.</th>
+              <th scope="col" className="label-caps py-2 pl-2 pr-2 text-right">Total</th>
             </tr>
           </thead>
-          <tbody>
+          {/* Le bord bas du tableau, porté par le `tbody` : il remplace les
+              filets de rangée retirés. Sans lui la dernière ligne flotte, et
+              le bloc de totaux semble lui appartenir. */}
+          <tbody className="border-b border-line">
             {lines.length === 0 ? (
               <tr>
                 <td colSpan={4} className="py-4 text-center text-[12px] text-ink-3">
@@ -244,18 +257,28 @@ export function InvoicePreview({
                 </td>
               </tr>
             ) : (
-              lines.map((line) => (
-                <tr key={line.id} className="border-b border-line last:border-0">
-                  <td className="py-2.5 pr-3 text-ink">
+              /* ⚠️ **LE TABLEAU SUIT CELUI DU PDF — allégé le 24 oct. 2026.**
+                 Un filet sous chaque rangée a été remplacé par une alternance
+                 de fond : deux traits au lieu de douze sur une facture de dix
+                 postes. L'alternance part de la DEUXIÈME rangée, comme dans
+                 `lib/pdf/invoice-document.tsx`.
+
+                 ⚠️ **L'écart avec le PDF se verrait au téléchargement, trop
+                 tard** : cet aperçu prétend montrer le document tel que le
+                 client le recevra. Les deux changent ensemble ou pas du
+                 tout. */
+              lines.map((line, index) => (
+                <tr key={line.id} className={index % 2 === 1 ? 'bg-[#FAF7F2]' : undefined}>
+                  <td className="py-[11px] pl-2 pr-3.5 text-ink">
                     {line.description || <span className="text-ink-3">Sans désignation</span>}
                   </td>
-                  <td className="tabular py-2.5 text-right text-ink-2">
+                  <td className="tabular py-[11px] text-right text-ink-2">
                     {formatQuantity(line.quantity)}
                   </td>
-                  <td className="tabular py-2.5 text-right text-ink-2">
+                  <td className="tabular py-[11px] pl-2 text-right text-ink-2">
                     {formatAmount(line.unitPrice)}
                   </td>
-                  <td className="tabular py-2.5 text-right font-semibold text-ink">
+                  <td className="tabular py-[11px] pl-2 pr-2 text-right font-semibold text-ink">
                     {formatAmount(line.total)}
                   </td>
                 </tr>

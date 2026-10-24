@@ -135,23 +135,62 @@ const styles = StyleSheet.create({
 
   dates: { flexDirection: 'row', marginTop: 12, gap: 1 },
 
+  /*
+    ⚠️ **LE TABLEAU A ÉTÉ ALLÉGÉ LE 24 oct. 2026, à la demande de
+    l'utilisateur** — filets plus légers, alternance de fond, colonnes de
+    montants plus aérées.
+
+    Il portait un filet d'1 pt sous CHAQUE ligne : sur une facture de dix
+    postes, dix traits horizontaux pleine largeur, c'est-à-dire une grille. Le
+    rythme venait du trait, jamais de l'espace.
+
+    ⚠️ **LA SÉPARATION PASSE DÉSORMAIS PAR LE FOND, PAS PAR LE TRAIT.** Une
+    rangée sur deux reçoit un aplat crème ; les seuls filets qui restent sont
+    celui de l'en-tête et celui qui ferme le tableau. Deux traits au lieu de
+    douze, et la colonne de montants cesse d'être enfermée dans des cases.
+
+    ⚠️ **LES FILETS SONT À 0,75 pt, et c'est le mince utile.** En dessous,
+    l'impression à 300 ppp les rend irréguliers — un trait qui disparaît par
+    endroits se lit comme un défaut d'impression, pas comme une finesse.
+  */
   tableHead: {
     flexDirection: 'row',
     marginTop: 24,
-    paddingBottom: 6,
-    borderBottomWidth: 1,
+    paddingBottom: 7,
+    paddingHorizontal: 8,
+    borderBottomWidth: 0.75,
     borderBottomColor: LINE,
   },
   row: {
     flexDirection: 'row',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: LINE,
+    // 9,5 pt contre 8 : l'espace remplace le trait, il doit donc être le seul
+    // à porter le rythme. Trop serré, les rangées se touchent sans filet pour
+    // les séparer.
+    paddingVertical: 9.5,
+    paddingHorizontal: 8,
   },
-  colDesc: { flex: 1, paddingRight: 10 },
-  colQty: { width: 48, textAlign: 'right' },
-  colUnit: { width: 80, textAlign: 'right' },
-  colTotal: { width: 88, textAlign: 'right' },
+  /*
+    ⚠️ **L'ALTERNANCE MASQUE LE FILIGRANE LÀ OÙ ELLE PASSE, et il faut le
+    savoir.** Un aplat est opaque : sous une rangée teintée, le logo en fond
+    disparaît. `#FAF7F2` est volontairement à un cheveu du blanc — il suffit à
+    guider l'œil le long d'une ligne sans découper le filigrane en tranches
+    visibles. **L'assombrir rendrait le filigrane strié.**
+  */
+  rowAlt: { backgroundColor: '#FAF7F2' },
+  /*
+    Le filet de fermeture. Sans lui, la dernière rangée flotte : le tableau
+    n'a plus de bord bas, et le bloc de totaux semble lui appartenir.
+  */
+  tableEnd: { borderTopWidth: 0.75, borderTopColor: LINE },
+
+  // ⚠️ **LES TROIS COLONNES DE CHIFFRES SONT ÉLARGIES** — 48/80/88 devenait
+  // serré dès qu'un montant dépassait le million : « 1 452 855 » touchait
+  // l'intitulé de gauche. `paddingLeft` sépare chaque colonne de la
+  // précédente sans ajouter le moindre trait vertical.
+  colDesc: { flex: 1, paddingRight: 14 },
+  colQty: { width: 44, textAlign: 'right' },
+  colUnit: { width: 94, textAlign: 'right', paddingLeft: 8 },
+  colTotal: { width: 104, textAlign: 'right', paddingLeft: 8 },
 
   totals: { marginTop: 14, flexDirection: 'row', justifyContent: 'flex-end' },
   totalsBox: { width: 220 },
@@ -243,10 +282,47 @@ export function InvoiceDocument({ payload }: { payload: PdfPayload }) {
       }
     : null;
 
-  // ⚠️ **LE FILIGRANE DISPARAÎT AUSSI.** Il reprend le logo en grand au centre
-  // de la page : posé sous un papier à en-tête, il se bat avec le dessin de
-  // l'entreprise au lieu de le servir.
-  const filigrane = !enTete && company.logoDataUrl;
+  /*
+    ⚠️ **LE FILIGRANE SURVIT DÉSORMAIS AU PAPIER À EN-TÊTE — décision de
+    l'utilisateur, 24 oct. 2026, et elle RENVERSE celle du 5 oct.**
+
+    La règle était `!enTete && logoDataUrl`, au motif qu'un logo géant au
+    centre « se bat avec le dessin de l'entreprise ». Ce raisonnement vaut pour
+    un papier dont le dessin occupe la page ; il est faux pour le cas réel —
+    un papier qui porte une bande en haut, une bande en bas, et **du blanc au
+    milieu**, c'est-à-dire précisément l'endroit où le filigrane se pose.
+
+    L'utilisateur a demandé le filigrane sur SA facture, qui est dans ce cas.
+    Il ne le voyait pas, et rien à l'écran ne lui disait pourquoi : le réglage
+    d'en-tête éteignait en silence une fonction qu'il n'avait pas désactivée.
+
+    ⚠️ **CE QUE CELA COÛTE, ET IL FAUT LE SAVOIR :** un papier dont le dessin
+    couvre toute la page porte maintenant le logo par-dessus, à 7 %. Le recours
+    est de retirer le logo de l'entreprise — pas idéal, mais ce cas est
+    hypothétique là où celui qu'on vient de corriger est réel et mesuré.
+  */
+  const filigrane = company.logoDataUrl;
+
+  /*
+    ⚠️ **LE PIED DE PAGE IGNORAIT LA BANDE RÉSERVÉE — vrai défaut, corrigé le
+    24 oct. 2026 sur signalement de l'utilisateur.**
+
+    `styles.footer` est posé à `bottom: 26`. Quand un papier à en-tête réserve
+    25 mm en bas — soit ~71 pt — notre ligne légale et notre pagination
+    tombaient donc **à l'intérieur** de la bande que le papier dessine, par
+    -dessus son propre pied. Sur la facture signalée : « XN-Corp · Doula,
+    Cameroun — Page 1/1 » imprimé au milieu de la bande de l'entreprise.
+
+    ⚠️ **ET DÉCOCHER « garder la ligne légale » N'Y AURAIT RIEN CHANGÉ** : la
+    pagination survit toujours, elle n'est pas une mention légale. « Page 1/1 »
+    serait resté exactement au même endroit. **Le défaut est le placement, pas
+    le contenu** — c'est pourquoi aucun réglage ne pouvait le contourner.
+
+    On remonte donc le pied **juste au-dessus** de la bande. Les 6 pt sont le
+    filet qui évite que sa bordure supérieure ne touche le dessin.
+  */
+  const basReserve = enTete ? mm(company.letterheadBottomMm ?? 25) : 0;
+  const piedStyle = basReserve > 0 ? [styles.footer, { bottom: basReserve + 6 }] : styles.footer;
 
   // ⚠️ **LA LIGNE LÉGALE RESTE PAR DÉFAUT**, et ce n'est pas un choix
   // esthétique. Une facture camerounaise doit porter le NIU et le RCCM, et rien
@@ -370,8 +446,16 @@ export function InvoiceDocument({ payload }: { payload: PdfPayload }) {
           <Text style={[styles.label, styles.colTotal]}>Total</Text>
         </View>
 
+        {/* ⚠️ **L'ALTERNANCE PART DE LA DEUXIÈME RANGÉE** (`index % 2 === 1`) :
+            la première reste blanche, sous le filet de l'en-tête. Teinter
+            celle-ci la collerait visuellement à l'en-tête, qui porte déjà son
+            propre fond dans l'aperçu. */}
         {payload.lines.map((line, index) => (
-          <View key={index} style={styles.row} wrap={false}>
+          <View
+            key={index}
+            style={index % 2 === 1 ? [styles.row, styles.rowAlt] : styles.row}
+            wrap={false}
+          >
             <Text style={styles.colDesc}>{line.description}</Text>
             <Text style={[styles.colQty, { color: INK_2 }]}>
               {pdfText(formatQuantity(line.quantity))}
@@ -384,6 +468,11 @@ export function InvoiceDocument({ payload }: { payload: PdfPayload }) {
             </Text>
           </View>
         ))}
+
+        {/* Le bord bas du tableau. Il remplace les dix filets de rangée
+            retirés : un seul trait ferme le bloc, au lieu d'en cloisonner
+            chaque ligne. */}
+        <View style={styles.tableEnd} />
 
         <View style={styles.totals}>
           <View style={styles.totalsBox}>
@@ -463,7 +552,7 @@ export function InvoiceDocument({ payload }: { payload: PdfPayload }) {
             l'identification de l'émetteur se retire, et seulement si
             l'entreprise a décidé que son papier la portait. */}
         <Text
-          style={styles.footer}
+          style={piedStyle}
           render={({ pageNumber, totalPages }) => {
             const pages = `Page ${pageNumber}/${totalPages}`;
             if (!pied) return pages;
