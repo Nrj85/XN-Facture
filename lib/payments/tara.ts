@@ -61,10 +61,37 @@ function lienSur(valeur: unknown): string | null {
   }
 }
 
+/**
+ * ⚠️ **TROIS FORMES DE RÉPONSE CIRCULENT POUR LA MÊME REQUÊTE, et nous n'en
+ * lisions qu'une — corrigé le 24 oct. 2026.** `docs/tara-api/pieges.md` §3 les
+ * recense : aucune source de Tara ne fait foi, et les trois nomment le lien
+ * principal différemment.
+ *
+ * ```
+ * (a) doc detaillee      generalLink + cardLink + whatsappLink
+ *                        + smsLink + telegramLink + dikaloLink
+ * (b) page developpeur   paymentUrl     <- n etait lu NULLE PART
+ * (c) SDK officiel       paymentLink    <- n etait lu NULLE PART
+ * ```
+ *
+ * ⚠️ **ET L'ÉCHEC ÉTAIT SILENCIEUX, donc pire que bruyant.** Ce schéma est
+ * permissif — tous les champs sont optionnels : sur une réponse de forme (b) ou
+ * (c), `safeParse` réussissait, `status` valait bien `SUCCESS`, puis les six
+ * champs `*Link` ressortaient `null` et l'appel sortait sur
+ * `aucun-lien-exploitable`. **Un succès de Tara lu comme un échec**, avec un
+ * motif qui accusait l'absence de lien là où le lien était présent sous un
+ * autre nom — et le parcours retombait sur le mobile money manuel sans que rien
+ * ne le signale.
+ *
+ * La règle de la référence est une cascade, pas un choix :
+ * `generalLink ?? paymentUrl ?? paymentLink`.
+ */
 const reponseSchema = z.object({
   status: z.string().optional(),
   message: z.string().optional(),
   generalLink: z.unknown().optional(),
+  paymentUrl: z.unknown().optional(),
+  paymentLink: z.unknown().optional(),
   cardLink: z.unknown().optional(),
   whatsappLink: z.unknown().optional(),
   smsLink: z.unknown().optional(),
@@ -226,7 +253,17 @@ export async function createPaymentLink(
   }
 
   const links: PaymentLinks = {
-    general: lienSur(corps.generalLink),
+    /*
+      ⚠️ **LA CASCADE PASSE PAR `lienSur` À CHAQUE ÉTAGE, et pas une seule fois
+      à la fin.** `lienSur(a) ?? lienSur(b) ?? lienSur(c)` n'est pas
+      `lienSur(a ?? b ?? c)` : la seconde forme laisserait un `generalLink`
+      présent mais REFUSÉ par le filtre de schéma — un `javascript:` renvoyé par
+      un serveur détourné — court-circuiter le `??` et masquer un `paymentUrl`
+      parfaitement légitime. Un lien écarté doit laisser sa place au suivant,
+      jamais emporter les autres avec lui.
+    */
+    general:
+      lienSur(corps.generalLink) ?? lienSur(corps.paymentUrl) ?? lienSur(corps.paymentLink),
     card: lienSur(corps.cardLink),
     whatsapp: lienSur(corps.whatsappLink),
     sms: lienSur(corps.smsLink),

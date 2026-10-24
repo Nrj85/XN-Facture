@@ -15,6 +15,7 @@ import {
   type BillingPeriod,
   type PlanCode,
 } from '@/lib/plans';
+import { CANAUX, type Canal } from '@/lib/subscription-channels';
 import { createPaymentLink, taraConfig } from '@/lib/payments/tara';
 import { webhookUrl } from '@/lib/billing-config';
 import { siteOrigin } from '@/lib/site-origin';
@@ -98,7 +99,34 @@ async function attacherLienDePaiement(
     webhookUrl: webhook,
   });
 
-  if (!resultat.ok) return;
+  /*
+    ⚠️ **LE MOTIF D'ÉCHEC ÉTAIT JETÉ ICI, et c'est la leçon du 6 oct. 2026 non
+    appliquée — corrigé le 24 oct. 2026.** La ligne disait `if (!resultat.ok)
+    return;` : `createPaymentLink` distingue soigneusement `injoignable`,
+    `http-404`, `refus-API_KEY_IS_NULL` ou `aucun-lien-exploitable`, et
+    l'appelant les abandonnait tous.
+
+    C'est exactement ce qui a laissé vivre le domaine faux `dikalo.co` : la
+    règle « un échec de Tara ne fait jamais échouer la commande » est bonne,
+    mais elle rendait une panne TOTALE indiscernable d'une fonctionnalité
+    volontairement désactivée — dans les deux cas l'écran retombe sur le mobile
+    money manuel, sans un mot. **Un repli muet masque la panne qu'il amortit.**
+
+    ⚠️ **AU JOURNAL DU SERVEUR, JAMAIS À L'ÉCRAN.** Le motif arrive en anglais,
+    tel que Tara l'a écrit, et l'utilisateur n'a rien à en faire : son règlement
+    manuel reste ouvert. Même discipline que `translateAuthError` et
+    `AdminRead<T>`.
+
+    ⚠️ **AUCUN SECRET N'Y PASSE** : `reason` ne porte que le `message` rendu par
+    Tara, jamais la requête — ni la clé, ni le `businessId`, ni le secret de
+    l'URL de notification.
+  */
+  if (!resultat.ok) {
+    console.error(
+      `Tara : aucun lien de paiement pour la commande ${reference} — ${resultat.reason}`,
+    );
+    return;
+  }
 
   await supabase.rpc('attach_payment_links', {
     p_reference: reference,
@@ -182,9 +210,27 @@ export interface OctroiRendu {
   paymentRecorded: boolean;
 }
 
-/** Les quatre canaux de règlement réels, plus « autre ». */
-export const CANAUX = ['mtn_momo', 'orange_money', 'bank', 'cash', 'autre'] as const;
-export type Canal = (typeof CANAUX)[number];
+/*
+  ⚠️ **`CANAUX` ET `Canal` ONT QUITTÉ CE FICHIER le 24 oct. 2026, pour
+  `lib/subscription-channels.ts`.** Un module `'use server'` ne peut exporter
+  que des fonctions **asynchrones**, et `CANAUX` est une constante — donc un
+  `object`. Next refusait le module ENTIER à son chargement :
+
+      A "use server" file can only export async functions, found object.
+      exportedName : "CANAUX"      POST /abonnement 500
+
+  ⚠️ **ET LA PANNE TOMBAIT SUR UN AUTRE ÉCRAN QUE LE FAUTIF.** La validation
+  porte sur TOUS les exports et s'exécute **avant** la première ligne de
+  l'action appelée : « Choisir Pro » sur `/abonnement` échouait à cause d'une
+  constante qui ne sert qu'à `/admin`, et `startOrderAction` n'était jamais
+  atteinte. **Ne jamais y lire une panne de Tara** — son appel vit plus loin,
+  dans une fonction qui n'avait pas commencé.
+
+  C'est le départ de `translateAuthError` vers `lib/auth-errors.ts`, deuxième
+  édition. **Aucune valeur ne se réexporte d'ici** : ni constante, ni table, ni
+  schéma zod. Les `type` et `interface` restent permis, ils s'effacent à la
+  compilation. L'import est en tête de fichier, avec les autres.
+*/
 
 /**
  * Un versement **réellement reçu**, déclaré par l'exploitant.

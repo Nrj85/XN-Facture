@@ -8,7 +8,11 @@ import { Dialog } from '@/components/ui/dialog';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
-import { grantPlanAction, type Canal } from '@/lib/actions/subscription';
+import { grantPlanAction } from '@/lib/actions/subscription';
+// ⚠️ `Canal` vient d'un module PUR, pas du module d'actions — voir
+// `lib/subscription-channels.ts` : une valeur exportée d'un fichier
+// `'use server'` fait refuser ce fichier EN ENTIER au chargement.
+import type { Canal } from '@/lib/subscription-channels';
 import { formatDateLong } from '@/lib/format';
 import { formatAmount } from '@/lib/money';
 import { PLANS, planByCode } from '@/lib/plans';
