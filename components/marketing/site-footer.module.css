@@ -76,7 +76,9 @@
 
 @media (min-width: 1024px) {
   .columns {
-    grid-template-columns: 1.6fr 1fr 1fr 1fr;
+    /* Cinq colonnes depuis l'ajout de « Contact » (29 oct. 2026), la dernière
+       plus large pour que l'adresse email tienne sur une ligne. */
+    grid-template-columns: 1.4fr 1fr 1fr 1fr 1.3fr;
     gap: 40px;
   }
 }

@@ -62,6 +62,18 @@ export interface PdfPayload {
    * Optionnelle : une charge produite avant la migration 0017 reste valide.
    */
   letterheadDataUrl?: string;
+  /**
+   * Mention « Document créé avec XN-Facture » sous la ligne légale.
+   *
+   * Posée par la route PDF, **en formule Découverte seulement** : c'est la
+   * contrepartie de la gratuité, et elle disparaît d'elle-même en Pro. Chaque
+   * document envoyé fait connaître l'outil à un autre professionnel — décision
+   * de l'utilisateur du 29 oct. 2026, voir `lib/pdf/powered-by.ts`.
+   *
+   * Optionnelle et absente par défaut : un document ne la porte jamais par
+   * accident.
+   */
+  poweredBy?: boolean;
 }
 
 /**

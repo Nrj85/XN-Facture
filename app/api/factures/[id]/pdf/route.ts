@@ -8,6 +8,7 @@ import { createClient } from '@/lib/supabase/server';
 import type { ClientRow } from '@/lib/db/types';
 import { toClient } from '@/lib/db/mappers';
 import { letterheadIfUsed } from '@/lib/db/letterhead';
+import { showPoweredBy } from '@/lib/pdf/powered-by';
 
 // `@react-pdf/renderer` a besoin des API Node (Buffer, streams) : la route ne
 // peut pas tourner sur le runtime Edge.
@@ -73,6 +74,7 @@ export async function GET(
     clientRow ? toClient(clientRow) : undefined,
     letterhead,
   );
+  payload.poweredBy = await showPoweredBy(session.companyId);
 
   try {
     const buffer = await renderToBuffer(InvoiceDocument({ payload }));

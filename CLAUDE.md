@@ -3378,6 +3378,30 @@ réception**, pas de relire cette ligne.
   service des relances d'échéance a ainsi rendu fausse la phrase « Resend — emails
   d'authentification, **uniquement** » de la politique de confidentialité.
 
+### Campagne de lancement — 29 oct. 2026
+
+Trois changements pour la campagne XN-Facture du 16 nov. au 15 déc. 2026 (plan :
+`sultant-starter-kit`, Claude Doc « Campagne de lancement XN-Facture »).
+
+- **Mention « Document créé avec XN-Facture » en pied des PDF, formule Découverte
+  uniquement** — décision de l'utilisateur. `lib/pdf/powered-by.ts` décide, les deux routes
+  PDF la posent sur `payload.poweredBy`, `invoice-document.tsx` l'imprime sous la ligne
+  légale (6,5 pt, `bottom: 12`). Le papier à en-tête étant réservé aux formules payantes
+  (0021), cette zone est toujours libre quand la mention s'affiche. ⚠️ **Une lecture
+  d'abonnement ratée (`readFailed`) ne pose PAS la mention** : mieux vaut l'oublier sur un
+  compte gratuit que l'imposer à un abonné. Vérifié par rendu hors ligne : présente en
+  Découverte, absente sinon.
+- **Colonne « Contact » dans le pied de la landing** : WhatsApp +237 672 006 132 et
+  `xncorp.cm@gmail.com` (coordonnées données par l'utilisateur ; les pages légales citent
+  encore `contact@xn-facture.com`, à harmoniser). La grille passe à 5 colonnes en ≥ 1024 px.
+  Vérifié sans débordement à 1440 et 500 px. La note de la grille tarifaire mentionne le
+  règlement par Orange Money ou MTN Mobile Money.
+- **`/tarifs` redirige vers `/#tarifs`** (`next.config.mjs`) : l'adresse tombait sur la
+  protection du middleware et affichait l'écran de connexion.
+
+Le prix Fondateurs (2 500 FCFA/mois pour les 20 premiers abonnés Pro) **n'est pas codé** : il
+passe par `admin_record_payment` (0023) avec le montant réellement reçu, puis l'octroi.
+
 ### PDF
 Génération serveur — `GET /api/factures/[id]/pdf` et `GET /api/devis/[id]/pdf` — avec logo,
 mentions légales, bloc de règlement, pagination. Le document est **relu en base sous RLS** :

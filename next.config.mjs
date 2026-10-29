@@ -218,6 +218,17 @@ const nextConfig = {
         destination: 'https://www.xn-facture.com/:chemin',
         permanent: false,
       },
+      /*
+        `/tarifs` n'est pas une page : elle tombait sur la protection du
+        middleware et affichait l'écran de connexion. Une adresse qu'on peut
+        écrire dans un post (« voir xn-facture.com/tarifs ») doit mener aux
+        tarifs. Les redirections de ce fichier passent AVANT le middleware.
+      */
+      {
+        source: '/tarifs',
+        destination: '/#tarifs',
+        permanent: false,
+      },
     ];
   },
 };

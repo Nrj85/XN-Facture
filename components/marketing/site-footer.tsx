@@ -27,6 +27,15 @@ const COLONNES = [
       { label: 'Mentions légales', href: '/mentions-legales' },
     ],
   },
+  {
+    // Le canal de confiance de la cible : on achète à quelqu'un qu'on peut
+    // joindre. Coordonnées données par l'utilisateur le 29 oct. 2026.
+    title: 'Contact',
+    links: [
+      { label: 'WhatsApp : +237 672 006 132', href: 'https://wa.me/237672006132' },
+      { label: 'xncorp.cm@gmail.com', href: 'mailto:xncorp.cm@gmail.com' },
+    ],
+  },
 ];
 
 /** Appel à l'action final, sur fond encre — la seule inversion de la page. */
@@ -76,7 +85,9 @@ export function SiteFooter() {
               <ul className={styles.list}>
                 {colonne.links.map((lien) => (
                   <li key={lien.label}>
-                    {lien.href.startsWith('#') ? (
+                    {/* `Link` pour les routes internes seulement : une ancre, un
+                        lien WhatsApp ou une adresse email n'ont rien à précharger. */}
+                    {!lien.href.startsWith('/') ? (
                       <a href={lien.href} className={styles.link}>
                         {lien.label}
                       </a>

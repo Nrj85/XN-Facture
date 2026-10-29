@@ -82,8 +82,8 @@ export function Pricing() {
       </div>
 
       <p className={styles.note}>
-        Sans engagement, sans carte bancaire. Vous changez de formule ou vous arrêtez quand vous
-        voulez.
+        Sans engagement, sans carte bancaire. Les formules payantes se règlent par Orange Money ou
+        MTN Mobile Money. Vous changez de formule ou vous arrêtez quand vous voulez.
       </p>
     </>
   );

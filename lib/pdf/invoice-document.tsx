@@ -230,6 +230,18 @@ const styles = StyleSheet.create({
     color: INK_3,
     textAlign: 'center',
   },
+  // Sous la ligne légale, plus petit et sans filet : une signature, pas une
+  // seconde ligne de pied. Le papier à en-tête étant réservé aux formules
+  // payantes, cette zone est toujours libre quand la mention s'affiche.
+  poweredBy: {
+    position: 'absolute',
+    bottom: 12,
+    left: 44,
+    right: 44,
+    fontSize: 6.5,
+    color: INK_3,
+    textAlign: 'center',
+  },
   draft: {
     marginTop: 10,
     alignSelf: 'flex-start',
@@ -565,6 +577,13 @@ export function InvoiceDocument({ payload }: { payload: PdfPayload }) {
           }}
           fixed
         />
+
+        {/* Formule Découverte uniquement — voir `lib/pdf/powered-by.ts`. */}
+        {payload.poweredBy && (
+          <Text style={styles.poweredBy} fixed>
+            {pdfText('Document créé avec XN-Facture · facturation gratuite sur xn-facture.com')}
+          </Text>
+        )}
       </Page>
     </Document>
   );
