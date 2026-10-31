@@ -1,6 +1,12 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { isConfigured, publicConfig } from '@/lib/supabase/config';
+import {
+  ACQUISITION_COOKIE,
+  ACQUISITION_MAX_AGE,
+  acquisitionFromUrl,
+  serializeAcquisition,
+} from '@/lib/acquisition';
 
 /**
  * Routes accessibles sans session. Tout le reste exige d'être connecté.
@@ -95,6 +101,23 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
     target.pathname = '/dashboard';
     target.search = '';
     return NextResponse.redirect(target);
+  }
+
+  // Source d'acquisition (migration 0025) : seulement pour un visiteur sans
+  // session, et seulement s'il n'en a pas déjà une — la première source gagne.
+  // Poser un cookie sur la réponse ne rend PAS la landing dynamique : elle
+  // reste prérendue, c'est le middleware qui ajoute l'en-tête.
+  if (!user && !request.cookies.has(ACQUISITION_COOKIE)) {
+    const source = acquisitionFromUrl(request.nextUrl.searchParams, pathname);
+    if (source) {
+      response.cookies.set(ACQUISITION_COOKIE, serializeAcquisition(source), {
+        maxAge: ACQUISITION_MAX_AGE,
+        httpOnly: true,
+        sameSite: 'lax',
+        secure: request.nextUrl.protocol === 'https:',
+        path: '/',
+      });
+    }
   }
 
   return response;

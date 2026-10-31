@@ -283,8 +283,23 @@ export function AdminView({
                     <td className="tabular whitespace-nowrap px-5 py-3.5 text-right text-ink-2">
                       {formatMoney(c.collected)}
                     </td>
+                    {/*
+                      Campagne de lancement (migration 0025) : d'où vient
+                      l'entreprise, et a-t-elle émis sa première facture ?
+                      Sous la date plutôt qu'en colonnes, pour ne pas élargir
+                      un tableau déjà dense. « aucune facture » est en mots :
+                      l'information ne tient pas à la couleur (§6.2).
+                    */}
                     <td className="tabular whitespace-nowrap px-5 py-3.5 text-ink-2">
                       {jour(c.createdAt)}
+                      <span className="mt-0.5 block text-[11.5px] text-ink-3">
+                        {c.firstInvoiceAt
+                          ? `1re facture ${formatDate(c.firstInvoiceAt)}`
+                          : 'aucune facture'}
+                      </span>
+                      {c.source && (
+                        <span className="block text-[11.5px] text-ink-3">via {c.source}</span>
+                      )}
                     </td>
                     {/*
                       ⚠️ **LA FORMULE AFFICHÉE EST L'EFFECTIVE**, résolue par

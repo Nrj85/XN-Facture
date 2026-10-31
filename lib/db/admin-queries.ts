@@ -63,6 +63,18 @@ export interface AdminCompanyRow {
    * commerciales opposées.
    */
   expired: boolean;
+  /**
+   * Première source connue (migration 0025) : le `ref` d'un partenaire en
+   * priorité, sinon `utm_source / utm_campaign`. `null` = inscription directe,
+   * ou antérieure au suivi, ou table pas encore créée.
+   */
+  source: string | null;
+  /**
+   * Date d'émission de la première facture émise (`AAAA-MM-JJ`). C'est
+   * l'indicateur « client actif » de la campagne : un inscrit sans facture
+   * émise n'a pas encore adopté l'outil.
+   */
+  firstInvoiceAt: string | null;
 }
 
 export interface AdminActivityRow {
@@ -174,18 +186,24 @@ export async function getAdminOverview(): Promise<{
 }> {
   const supabase = createClient();
 
-  const [companies, members, clients, invoices, quotes, subscriptions] = await Promise.all([
+  const [companies, members, clients, invoices, quotes, subscriptions, acquisitions] = await Promise.all([
     supabase.from('companies').select('id,name,legal_name,city,created_at'),
     supabase.from('company_members').select('company_id,user_id'),
     supabase.from('clients').select('id,company_id'),
     supabase
       .from('invoices')
-      .select('id,company_id,status,amount_paid,vat_rate,updated_at,invoice_items(qty_milli,unit_price)'),
+      .select(
+        'id,company_id,status,amount_paid,vat_rate,issue_date,updated_at,invoice_items(qty_milli,unit_price)',
+      ),
     supabase.from('quotes').select('id,company_id'),
     // ⚠️ Lecture autorisée par `subscriptions_admin_select` (0006). Elle est
     // en SELECT seulement : accorder une formule passe par `admin_set_plan`,
     // jamais par une écriture directe sur cette table.
     supabase.from('subscriptions').select('company_id,plan,expires_at'),
+    // ⚠️ Peut échouer tant que 0025 n'est pas appliquée : on lit `data` sans
+    // exiger l'absence d'`error`, et la colonne « Source » reste vide. Une
+    // table manquante ne doit pas faire tomber l'espace administrateur.
+    supabase.from('company_acquisition').select('company_id,ref,utm_source,utm_campaign'),
   ]);
 
   type LigneBrute = { qty_milli: number; unit_price: number };
@@ -195,6 +213,7 @@ export async function getAdminOverview(): Promise<{
     status: string;
     amount_paid: number;
     vat_rate: number;
+    issue_date: string;
     updated_at: string;
     invoice_items: LigneBrute[];
   };
@@ -228,6 +247,7 @@ export async function getAdminOverview(): Promise<{
   const factureePar = new Map<string, number>();
   const encaissePar = new Map<string, number>();
   const derniereAct = new Map<string, string>();
+  const premiereFacture = new Map<string, string>();
 
   let invoiced = 0;
   let collected = 0;
@@ -236,6 +256,9 @@ export async function getAdminOverview(): Promise<{
     const precedent = derniereAct.get(f.company_id);
     if (!precedent || f.updated_at > precedent) derniereAct.set(f.company_id, f.updated_at);
     if (!emise(f)) continue;
+
+    const premiere = premiereFacture.get(f.company_id);
+    if (!premiere || f.issue_date < premiere) premiereFacture.set(f.company_id, f.issue_date);
 
     const ttc = totalTtc(f);
     invoiced += ttc;
@@ -252,6 +275,21 @@ export async function getAdminOverview(): Promise<{
   const formulePar = new Map<string, { plan: PlanCode; expiresAt: string | null }>();
   for (const s of subscriptions.data ?? []) {
     formulePar.set(s.company_id, { plan: s.plan, expiresAt: s.expires_at });
+  }
+
+  // Le `ref` d'un partenaire prime : c'est lui qu'on remercie ou qu'on
+  // rémunère. Sinon la campagne, lisible telle quelle (« facebook / lancement »).
+  const sourcePar = new Map<string, string>();
+  type AcquisitionBrute = {
+    company_id: string;
+    ref: string | null;
+    utm_source: string | null;
+    utm_campaign: string | null;
+  };
+  for (const a of (acquisitions.data ?? []) as AcquisitionBrute[]) {
+    const libelle =
+      a.ref ?? [a.utm_source, a.utm_campaign].filter((v): v is string => Boolean(v)).join(' / ');
+    if (libelle) sourcePar.set(a.company_id, libelle);
   }
 
   const lignes: AdminCompanyRow[] = (companies.data ?? []).map((c) => {
@@ -277,6 +315,8 @@ export async function getAdminOverview(): Promise<{
       plan: effective,
       expiresAt: abo.expiresAt,
       expired: abo.plan !== 'discovery' && effective === 'discovery',
+      source: sourcePar.get(c.id) ?? null,
+      firstInvoiceAt: premiereFacture.get(c.id) ?? null,
     };
   });
 

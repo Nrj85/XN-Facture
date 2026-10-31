@@ -3402,6 +3402,64 @@ Trois changements pour la campagne XN-Facture du 16 nov. au 15 déc. 2026 (plan 
 Le prix Fondateurs (2 500 FCFA/mois pour les 20 premiers abonnés Pro) **n'est pas codé** : il
 passe par `admin_record_payment` (0023) avec le montant réellement reçu, puis l'octroi.
 
+#### Source des inscriptions — migration 0025 (préparée le 29 oct. 2026)
+
+But : savoir quel canal amène les inscrits, et donner à chaque comptable partenaire un lien à
+son nom (`xn-facture.com/?ref=cabinet-ndoumbe`).
+
+- **Captation** : `lib/supabase/middleware.ts` pose le cookie `xn_src` (90 jours, `HttpOnly`)
+  quand un visiteur SANS session arrive avec `?ref=` ou `utm_*`, et **seulement s'il n'en a pas
+  déjà un** — la première source gagne. Logique partagée dans `lib/acquisition.ts`, sans
+  dépendance Node puisque le middleware l'importe. La landing reste prérendue (`○ /`).
+- **Enregistrement** : `recordAcquisition()` (NON exportée, module `'use server'`) dans
+  `lib/actions/auth.ts`, appelée après la création de l'entreprise — dans `createCompany`
+  (email confirmé ET Google, qui passent tous deux par `/bienvenue`) et dans l'inscription
+  directe. Elle appelle `record_acquisition` puis efface le cookie. **Un échec est ignoré**,
+  comme `request_plan`.
+- **Base** : table `company_acquisition` (une ligne par entreprise, valeurs normalisées et
+  bornées par des `check`), écriture uniquement par `record_acquisition` (`security definer`,
+  entreprise prise par `current_company_id()`, `on conflict do nothing`), lecture réservée à
+  `is_platform_admin()`.
+- **Affichage** : `/admin`, sous la date de création de chaque entreprise : « 1re facture
+  jj/mm/aaaa » ou « aucune facture », et « via <source> » (le `ref` prime, sinon
+  `utm_source / utm_campaign`). La date de première facture se calcule depuis les factures
+  émises, sans colonne nouvelle.
+
+⚠️ **LE CODE TOLÈRE L'ABSENCE DE LA TABLE.** Mis en ligne avant la migration, l'appel RPC
+échoue en silence et `/admin` lit `data` sans exiger l'absence d'`error` : la mention « via »
+reste simplement vide. On peut donc déployer d'abord et migrer ensuite.
+
+**Types** : écrits à la main avant la migration, puis **régénérés depuis la base le 31 oct.
+2026** (`GET …/types/typescript`) — identiques à l'ordre d'une fonction près. Les arguments de
+`record_acquisition` sont des `string` : l'appel passe `''` plutôt que `null`, et la base
+ramène une valeur vide à NULL.
+
+⚠️ **UNE SOURCE EST DÉCLARATIVE ET FALSIFIABLE** : elle sert à compter. Aucune commission de
+parrainage ne doit être versée sur sa seule foi.
+
+**Vérifié avant application** : `tsc`, lint, build ; cookie posé avec `ref`+`utm`, absent
+sans paramètre, non écrasé quand il existe, posé aussi sur `/inscription` ; relecture par
+`RequestCookies` de Next qui rend la source d'origine (« Cabinet Ndoumbé »).
+
+**0025 APPLIQUÉE le 31 oct. 2026** (SQL direct, `POST /database/query`, jeton renouvelé le
+même jour — l'ancien avait expiré). **Vérifié contre la base réelle :**
+
+```
+RLS active, une seule politique      company_acquisition_admin_select : SELECT
+ACL des deux fonctions               postgres, authenticated, service_role — ni anon ni public
+normalisation                        « Cabinet Ndoumbé » -> cabinet-ndoumbe · « Facebook ADS » ->
+                                     facebook-ads · « Lancement Nov/2026! » -> lancement-nov2026 ·
+                                     espaces seuls -> NULL
+compte ordinaire (transaction annulée par exception, 0 ligne restante ensuite)
+  deux appels successifs             1 ligne : cabinet-ndoumbe|facebook|cpc|lancement-nov|/
+                                     (le second, « autre-cabinet », n'a rien réécrit)
+  lecture de la table                0 ligne visible
+anon par l'API publique              rpc -> 401 42501 permission denied · lecture -> []
+```
+
+**Reste à constater** : une vraie inscription arrivée par un lien `?ref=`, jusqu'à la mention
+« via … » dans `/admin`.
+
 ### PDF
 Génération serveur — `GET /api/factures/[id]/pdf` et `GET /api/devis/[id]/pdf` — avec logo,
 mentions légales, bloc de règlement, pagination. Le document est **relu en base sous RLS** :

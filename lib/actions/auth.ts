@@ -9,6 +9,41 @@ import { googleSignInEnabled } from '@/lib/auth-providers';
 import { parsePlan } from '@/lib/plans';
 import { siteOrigin } from '@/lib/site-origin';
 import { translateAuthError } from '@/lib/auth-errors';
+import { cookies } from 'next/headers';
+import { ACQUISITION_COOKIE, parseAcquisition } from '@/lib/acquisition';
+
+/**
+ * Enregistre la source d'acquisition (cookie `xn_src`, migration 0025) de
+ * l'entreprise qu'on vient de créer.
+ *
+ * ⚠️ **NON EXPORTÉE, et c'est voulu** : dans un module `'use server'`, tout
+ * export devient une Server Action appelable du navigateur.
+ *
+ * ⚠️ **UN ÉCHEC NE REMONTE JAMAIS**, même règle que `request_plan` : compter
+ * une source ne vaut pas de priver quelqu'un de son espace. Cela couvre aussi
+ * la période où le code est en ligne et la migration 0025 pas encore
+ * appliquée — l'appel échoue en silence et l'inscription n'en sait rien.
+ */
+async function recordAcquisition(supabase: ReturnType<typeof createClient>): Promise<void> {
+  try {
+    const jar = await cookies();
+    const source = parseAcquisition(jar.get(ACQUISITION_COOKIE)?.value);
+    if (!source) return;
+    // Chaîne vide plutôt que `null` : les types générés déclarent ces
+    // arguments en `string`, et la base ramène une valeur vide à NULL.
+    const { error } = await supabase.rpc('record_acquisition', {
+      p_ref: source.ref ?? '',
+      p_utm_source: source.utm_source ?? '',
+      p_utm_medium: source.utm_medium ?? '',
+      p_utm_campaign: source.utm_campaign ?? '',
+      p_landing_path: source.p ?? '',
+    });
+    if (error) console.error('record_acquisition : échec ignoré', error.message);
+    else jar.delete(ACQUISITION_COOKIE);
+  } catch (e) {
+    console.error('record_acquisition : échec ignoré', e);
+  }
+}
 
 /**
  * Le fournisseur externe est-il RÉELLEMENT activé sur le projet Supabase ?
@@ -217,6 +252,7 @@ export async function signUp(
   if (plan) {
     await supabase.rpc('request_plan', { p_plan: plan });
   }
+  await recordAcquisition(supabase);
 
   revalidatePath('/', 'layout');
   return ok({ needsConfirmation: false });
@@ -253,6 +289,7 @@ export async function createCompany(
   if (plan) {
     await supabase.rpc('request_plan', { p_plan: plan });
   }
+  await recordAcquisition(supabase);
 
   revalidatePath('/', 'layout');
   return ok();

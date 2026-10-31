@@ -181,6 +181,44 @@ export type Database = {
         }
         Relationships: []
       }
+      company_acquisition: {
+        Row: {
+          company_id: string
+          created_at: string
+          landing_path: string | null
+          ref: string | null
+          utm_campaign: string | null
+          utm_medium: string | null
+          utm_source: string | null
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          landing_path?: string | null
+          ref?: string | null
+          utm_campaign?: string | null
+          utm_medium?: string | null
+          utm_source?: string | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          landing_path?: string | null
+          ref?: string | null
+          utm_campaign?: string | null
+          utm_medium?: string | null
+          utm_source?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "company_acquisition_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: true
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       company_letterheads: {
         Row: {
           company_id: string
@@ -820,6 +858,10 @@ export type Database = {
         }
         Returns: string
       }
+      normalize_acquisition_value: {
+        Args: { p_value: string }
+        Returns: string
+      }
       plan_effectif: {
         Args: { p_company_id: string }
         Returns: Database["public"]["Enums"]["plan_code"]
@@ -827,6 +869,16 @@ export type Database = {
       plan_label: {
         Args: { p: Database["public"]["Enums"]["plan_code"] }
         Returns: string
+      }
+      record_acquisition: {
+        Args: {
+          p_landing_path: string
+          p_ref: string
+          p_utm_campaign: string
+          p_utm_medium: string
+          p_utm_source: string
+        }
+        Returns: undefined
       }
       request_plan: { Args: { p_plan: string }; Returns: undefined }
       send_expiry_reminders: { Args: never; Returns: number }
