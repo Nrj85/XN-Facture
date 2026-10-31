@@ -3466,12 +3466,18 @@ déclencheur écrit PENDANT la suppression (`company deleted`, à effacer après
 vérifié : 11 entreprises · 11 appartenances · 11 comptes · 0 orpheline · 0 journal orphelin ·
 un seul administrateur.
 
-⚠️ **PONCTUATION FINALE CONSERVÉE — amélioration proposée, non faite.** La source a été
-enregistrée `test-jacques.` : le lien copié emportait le point de la phrase. La normalisation
-garde `.`, `-` et `_` partout, y compris en bout de chaîne. Un lien recopié dans un message
-produira le même effet, et `cabinet-x` et `cabinet-x.` seraient comptés séparément. Correctif
-envisagé : retirer ces trois caractères en début et en fin dans
-`normalize_acquisition_value` (nouvelle migration), et dans `acquisitionFromUrl`.
+#### Ponctuation en bout de source — migration 0026 (31 oct. 2026), APPLIQUÉE
+
+Le parcours réel avait enregistré `test-jacques.` : le lien copié emportait le point de la
+phrase, et `cabinet-x` / `cabinet-x.` auraient été comptés séparément. 0026 remplace
+`normalize_acquisition_value` : après le nettoyage de 0025, elle retire `.`, `-` et `_` en
+DÉBUT et en FIN (ceux du milieu restent). **Seule la base normalise** : le cookie garde la
+valeur brute et `acquisitionFromUrl` n'y touche pas — une seule règle, au seul endroit qui
+écrit. Aucune donnée à reprendre (table vide au moment du correctif).
+
+Vérifié contre la base : `test-jacques.` → `test-jacques` · `Cabinet Ndoumbé,` →
+`cabinet-ndoumbe` · `...-cabinet-x-...` → `cabinet-x` · `lancement.nov_2026` inchangé ·
+`Facebook ADS` → `facebook-ads` · `.-_` → NULL · ACL inchangée (ni anon ni public).
 
 ### PDF
 Génération serveur — `GET /api/factures/[id]/pdf` et `GET /api/devis/[id]/pdf` — avec logo,
