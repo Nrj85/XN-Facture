@@ -3457,8 +3457,21 @@ compte ordinaire (transaction annulée par exception, 0 ligne restante ensuite)
 anon par l'API publique              rpc -> 401 42501 permission denied · lecture -> []
 ```
 
-**Reste à constater** : une vraie inscription arrivée par un lien `?ref=`, jusqu'à la mention
-« via … » dans `/admin`.
+**Parcours réel constaté le 31 oct. 2026**, en production : fenêtre privée sur
+`?ref=test-jacques`, inscription par email (`jrengou88+test-ref@gmail.com`), confirmation,
+création d'entreprise → ligne `company_acquisition` écrite, et « via test-jacques. » affiché
+dans `/admin` (vu par l'utilisateur). Puis ménage : compte, entreprise (et en cascade
+appartenance, abonnement, source) et les deux lignes de journal — dont celle que le
+déclencheur écrit PENDANT la suppression (`company deleted`, à effacer après coup). État
+vérifié : 11 entreprises · 11 appartenances · 11 comptes · 0 orpheline · 0 journal orphelin ·
+un seul administrateur.
+
+⚠️ **PONCTUATION FINALE CONSERVÉE — amélioration proposée, non faite.** La source a été
+enregistrée `test-jacques.` : le lien copié emportait le point de la phrase. La normalisation
+garde `.`, `-` et `_` partout, y compris en bout de chaîne. Un lien recopié dans un message
+produira le même effet, et `cabinet-x` et `cabinet-x.` seraient comptés séparément. Correctif
+envisagé : retirer ces trois caractères en début et en fin dans
+`normalize_acquisition_value` (nouvelle migration), et dans `acquisitionFromUrl`.
 
 ### PDF
 Génération serveur — `GET /api/factures/[id]/pdf` et `GET /api/devis/[id]/pdf` — avec logo,
