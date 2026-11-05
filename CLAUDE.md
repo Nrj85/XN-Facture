@@ -3402,6 +3402,15 @@ Trois changements pour la campagne XN-Facture du 16 nov. au 15 déc. 2026 (plan 
 Le prix Fondateurs (2 500 FCFA/mois pour les 20 premiers abonnés Pro) **n'est pas codé** : il
 passe par `admin_record_payment` (0023) avec le montant réellement reçu, puis l'octroi.
 
+**Faux témoignages dépubliés le 5 nov. 2026** (demande de l'utilisateur, avant la campagne) :
+les deux avis signés « Prénom Nom » (cabinet de conseil à Douala, prestataire à Kribi) sont
+passés à `published = false` dans `site_testimonials`, sans rien supprimer ; ils se remettent
+en ligne depuis `/admin/temoignages`. Celui de Gabriel Makani (Yaoundé) reste publié, **son
+authenticité reste à confirmer**. ⚠️ **La landing étant prérendue, un changement fait
+directement en base n'apparaît qu'à la construction suivante** : seul `revalidatePath` (action
+d'administration) ou un déploiement la régénère. Ici, un commit de documentation a servi à
+relancer le déploiement.
+
 #### Source des inscriptions — migration 0025 (préparée le 29 oct. 2026)
 
 But : savoir quel canal amène les inscrits, et donner à chaque comptable partenaire un lien à
