@@ -3510,6 +3510,13 @@ Vérifié contre la base : mauvaise clé → 42501 (SQL et REST, 401) · `anon` 
 `authenticated` non · lecture REST de `pilote_cles` par `anon` refusée · vraie clé → 200,
 11 inscrits / 6 actifs / 3 payants au total le 13-11 (comptes de test, campagne à 0).
 
+**0028 (13 nov. 2026), APPLIQUÉE** : `pilote_stats` ajoute `candidats_testeurs` (entreprises
+avec **2 devis ou plus**, critère choisi par l'utilisateur, pour inviter des testeurs de
+XN-RelancePro) et `company_id` dans les deux listes. ⚠️ **Les entreprises dont un membre est
+dans `platform_admins` sont exclues des deux listes** (nos comptes de test), mais restent
+comptées dans `total`, qui doit rester identique à /admin. Même signature, mêmes droits :
+`anon` exécute, `authenticated` non, mauvaise clé → 42501 (revérifié après application).
+
 ### PDF
 Génération serveur — `GET /api/factures/[id]/pdf` et `GET /api/devis/[id]/pdf` — avec logo,
 mentions légales, bloc de règlement, pagination. Le document est **relu en base sous RLS** :
