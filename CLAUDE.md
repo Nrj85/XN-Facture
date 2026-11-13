@@ -3488,6 +3488,28 @@ Vérifié contre la base : `test-jacques.` → `test-jacques` · `Cabinet Ndoumb
 `cabinet-ndoumbe` · `...-cabinet-x-...` → `cabinet-x` · `lancement.nov_2026` inchangé ·
 `Facebook ADS` → `facebook-ads` · `.-_` → NULL · ACL inchangée (ni anon ni public).
 
+#### Statistiques pour le pilote marketing — migration 0027 (13 nov. 2026), APPLIQUÉE
+
+Projet `XN-Pilote-Marketing` (dossier voisin, `docs/PRD.md` et `docs/PLAN.md`) : un workflow
+n8n poste chaque dimanche dans Slack le bilan de la campagne. Il lit **une seule fonction**,
+`pilote_stats(p_cle text) → jsonb` : totaux, chiffres depuis le 16-11 et sur 7 jours,
+sources, places Fondateurs restantes (versements Pro de 2 500 FCFA), et `a_relancer`
+(inscrits de la campagne sans facture émise : entreprise, téléphone, e-mail, nombre de devis).
+
+⚠️ **APPEL PAR `anon` + CLÉ PROPRE AU PILOTE, PAS `service_role`** (toujours inutilisée,
+0004). La table `pilote_cles` ne garde que l'**empreinte SHA-256** ; RLS active sans
+politique, droits de table retirés à `anon` et `authenticated`. La clé vit dans une
+credential n8n, jamais dans le dépôt. Révoquer : `update pilote_cles set revoque_le = now()`.
+⚠️ **La sortie contient des données personnelles** : c'est la raison d'être de la clé.
+
+⚠️ **Mêmes règles que /admin, rien de recopié** : facture émise = ni `draft` ni `cancelled`
+(comme `emise` dans `admin-queries.ts`), formule par `plan_effectif()` (0021), libellé de
+source identique. Le critère du pilote est « chiffres identiques à /admin ».
+
+Vérifié contre la base : mauvaise clé → 42501 (SQL et REST, 401) · `anon` exécute,
+`authenticated` non · lecture REST de `pilote_cles` par `anon` refusée · vraie clé → 200,
+11 inscrits / 6 actifs / 3 payants au total le 13-11 (comptes de test, campagne à 0).
+
 ### PDF
 Génération serveur — `GET /api/factures/[id]/pdf` et `GET /api/devis/[id]/pdf` — avec logo,
 mentions légales, bloc de règlement, pagination. Le document est **relu en base sous RLS** :
